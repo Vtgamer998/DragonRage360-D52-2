@@ -57,9 +57,13 @@ void dr_lobby_stop(DrLobby *l);
 /* Queue the local input for frame `frame`. Frame numbers start at 0 and both
  * consoles must hand them over in the same order. Returns 1 if queued. */
 int dr_lobby_send_input(DrLobby *l,uint32_t frame,uint32_t input);
-/* Pop the next peer input in frame order, skipping duplicates and reordering.
- * Returns 1 and stores frame/input, or 0 when no new frame is available. */
-int dr_lobby_receive_input(DrLobby *l,uint32_t *frame,uint32_t *input);
+/* Return the next peer input in frame order without taking it out of the
+ * queue, so the caller can decide whether it is the frame it needs. */
+int dr_lobby_peek_input(DrLobby *l,uint32_t *frame,uint32_t *input);
+/* Hand the frame returned by dr_lobby_peek_input to the game. Call it only
+ * for the frame you actually used; frames you are not ready for must stay in
+ * the queue, otherwise they are lost and the peer's ack says they arrived. */
+void dr_lobby_consume_input(DrLobby *l);
 /* Publish the battle state hash for `frame`. */
 void dr_lobby_send_hash(DrLobby *l,uint32_t hash,uint32_t frame);
 /* Read the peer's hash. Returns 1 and stores hash/frame, 0 when none. */

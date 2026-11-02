@@ -106,16 +106,23 @@ static void check_peer_hash(DrOnlineBattle *b,uint32_t hash,uint32_t frame)
 int dr_online_battle_update(DrOnlineBattle *b,uint32_t local_input,
                             uint32_t *remote_input)
 {
-    uint32_t f,v,hash;
+    uint32_t f,hash;
     if(!b || !b->active || !b->lobby) return -1;
 
     /* Retransmit anything the peer has not acknowledged yet. */
     dr_lobby_retransmit(b->lobby,b->lobby->tick_now);
 
-    /* Drain every peer input the transport has ordered for us. */
-    while(dr_lobby_receive_input(b->lobby,&f,&v)) {
-        if(f==b->frame && !b->remote_ready) { b->remote_value=v; b->remote_ready=1; }
-        /* Frames past b->frame stay buffered inside the lobby. */
+    /* Take the peer's input only when it is the frame we are waiting for.
+     * Anything newer has to stay in the lobby's queue: consuming it here and
+     * discarding it would lose the frame while the ack still claims it
+     * arrived, which deadlocks both sides. */
+    if(!b->remote_ready) {
+        uint32_t f,v;
+        if(dr_lobby_peek_input(b->lobby,&f,&v) && f==b->frame) {
+            b->remote_value=v;
+            b->remote_ready=1;
+            dr_lobby_consume_input(b->lobby);
+        }
     }
     /* Answers to our hashes arrive the same way. */
     while(dr_lobby_receive_hash(b->lobby,&hash,&f)) check_peer_hash(b,hash,f);

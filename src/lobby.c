@@ -184,14 +184,20 @@ static void send_hash_packet(DrLobby *l,const struct sockaddr_in *to,
 }
 
 /* Queue the local input for `frame` and put it on the wire. Frames start at
- * 1; 0 always means "nothing yet" on both sides of the protocol. */
+ * 1; 0 always means "nothing yet" on both sides of the protocol.
+ *
+ * Returns 1 when the caller can consider its input for this frame delivered
+ * (either just sent, or already confirmed by the peer), 0 only when the lobby
+ * is not paired or the frame is beyond the window. Treating an already
+ * acked frame as success matters: the lockstep harness asks once per frame
+ * and would deadlock if a confirmed frame reported failure. */
 int dr_lobby_send_input(DrLobby *l,uint32_t frame,uint32_t input)
 {
     unsigned slot;
     if(!l || l->fd<0 || l->state!=LOBBY_PAIRED) return 0;
     if(!frame) return 0;
-    if((int32_t)(frame-l->tx_acked)<=0) return 0;        /* already acked */
-    if((int32_t)(frame-(l->tx_highest+D52_INPUT_DEPTH))>0) return 0; /* too far */
+    if((int32_t)(frame-(l->tx_highest+D52_INPUT_DEPTH))>0) return 0; /* beyond window */
+    if((int32_t)(frame-l->tx_acked)<=0) return 1;   /* peer already has it */
     slot=frame&D52_INPUT_MASK;
     l->tx_value[slot]=input;
     l->tx_frame_of[slot]=frame;
@@ -243,16 +249,22 @@ static void lobby_pump_inputs(DrLobby *l)
     }
 }
 
-/* Return the next peer input in frame order. Frame 1 is the first frame. */
-int dr_lobby_receive_input(DrLobby *l,uint32_t *frame,uint32_t *input)
+/* Return the next peer input in frame order, or 0 when nothing new arrived.
+ * The frame stays queued until dr_lobby_consume_input is called. */
+int dr_lobby_peek_input(DrLobby *l,uint32_t *frame,uint32_t *input)
 {
     if(!l || l->fd<0 || l->state!=LOBBY_PAIRED || !frame || !input) return 0;
     lobby_pump_inputs(l);
     if((int32_t)(l->rx_frame-l->rx_delivered)<=0) return 0;
-    l->rx_delivered++;
-    *frame=l->rx_delivered;
-    *input=l->rx_value[l->rx_delivered&D52_INPUT_MASK];
+    *frame=l->rx_delivered+1;
+    *input=l->rx_value[*frame&D52_INPUT_MASK];
     return 1;
+}
+
+void dr_lobby_consume_input(DrLobby *l)
+{
+    if(!l) return;
+    if((int32_t)(l->rx_frame-l->rx_delivered)>0) l->rx_delivered++;
 }
 
 /* Frames the peer is still missing are re-sent after a short delay. This is
