@@ -1,0 +1,5 @@
+{
+  "result": "PASS",
+  "tests": 12,
+  "scope": "host/source only; no GPU, PowerPC, XEX, whole game or FPS proof"
+}

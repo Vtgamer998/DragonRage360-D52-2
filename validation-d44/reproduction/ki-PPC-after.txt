@@ -1,0 +1,39 @@
+
+/workspace/scratch/679a7ca7bd27/work/DragonRage360/build/d44-release/xenia/default.elf:     file format elf32-powerpc
+
+
+Disassembly of section .text:
+
+82189598 <BtlKiBlast_GetReactOfHit>:
+82189598:	81 23 00 68 	lwz     r9,104(r3)
+8218959c:	2c 09 00 00 	cmpwi   r9,0
+821895a0:	41 82 00 70 	beq     82189610 <BtlKiBlast_GetReactOfHit+0x78>
+821895a4:	94 21 ff a0 	stwu    r1,-96(r1)
+821895a8:	7c 08 02 a6 	mflr    r0
+821895ac:	fb e1 00 58 	std     r31,88(r1)
+821895b0:	7c 7f 1b 78 	mr      r31,r3
+821895b4:	90 01 00 64 	stw     r0,100(r1)
+821895b8:	fb c1 00 50 	std     r30,80(r1)
+821895bc:	a8 69 00 10 	lha     r3,16(r9)
+821895c0:	4b fd b7 d9 	bl      82164d98 <BtlChar_Get>
+821895c4:	81 3f 00 68 	lwz     r9,104(r31)
+821895c8:	7c 7e 1b 78 	mr      r30,r3
+821895cc:	a3 e9 00 18 	lhz     r31,24(r9)
+821895d0:	4b fd b8 f1 	bl      82164ec0 <BtlChar_GetObj>
+821895d4:	7c 69 1b 78 	mr      r9,r3
+821895d8:	7f e5 07 34 	extsh   r5,r31
+821895dc:	7f c3 f3 78 	mr      r3,r30
+821895e0:	81 49 09 24 	lwz     r10,2340(r9)
+821895e4:	1d 25 00 34 	mulli   r9,r5,52
+821895e8:	7d 4a 4a 14 	add     r10,r10,r9
+821895ec:	88 8a 00 24 	lbz     r4,36(r10)
+821895f0:	7c 84 07 74 	extsb   r4,r4
+821895f4:	4b ff f5 a5 	bl      82188b98 <BtlKiBlast_MapReact>
+821895f8:	80 01 00 64 	lwz     r0,100(r1)
+821895fc:	eb c1 00 50 	ld      r30,80(r1)
+82189600:	eb e1 00 58 	ld      r31,88(r1)
+82189604:	7c 08 03 a6 	mtlr    r0
+82189608:	38 21 00 60 	addi    r1,r1,96
+8218960c:	4e 80 00 20 	blr
+82189610:	89 29 00 24 	lbz     r9,36(r9)
+82189614:	7f e0 00 08 	trap

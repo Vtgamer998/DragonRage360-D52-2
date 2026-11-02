@@ -1,0 +1,10 @@
+warframes: 0 32 64 96 128 160 192 224 256 288 320
+dma_invalid_hits:0
+step_invalid_hits:0
+last_lines:
+D46 profile frames=321 elapsed_us=1395600160 VU_instructions=4936635 stage_GPU_draws=385736 stage_fallbacks=0
+D46 sequence frame=320 state=3 demo_flags=00000000 time=0 length=0 camera=-44.6039276,-13.6974716,90.9143448
+D46 HUD flags=0000001f gauge=1 timer=1 notice=1
+D46 visible objects frame=320 views=1 flags=10010016 list0=2 list1=0
+D46 fighter side=0 id=0 active=1 bound=1 noAnim=1 state=10010016 view0=10010016
+D46 fighter side=1 id=1 active=1 bound=1 noAnim=1 state=10010016 view0=10010016

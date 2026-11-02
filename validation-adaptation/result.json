@@ -1,0 +1,12 @@
+{
+  "result": "PASS",
+  "checks": [
+    "PASS upstream forwarding: original lobby calls, original unlock queue, validation, confirmation, online/pending gates",
+    "PASS Xbox: original netcode unavailable, no fake online/cheat success",
+    "PASS upstream forwarding: original lobby calls, original unlock queue, validation, confirmation, online/pending gates",
+    "PASS Xbox: original netcode unavailable, no fake online/cheat success",
+    "exact original UI patch, idempotence and changed-anchor refusal"
+  ],
+  "scope": "C/C++ forwarding and UI source integration only; no two-machine match, GPU, full UI compilation or XEX test",
+  "publisher_test": "PASS; temporary local bare repository, parent/history preservation, gitlink pins, binary exclusions, dirty-checkout rejection"
+}

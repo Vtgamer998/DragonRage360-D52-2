@@ -1,0 +1,9 @@
+{
+  "completed": [
+    "gcc-stage1.done",
+    "newlib.done",
+    "gcc.done",
+    "binutils.done"
+  ],
+  "full_build_log": "toolchain-rebuild.log"
+}

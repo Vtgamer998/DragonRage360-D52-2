@@ -1,0 +1,1169 @@
+--- a/BUILD-RESULT.txt
++++ b/BUILD-RESULT.txt
+@@ -1,86 +1 @@
+-ATUALIZAÇÃO 0.42-D8: seis janelas comuns/IA e oito janelas por modelo preparadas; estado facial CPU exercitado. BtlChar/BtlAi, boot completo, cenário/simulação/controle/apresentação continuam pendentes. Luta bloqueada; XEX recompilado, não executado no Xbox. Leia RELATORIO-0.42-D8.md.
+-
+-DOCUMENTAÇÃO HISTÓRICA ABAIXO:
+-
+-# Atualização 0.29 — recursos completos e heap do motor
+-
+-ISO completa baixada, com executáveis e três AFS extraídos e validados.
+-Heap nativo corrigido: 3.016 verificações passaram. Dados reais: 698 modelos
+-e 57.259 animações não vazias validados em host; modelo VU em pose de referência.
+-383/383 unidades PowerPC, sem conflito ABI; vínculo com 137 nomes pendentes.
+-**A luta ainda não roda. Battle_Main segue fora do XEX. Sem teste em Xbox.**
+-O default.xex é o diagnóstico 0.27 inalterado. Consulte RELATORIO-0.29.md.
+-
+---- Histórico ---
+-
+-# Atualização 0.28 — fontes do carregador de dados
+-
+-Carregador BT3X com destinos explícitos, validação das origens/ELF e checksum
+-antes da escrita. 546 verificações passaram. 382/382 unidades PowerPC,
+-sem conflito de ABI; o vínculo segue com 139 referências pendentes.
+-**O jogo e a luta não rodam. Battle_Main segue fora do XEX. Sem teste em Xbox.**
+-O default.xex continua o diagnóstico 0.27. Consulte RELATORIO-0.28.md.
+-
+---- Histórico ---
+-
+-# Atualização 0.27 — caminho VIF/VU/GIF nativo
+-
+-Novo default.xex de diagnóstico com as entradas gráficas Port_Gs*, uma sessão
+-VU compartilhada e conversão do ambiente/clear DBuff. 382/382 unidades do motor
+-compilaram; ABI sem conflitos; 139 nomes pendentes no vínculo do combate.
+-**O jogo e a luta não rodam. Battle_Main segue fora do XEX. Sem teste em Xbox.**
+-Consulte RELATORIO-0.27.md e TESTE-XBOX-0.27.md.
+-
+---- Histórico ---
+-
+-# Atualização 0.26 — fontes do produtor de textura
+-
+-Dma_PutTexStrips adaptado e compilado no vínculo do motor; 382/382 unidades,
+-sem conflito ABI, 156 nomes pendentes. 5.768 casos de teste passaram.
+-**Battle_Main continua fora do XEX, sem luta nem teste em Xbox/emulador.**
+-O default.xex é o diagnóstico 0.25 inalterado. Consulte RELATORIO-0.26.md.
+-
+---- Histórico ---
+-
+-0.25 integrada: novo default.xex de diagnostico verificado estaticamente.
+-381/381 unidades PowerPC; ABI float sem rejeicoes; 157 nomes pendentes no combate.
+-Host: 368 verificacoes DMA novas, 1329 de regressao, NEXT/IOP e captura ASan/UBSan passaram.
+-Xbox/emulador nao executado. Battle_Main ausente. Veja RELATORIO-0.25-integrado.md.
+-
+---- Historico ---
+-
+-PLATAFORMA 0.4: 380/380 unidades PowerPC compiladas.
+-ABI float: 0 rejeicoes; 163 nomes ainda sem resolucao no motor.
+-Novo XEX com plataforma de arquivos e registro de conversores no diagnostico.
+-Battle_Main NAO integrado. Nao executado no Xbox/emulador.
+-Veja RELATORIO-plataforma-0.4.md e engine/reports/platform-0.4/.
+-
+---- Historico ---
+-
+-DragonRage360 0.24 — produtores DMA parciais; combate NÃO ligado
+-
+-XEX2: 5836800 bytes.
+-SHA-256: be4c62ac7759d064bdb8a5d257d9f46161d581ce47c8d88488ab392e7cf3aac3
+-Entry: 0x82075a18; base: 0x82000000; Title ID: 0x44523630.
+-Páginas: 89. PowerPC BE, ABI xsdk 0x100.
+-ELF sem símbolos fortes/fracos pendentes; PE e hashes completos verificados.
+-
+-Build incremental dos produtores/diagnóstico e versão do título, com
+--O2 -Wall -Wextra -Werror. Log: engine/reports/0.24/build-final.txt.
+-Header de produtores comparado ao sys/dma.h original em compilação PowerPC.
+-GCC C/bootstrap 15.3.0, patches/specs xsdk e newlib instalada.
+-XSDK 57b02f1e60667e37d22c3aa613d23d2486514ff8.
+-Upstream AGPL 3ca419c7966b11438e2dc3c9a7e1914f102ed545.
+-
+-Produtores: 1329 comparações com dma.c original; ASan/UBSan.
+-Captura completa com os produtores/Flush: 9 ciclos ASan/UBSan passaram.
+-APIs GPU simuladas, sem rasterização. Leak detection desativada.
+-Dma_Flush/ResetBuffers e produtores Frame/Zbuf/Scissor/XYOffset/AD
+-verificados no ELF final. Helpers não usados podem ser removidos pelo linker.
+-
+-Battle_Main NÃO LIGADO. 85 dependências diretas ausentes no objeto battle.c
+-(antes 87; a diferença é Flush/ResetBuffers). Não é contagem transitiva.
+-IA, colisões, animações, plataforma e demais produtores NÃO integrados.
+-Nenhum XEX executado no Xbox/emulador. Nenhuma luta/FPS/CPU/GPU medidos.
+-DATE/FBA/stencil SEM PIXELS VALIDADOS EM HARDWARE.
+-Leia RELATORIO-0.24.md.
++0.44-D10: novo XEX compilado; 405/405 unidades PPC; zero indefinidos. Boot original de objetos e BtlChar/BtlAi executado em i386, não em PowerPC. Sem luta/GPU de combate. Consulte RELATORIO-0.44-D10.md e checkpoint-D10-final/.
+--- a/LEIA-ME.txt
++++ b/LEIA-ME.txt
+@@ -1,3 +1,15 @@
++# 0.44-D10 — novo XEX: objetos, BtlChar e BtlAi
++
++Novo default.xex compilado. O boot original de objetos e o reset/inicialização
++de BtlChar/BtlAi estão integrados ao diagnóstico e passaram em CPU i386 com
++recursos reais. Ainda não existe luta jogável: Battle_Update/Battle_Main e
++apresentação GPU do combate continuam pendentes; sem teste em Xbox/Xenia.
++
++Leia TESTAR-PRIMEIRO.md e RELATORIO-0.44-D10.md. O XEX anterior D8 foi preservado.
++
++---
++Documentação histórica da versão anterior:
++
+ # Revisão de fontes 0.43-D9 — entrega parcial
+ 
+ **Não há XEX novo nem luta jogável nesta revisão.** O default.xex é o diagnóstico
+--- a/Makefile
++++ b/Makefile
+@@ -133,3 +133,5 @@
+ 
+ # Original roster/common reader layouts used by the bounded D9 probe.
+ build/xb_battle_consumers.o: CFLAGS += -I$(UPSTREAM)/include -I$(UPSTREAM)/port/include -mcheck-fpr-alignment
++
++build/xb_battle_runtime.o: CFLAGS += -I$(UPSTREAM)/include -I$(UPSTREAM)/port/include -mcheck-fpr-alignment
+--- a/PENDENCIAS.md
++++ b/PENDENCIAS.md
+@@ -1,3 +1,15 @@
++# 0.44-D10 — novo XEX: objetos, BtlChar e BtlAi
++
++Novo default.xex compilado. O boot original de objetos e o reset/inicialização
++de BtlChar/BtlAi estão integrados ao diagnóstico e passaram em CPU i386 com
++recursos reais. Ainda não existe luta jogável: Battle_Update/Battle_Main e
++apresentação GPU do combate continuam pendentes; sem teste em Xbox/Xenia.
++
++Leia TESTAR-PRIMEIRO.md e RELATORIO-0.44-D10.md. O XEX anterior D8 foi preservado.
++
++---
++Documentação histórica da versão anterior:
++
+ ATUALIZAÇÃO 0.42-D8: seis janelas comuns/IA e oito janelas por modelo preparadas; estado facial CPU exercitado. BtlChar/BtlAi, boot completo, cenário/simulação/controle/apresentação continuam pendentes. Luta bloqueada; XEX recompilado, não executado no Xbox. Leia RELATORIO-0.42-D8.md.
+ 
+ DOCUMENTAÇÃO HISTÓRICA ABAIXO:
+--- a/README.md
++++ b/README.md
+@@ -1,3 +1,15 @@
++# 0.44-D10 — novo XEX: objetos, BtlChar e BtlAi
++
++Novo default.xex compilado. O boot original de objetos e o reset/inicialização
++de BtlChar/BtlAi estão integrados ao diagnóstico e passaram em CPU i386 com
++recursos reais. Ainda não existe luta jogável: Battle_Update/Battle_Main e
++apresentação GPU do combate continuam pendentes; sem teste em Xbox/Xenia.
++
++Leia TESTAR-PRIMEIRO.md e RELATORIO-0.44-D10.md. O XEX anterior D8 foi preservado.
++
++---
++Documentação histórica da versão anterior:
++
+ # Revisão de fontes 0.43-D9 — entrega parcial
+ 
+ **Não há XEX novo nem luta jogável nesta revisão.** O default.xex é o diagnóstico
+--- /dev/null
++++ b/RELATORIO-0.44-D10.md
+@@ -0,0 +1,145 @@
++# 0.44-D10 — novo XEX, boot original de objetos e gerenciadores
++
++**Esta revisão contém um XEX novo. O pedido completo ainda não terminou:
++continua sendo um diagnóstico, sem partida jogável e sem apresentação GPU
++do combate.** Não é o binário D8 renomeado.
++
++O novo `default.xex` mede 13.705.216 bytes e tem SHA-256
++`8f6fb694564c001729c90b5045b4a69114dab080c1544463f1a603b8d5a5a6cb`.
++O D8 recebido está preservado em `diagnostico-anterior-D8/default.xex`.
++
++## O que passou a funcionar nesta etapa
++
++### BtlObj_Init/Term originais
++
++A sessão nova chama `BtlObj_Init(1)` original: heap do motor, buffers fixos,
++listas, pools, sombras, iluminação e alocações dos módulos de desenho. A
++textura de iluminação do comum 2 ganha uma representação TexFile nativa,
++com ponteiros reconstruídos e payloads canônicos preservados.
++
++Os modelos são copiados para os buffers originais, com limites de capacidade.
++A sessão preserva os descritores anteriores e os restaura ao destruir cada
++modelo. Assim `BtlObj_Term` original libera os buffers que ele próprio criou,
++sem liberar um empréstimo do preparador de modelos. A sessão D7 continua
++apenas como API de regressão; o launcher D10 usa o boot original de objetos.
++
++### BtlChar e BtlAi originais, com reset real
++
++`XbBattleRuntime_Open` instala uma visão persistente, própria, dos recursos
++comuns usados pelo boot CPU. As seis tabelas e os dados de IA têm campos
++convertidos, offsets nativos e tempo de vida controlado. Não publica os
++arquivos restantes como se estivessem convertidos.
++
++Depois de preparar os modelos 0/1, o caminho verifica suas posições iniciais
++com chão. Só então executa `Progress_Init`, `Save_Init`, `Pad_Init`, a
++configuração original da partida, `BtlChar_AllocAll(2)` — incluindo seu
++`ResetAll` imediato — e `BtlAiMgr_Init` originais.
++
++A configuração é versus local: lado 0 humano, lado 1 CPU, personagens 0/1,
++um membro por lado, nível de CPU 13 e saúde inicial de 100%. O save é uma
++instância temporária na RAM; nenhum save existente é importado ou escrito.
++Os gerenciadores são encerrados antes dos modelos/objetos e dos recursos.
++
++Foi adaptada a instalação das tabelas dos arquivos do modelo no binder de
++BtlChar: o caminho nativo fornece as representações com posse própria; não
++interpreta cabeçalhos little-endian como ponteiros PowerPC.
++
++### Correções encontradas no teste integrado
++
++- Resultado da busca de chão explicitamente alinhado a 16 bytes, conforme o
++  contrato do leitor original `StgGround_TestTri`. O alinhamento casual de
++  uma execução anterior não era suficiente.
++- Máscara de personagens do save usa `1ULL` para o bit 63.
++- Contadores de entrada usam `1u` ao percorrer os 32 bits, incluindo o bit 31.
++- Uma segunda execução do teste de dados valida os programas sem reaplicar
++  DATA sobre o heap vivo. Isso evita apagar os ponteiros do heap enquanto o
++  inicializador privado ainda o considera pronto.
++
++## Verificação real desta revisão
++
++Os programas USA foram conferidos com os hashes fixados pelo projeto. Foram
++usados recursos reais correspondentes: comum 2/4, cenário 0, dois modelos e
++suas animações. Esses recursos não acompanham a entrega.
++
++**Linux i386 sob QEMU-i386:** catálogo nativo com seus dados e callbacks
++reconstruídos; dois ciclos completos de boot de objetos, criação dos dois
++modelos, save/configuração, `BtlChar_AllocAll`, `BtlAiMgr_Init`, reset e
++encerramento. Nos dois lados: vida 40.000, ki 40.000, perfil de IA 0, nível
++13. Em ambos os ciclos o heap voltou exatamente ao tamanho livre anterior.
++Isso verifica o heap do motor nesses ciclos, não ausência geral de leaks.
++
++O mesmo teste executou `BtlInput_Sample` e `BtlInput_Update` originais com
++um estado de controle de teste: remapeamento, pressionamento e soltura de
++Square/Rush passaram. Não comprova leitura de um controle físico no Xbox.
++
++O teste host mantém os callbacks originais. As cinco importações de áudio
++do SDK que ele não executa são armadilhas que abortam se chamadas; nenhuma
++foi chamada. Isso não implementa nem valida áudio ou GPU. Essas armadilhas
++existem só no teste, não entram no XEX.
++
++UBSan/bounds habilitados no teste de 32 bits. Apenas na biblioteca matemática
++newlib de terceiros, verificações de shift/overflow com sinal são excluídas
++por seus algoritmos de manipulação de bits; nos módulos do jogo/port elas
++permanecem ativas. Não houve execução de código PowerPC nesse teste.
++
++Verificações adicionais:
++
++- Regressão dos modelos reais: animações, matrizes, volumes, face CPU,
++  texturas e criação/liberação dos pools: PASS.
++- Oráculo endian do comum 2/IA e equivalência do binder original em i386:
++  PASS; 11 corrupções de IA recusadas.
++- Posições sintéticas: seis consultas, ausência de chão e três corrupções
++  MAPD recusadas, ASan/UBSan: PASS; LeakSanitizer desativado.
++- Inventário de 33 módulos da plataforma e recusas de fontes inesperados:
++  PASS. Interface existente: PASS.
++- Toolchain xsdk GCC 15.3.0, ABI própria: verificações do toolchain PASS.
++  Motor: 405/405 unidades PowerPC no vínculo final (incluindo catálogo gerado), zero símbolos pendentes, ABI fechada.
++- Catálogo final: 33 regiões, 2.738 operações, 1.779 bindings nativos
++  conferidos no ELF final. `complete=true` é do catálogo selecionado.
++- Seções PS2 antigas continuam isoladas; enraizá-las ainda expõe seus 103
++  símbolos não implementados. O probe de Game_Main ainda encontra 69 nomes
++  ausentes. Nenhuma função vazia foi acrescentada ao título para esconder isso.
++- XEX2/PE, imagem, símbolos, hashes e chamadas diretas do boot CPU no ELF:
++  PASS. Evidências em `checkpoint-D10-final/`.
++
++**Não houve execução em Xbox ou Xenia.** Compilar um XEX e testar o boot em
++uma CPU i386 não comprova que ele executa corretamente no console.
++
++## Situação dos pedidos
++
++| Parte | Resultado D10 |
++|---|---|
++| BtlChar / BtlAi | Funções originais de alocação, reset e inicialização executadas em CPU com dados reais e integradas ao caminho do novo XEX. Sem execução PowerPC/console. |
++| Tabelas comuns | Instalação persistente das seis tabelas e IA para esse boot; comum 4 nativo; textura de iluminação nativa. Comum 3 e demais recursos de combate não concluídos. |
++| Cenário | Colisão e posições com chão; ainda NOT_READY. MAPD completo, modelos, ambiente, caminhos/nav e demais recursos internos não integrados. |
++| Configuração / save | Configuração versus e save temporário originais inicializados em RAM. Não há persistência em disco nesta sessão. |
++| Boot | BtlObj_Init(1)/Term originais integrados. O ciclo Battle_Load/Battle_Init completo continua pendente. |
++| Simulação / controle | Fase isolada de entrada original testada. Battle_Update e Battle_Main NÃO executados. Marcador permanece 2. |
++| Facial / GPU / vozes | Sem nova prova de apresentação, mandíbula animada, skinning na GPU, vozes, auras ou efeitos. O visualizador antigo não prova renderização da partida. |
++
++Não libere o marcador nem retire NOT_READY para chamar Battle_Main: a cena,
++o HUD, os recursos restantes, o cenário completo e o fluxo de apresentação
++continuam faltando. O diagnóstico não os substitui por sucesso vazio.
++
++## Reproduzir
++
++Use o upstream `3ca419c7966b11438e2dc3c9a7e1914f102ed545`, xsdk
++`57b02f1e60667e37d22c3aa613d23d2486514ff8` e o toolchain descrito em BUILD.md.
++Com a ISO USA fornecida localmente:
++
++```sh
++make typed-data-diagnostic UPSTREAM=/caminho/upstream \
++  XSDK=/caminho/xsdk TOOLCHAIN=/caminho/toolchain/bin/powerpc-xsdk-elf- \
++  ISO=/caminho/jogo-USA.iso
++```
++
++O XEX resultante do alvo está em `build/typed-diagnostic/default.xex`.
++O `make all` comum produz apenas o diagnóstico de componentes.
++
++O teste `engine/tools/test_native_managers.py` recebe, nessa ordem: upstream,
++xsdk, sysroot i386, qemu-i386, diretório do vínculo nativo, C do catálogo,
++recursos selecionados, programas originais e diretório de saída. Requer os
++arquivos `common-2.bin`, `common-4.bin`, `stage.bin`, `left-model.bin`,
++`left-animation.bin`, `right-model.bin`, `right-animation.bin`; não os gera
++nem os acompanha. Veja os nomes e contagens em `checkpoint-D10-final/`.
++Os caches do teste são invalidados quando fontes, headers ou flags mudam.
+--- a/TESTAR-PRIMEIRO.md
++++ b/TESTAR-PRIMEIRO.md
+@@ -1,79 +1,22 @@
+-# Revisão de fontes 0.43-D9 — entrega parcial
++# Teste do novo XEX 0.44-D10
+ 
+-**Não há XEX novo nem luta jogável nesta revisão.** O default.xex é o diagnóstico
+-0.42-D8 original. As alterações em fontes tratam comum 4, leitores temporários
+-e posicionamento inicial com chão. Leia RELATORIO-0.43-D9-FONTES.md para testes
+-e pendências. Não execute BtlChar_AllocAll/Battle_Main como se o boot estivesse pronto.
++Este é um diagnóstico de boot CPU, ainda sem luta jogável.
+ 
+----
+-Documentação histórica da versão recebida:
++1. Copie o novo `default.xex` e `startup_test.txt` para a pasta existente do
++   projeto no Xbox 360. Preserve a sua ISO USA original em `isos/`.
++2. Inicie pela Aurora. A interface deve identificar `0.44-D10`.
++   O startup `typed-data` executa o diagnóstico na ISO selecionada.
++3. Consulte `default.log`. No fim do teste devem aparecer:
++   - `original CPU manager boot: error=0`
++   - duas linhas `original initialized fighter`, lados 0/1,
++     `HP=40000 Ki=40000 AI_type=0 AI_level=13`.
++4. Se aparecer um erro, guarde o log completo. O resultado zero confirma
++   apenas o boot CPU indicado; não significa que uma partida foi renderizada.
+ 
+-# Diagnóstico 0.42-D8
++O pacote menor de atualização contém o executável e estas instruções.
++O pacote completo contém também os fontes e o relatório de validação.
++O XEX D8 anterior foi preservado no pacote completo em
++`diagnostico-anterior-D8/default.xex`.
+ 
+-Extraia em pasta própria. default.xex é o diagnóstico D8 com Battle_Main vinculado e bloqueado. startup_test.txt contém typed-data, que precisa da ISO configurada e prepara recursos selecionados. Ele não inicia a luta.
+-
+-Registros novos: native common battle tables, native common AI resource, native CPU facial. Copie default.log após executar para distinguir falha de leitura, preparação ou travamento. Nenhuma execução do D8 em console foi confirmada. Consulte RELATORIO-0.42-D8.md para o escopo exato.
+-
+----
+-Instruções históricas abaixo (versões anteriores):
+-
+-# Testar a base antes de continuar a luta fixa
+-
+-O default.xex deste pacote é exatamente o diagnóstico 0.33 já entregue.
+-Não foi executado em Xbox ou Xenia. Não contém Battle_Main/Game_Main.
+-Nenhuma alteração nova de vídeo foi incorporada ao executável deste pacote.
+-
+-1. Extraia DragonRage360-Demo para uma pasta própria no HD/USB do Xbox RGH.
+-   Não misture com uma instalação anterior. Para este primeiro teste, não
+-   coloque ISO nem configure rede. Abra default.xex pelo Aurora.
+-2. Observe se o menu aparece e responde ao direcional, A e B. Entre no teste
+-   gráfico disponível no launcher, volte com B e saia com BACK, confirmando
+-   a saída. Se houver tela preta ou travamento, anote em qual etapa ocorreu.
+-3. Copie default.log antes de abrir o XEX novamente: ele é sobrescrito ao
+-   iniciar. O SDK tenta gravar primeiro junto do XEX. Se não estiver lá,
+-   procure na raiz do HD interno e do USB; xsdk.log é o nome de fallback.
+-   Envie o log completo e diga se a imagem apareceu e os controles responderam.
+-
+-Marcadores úteis no log:
+-- DragonRage360 demo 0.33
+-- PASS: display and text opened
+-- PASS/FAIL: interface first frame orange tile
+-- PASS/FAIL: native GS MRT/DATE/FBA diagnostic
+-- checks: render=... navigate=... A=... B=... ISO=...
+-O teste de pixel do launcher não valida sozinho DATE/FBA/stencil ou combate.
+-
+-Se o teste básico passar, o segundo teste poderá usar sua ISO USA na pasta
+-isos/ para validar leitura/modelo. O primeiro teste dispensa a ISO.
+-
+-## Novo objetivo de implementação
+-
+-Uma luta fixa: dois lutadores e um cenário. Filmes, menus comerciais, rede,
+-loja, galeria e modos não entram no caminho de inicialização desse teste.
+-Áudio permanece fora do primeiro marco.
+-
+-A entrada deve ser um boot nativo pequeno, que inicialize memória, controles,
+-renderizador, dados tipados e recursos específicos, e alcance Battle_Main.
+-Não chamar Game_Main para atravessar menus e abertura. Não é suficiente apenas
+-remover suas referências: os dados necessários precisam existir e as chamadas
+-restantes precisam ter comportamento real.
+-
+-Os antigos 133 símbolos se referiam a uma tentativa com Battle_Main como raiz.
+-Os 207 da 0.33 incluem também Game_Main. Essas contagens têm escopos diferentes.
+-O caminho mínimo precisa de nova auditoria específica depois do teste da base;
+-nenhuma tabela de callbacks deve ser descartada sem comprovar seu uso.
+-
+-## Checkpoint de trabalho pausado
+-
+-extras/video-034-INCOMPLETO.patch guarda as alterações iniciadas antes da
+-mudança de prioridade. Não é um patch pronto para jogar. Inclui APIs MPEG,
+-player, relógio de áudio e GS, testes e alterações de build. Não aplique esse
+-patch sobre a instalação usada no primeiro teste do console.
+-
+-O vínculo combinado de trabalho compilou 391 unidades e falhou em 195 nomes,
+-sem conflitos de ABI. Esse resultado não é uma luta, nem substitui o log do
+-console. O teste do player em host ainda estava incompleto ao pausar o trabalho.
+-Relatórios intermediários estão em checkpoint-034/. Não há execução em hardware.
+-
+-Ambiente desta sessão: sem executável Xenia/Wine, DISPLAY vazio, sem /dev/dri
+-ou /dev/kvm expostos e sem conexão ao Xbox. Por isso não foi produzido um log
+-de execução; nenhum resultado de execução foi inventado.
++Ainda não são executados Battle_Update/Battle_Main. A apresentação GPU do
++combate, efeitos e vozes continuam pendentes. Leia RELATORIO-0.44-D10.md.
+--- a/engine/platform/platform/xb_battle_fighter.c
++++ b/engine/platform/platform/xb_battle_fighter.c
+@@ -356,3 +356,11 @@
+  out->lip_index=face->lipIndex;out->lip_count=face->lipCount;out->lip_time=face->lipTime;out->lip_end=face->lipEnd;
+  memcpy(out->jaw,&face->jaw,sizeof(out->jaw));f->matrices_valid=0;return 0;
+ }
++
++extern int XbFighterRegistry_BeginOriginal(void);
++int XbBattleFighter_BeginOriginalObjects(void){return XbFighterRegistry_BeginOriginal();}
++/* BtlChar_BindObject's native equivalents of file header word 3. */
++int XbFighter_MemberTable(void *object,int file,void **out){
++ XbBattleFighter *f=find_owner(object);if(!f || !f->model_lifecycle)return 0;
++ *out=file==0?XbNativeModel_Header(f->native_model):file==1?f->decoded[2]:NULL;return 1;
++}
+--- a/engine/platform/platform/xb_battle_fighter.h
++++ b/engine/platform/platform/xb_battle_fighter.h
+@@ -59,4 +59,8 @@
+ int XbBattleFighter_SetFace(XbBattleFighter *,unsigned mode,unsigned track);
+ int XbBattleFighter_SetEye(XbBattleFighter *,unsigned frame);
+ int XbBattleFighter_StepFace(XbBattleFighter *,XbFighterFaceState *);
++/* Original BtlObj_Init(1)/Term session. Requires installed Runtime resources
++ * and initialized game heap. End with EndObjectDiagnostic after all models
++ * have been destroyed; borrowed resources never replace original buffers. */
++int XbBattleFighter_BeginOriginalObjects(void);
+ #endif
+--- /dev/null
++++ b/engine/platform/platform/xb_battle_runtime.c
+@@ -0,0 +1,108 @@
++/* SPDX-License-Identifier: AGPL-3.0-or-later */
++#include "port_compat.h"
++#undef malloc
++#include "xb_battle_runtime.h"
++#include "xb_battle_common.h"
++#include "xb_battle_stage.h"
++#include "xb_model_native.h"
++#include "xb_mem.h"
++#include "xb_heap.h"
++#include "dr_container.h"
++#include "battle/btl_obj.h"
++#include "battle/btl_char_mgr.h"
++#include "battle/btl_ai_think.h"
++#include "battle/battle_setup.h"
++#include "battle/view_a.h"
++#include "sys/common.h"
++#include "sys/save.h"
++#include "sys/heap.h"
++#include "sys/pad.h"
++#include <stdint.h>
++#include <stdlib.h>
++#include <string.h>
++
++struct XbBattleRuntime {XbBattleCommon *common;CommonRes view;void *file,*light;int managers;};
++static XbBattleRuntime *active;
++extern AiThMgr *gBtlAi;
++extern ViewProgress *gProgress;
++extern void BtlChar_AllocAll(s32);
++extern void BtlChar_FreeAll(void);
++extern void BtlAiMgr_Init(void);
++extern void BtlAiMgr_Term(void);
++extern void Battle_ClearWork(void);
++
++int XbBattleRuntime_HasResources(void){return active && gCommonRes==&active->view;}
++int XbBattleRuntime_BindLight(void **out){
++ if(!XbBattleRuntime_HasResources())return 0;
++ *out=active->light;return 1;
++}
++int XbBattleRuntime_Open(const void *common2,size_t n2,const void *common4,size_t n4,XbBattleRuntime **out){
++ if(!out)return -890;
++ *out=NULL;if(sizeof(void *)!=4 || active || gCommonRes || gBtlObjWork || gBtlChars || gBtlAi || gSaveData || gProgress)return -891;
++ XbBattleRuntime *r=calloc(1,sizeof(*r));if(!r)return -851;
++ XbBattleCommonInfo info;int e=XbBattleCommon_Prepare(common2,n2,&r->common,&info);if(e)goto fail;
++ e=XbBattleCommon_AttachItems(r->common,common4,n4);if(e)goto fail;
++ unsigned nc,ni;size_t bytes;e=XbBattleCommon_GetItems(r->common,&r->view.data[2],&bytes,&nc,&ni);if(e)goto fail;
++ if(nc!=161 || ni<350){e=-890;goto fail;}r->view.size[2]=(s32)bytes;
++ size_t offset,length;unsigned flags;e=dr_pack_memory_entry(common2,n2,0,&offset,&length,&flags);if(e || flags){e=-890;goto fail;}
++ e=XbNativeTexture_Prepare((const uint8_t *)common2+offset,length,&r->light);if(e)goto fail;
++ /* Native offset-table wrapper: original roster/AI consumers receive typed
++  * sections. All unprepared common-2 entries remain empty, never a raw dump. */
++ const void *sections[213]={0};size_t sizes[213]={0};
++ static const unsigned index[6]={2,4,5,6,7,8};
++ for(unsigned i=0;i<6;i++){e=XbBattleCommon_GetRosterTable(r->common,i,&sections[index[i]],&sizes[index[i]]);if(e)goto fail;}
++ void *ai=NULL;e=XbBattleCommon_GetAiData(r->common,&ai,&sizes[3]);if(e)goto fail;sections[3]=ai;
++ size_t total=215*4;
++ for(unsigned i=0;i<213;i++){if(sizes[i]&3){e=-890;goto fail;}total+=sizes[i];}
++ uint8_t *file=calloc(1,total);if(!file){e=-851;goto fail;}r->file=file;
++ uint32_t *header=(uint32_t *)file;header[0]=213;size_t at=215*4;
++ for(unsigned i=0;i<213;i++){header[i+1]=(uint32_t)at;if(sizes[i])memcpy(file+at,sections[i],sizes[i]);at+=sizes[i];}
++ header[214]=(uint32_t)at;r->view.data[0]=file;r->view.size[0]=(s32)total;
++ /* Heap_Init is idempotent in the native engine and never erases live data. */
++ if(XbMem_InitHeap()){e=-851;goto fail;}Heap_Init();if(!XbHeap_Ready()){e=-851;goto fail;}
++ active=r;gCommonRes=&r->view;*out=r;return 0;
++fail:
++ XbNativeTexture_Free(r->light);free(r->file);XbBattleCommon_Free(r->common);free(r);return e;
++}
++int XbBattleRuntime_Close(XbBattleRuntime *r){
++ if(!r || active!=r || gCommonRes!=&r->view || r->managers || gBtlObjWork || gBtlChars || gBtlAi || gSaveData || gProgress)return -891;
++ gCommonRes=NULL;active=NULL;XbNativeTexture_Free(r->light);free(r->file);XbBattleCommon_Free(r->common);free(r);return 0;
++}
++int XbBattleRuntime_BeginManagers(XbBattleRuntime *r){
++ if(!r || active!=r || !XbBattleRuntime_HasResources() || r->managers || gBtlChars || gBtlAi || gSaveData || gProgress || !gBtlObjWork)return -891;
++ /* Validate every stage start before AllocAll performs its immediate reset. */
++ for(int side=0;side<2;side++){
++  BtlObj *obj=BtlObj_Get(side);float pos[4],rot[4];int zone=-1;
++  if(!obj || !obj->active || obj->type!=BTL_OBJ_TYPE_CHARA || !obj->charaWork)return -891;
++  if(!XbStage_TryStartPlace(side,pos,rot,0,&zone) || zone<0)return -892;
++ }
++ Progress_Init();Save_Init();Pad_Init();Battle_ClearWork();
++ BattleSetup_SetRule(0,0,0,0,0,0,0);
++ BattleItemSet items={{0}};
++ for(int side=0;side<2;side++){
++  BattleSetup_SetSide(side,side?BTL_CONTROL_CPU:BTL_CONTROL_PAD,side,1,0,0,0,NULL);
++  BattleSetup_SetMember(side,0,side,0,0,13,100.0f,&items);
++ }
++ BattleSetup_Finish();
++ for(int side=0;side<2;side++){BattleSide_SetObjId(side,side);BattleSide_SetModelSlot(side,side);}
++ BtlChar_AllocAll(2);BtlAiMgr_Init();r->managers=1;return 0;
++}
++int XbBattleRuntime_EndManagers(XbBattleRuntime *r){
++ if(!r || active!=r || !r->managers || !gBtlChars || !gBtlAi || !gSaveData || !gProgress)return -891;
++ BtlAiMgr_Term();BtlChar_FreeAll();
++ Heap_Free(gSaveData);gSaveData=NULL;
++ Heap_Free(gProgress->loadSprites);Heap_Free(gProgress->loadRes);Heap_Free(gProgress->loadPack);Heap_Free(gProgress);gProgress=NULL;
++ r->managers=0;return 0;
++}
++
++int XbBattleRuntime_GetInfo(XbBattleRuntime *r,XbBattleRuntimeInfo *out){
++ if(!out)return -890;
++ memset(out,0,sizeof(*out));
++ if(!r || active!=r || !r->managers || !gBtlChars || gBtlChars->count!=2 || !gBtlAi)return -891;
++ for(unsigned i=0;i<2;i++){
++  out->health[i]=gBtlChars->chars[i].members[0].gauge.health;
++  out->ki[i]=gBtlChars->chars[i].members[0].gauge.ki;
++  out->ai_type[i]=gBtlAi->work[i].type;out->ai_level[i]=gBtlAi->work[i].level;
++ }
++ return 0;
++}
+--- /dev/null
++++ b/engine/platform/platform/xb_battle_runtime.h
+@@ -0,0 +1,20 @@
++/* SPDX-License-Identifier: AGPL-3.0-or-later */
++#ifndef XB_BATTLE_RUNTIME_H
++#define XB_BATTLE_RUNTIME_H
++#include <stddef.h>
++typedef struct XbBattleRuntime XbBattleRuntime;
++/* Dedicated native common resources for object/roster boot. Common 3 and the
++ * effect scene are NOT supplied by this interface. No readiness marker is set. */
++int XbBattleRuntime_Open(const void *,size_t,const void *,size_t,XbBattleRuntime **);
++int XbBattleRuntime_Close(XbBattleRuntime *);
++int XbBattleRuntime_HasResources(void);
++int XbBattleRuntime_BindLight(void **);
++/* After original object init, models 0/1, and grounded starts: initializes a
++ * temporary original save/progress, versus setup, original BtlChar and BtlAi.
++ * Human side 0 / CPU side 1, character ids 0/1. Does not call Battle_Init or
++ * a frame of the effect/camera/HUD scene. End before freeing models. */
++int XbBattleRuntime_BeginManagers(XbBattleRuntime *);
++int XbBattleRuntime_EndManagers(XbBattleRuntime *);
++typedef struct XbBattleRuntimeInfo {int health[2],ki[2],ai_type[2],ai_level[2];} XbBattleRuntimeInfo;
++int XbBattleRuntime_GetInfo(XbBattleRuntime *,XbBattleRuntimeInfo *);
++#endif
+--- a/engine/platform/platform/xb_battle_stage.c
++++ b/engine/platform/platform/xb_battle_stage.c
+@@ -159,7 +159,7 @@
+  memcpy(c->starts,native,sizeof(native));c->has_starts=1;return 0;
+ }
+ /* Same by-pointer ABI/layout as eft_det_a.h StgGroundOut/EftDetTri. */
+-typedef struct SpawnGround {float x,y,z,w,nrm[4];int32_t flags;} SpawnGround;
++typedef struct __attribute__((aligned(16))) SpawnGround {float x,y,z,w,nrm[4];int32_t flags;} SpawnGround;
+ extern s32 StgGround_TestTri(void *,void *,s32,f32);
+ static int spawn_triangle(void *ctx,uint32_t index,const DrStageTriangle *t){
+  (void)index;if((t->flags&0x08000000u) || !(t->plane[1]<0))return 0;
+--- a/engine/platform/platform/xb_fighter_registry.c
++++ b/engine/platform/platform/xb_fighter_registry.c
+@@ -11,6 +11,10 @@
+  * or battle boot. The session owns its aligned work and shadow storage. */
+ static BtlObjWork *diagnostic_work;
+ static void *diagnostic_allocation;
++static int original_session;
++static void (*original_term)(void);
++static BtlResSlot original_slots[2];
++static unsigned slot_used;
+ static BtlObj *saved_map[BTL_OBJ_MAX];
+ static void *shadow_allocations[OBJ_SHADOW_MAX][3];
+ static void *aligned_zero(size_t bytes,size_t align,void **raw){
+@@ -27,6 +31,17 @@
+   SList_PushFront(&pool->free,&pool->nodes[i].link);
+  }
+  return 0;
++}
++extern void BtlObj_Init(s32);
++extern void BtlObj_Term(void);
++extern int XbBattleRuntime_HasResources(void);
++extern int XbHeap_Ready(void);
++int XbFighterRegistry_BeginOriginal(void){
++ if(sizeof(void *)!=4 || diagnostic_work || gBtlObjWork || !XbBattleRuntime_HasResources() || !XbHeap_Ready())return -865;
++ memcpy(saved_map,gBtlObjTbl,sizeof(saved_map));
++ BtlObj_Init(1); /* original heap, fixed resource buffers, light and draw modules */
++ diagnostic_work=gBtlObjWork;original_session=1;original_term=BtlObj_Term;slot_used=0;
++ return diagnostic_work?0:-851;
+ }
+ int XbFighterRegistry_Begin(void){
+  if(sizeof(void *)!=4 || diagnostic_work || gBtlObjWork)return -865;
+@@ -51,7 +66,11 @@
+ int XbFighterRegistry_End(void){
+  if(!diagnostic_work || gBtlObjWork!=diagnostic_work || BtlObj_GetCount()!=0)return -865;
+  if(BtlObjPoolE0_GetFreeCount()!=512 || BtlObjPool70_GetFreeCount()!=4 || BtlObjPool3_GetFreeCount()!=OBJ_SHADOW_MAX)return -865;
+- free_shadows();gBtlObjWork=NULL;free(diagnostic_allocation);diagnostic_allocation=NULL;diagnostic_work=NULL;memcpy(gBtlObjTbl,saved_map,sizeof(saved_map));return 0;
++ if(original_session){
++  if(slot_used)return -865;
++  original_term();original_term=NULL;original_session=0;
++ }else{free_shadows();gBtlObjWork=NULL;free(diagnostic_allocation);diagnostic_allocation=NULL;}
++ diagnostic_work=NULL;memcpy(gBtlObjTbl,saved_map,sizeof(saved_map));return 0;
+ }
+ 
+ extern void BtlObjMdl_Destroy(ObjMdlObj *);
+@@ -63,11 +82,24 @@
+ int XbFighterRegistry_ModelSlot(int side,const void *model,size_t model_size,const void *motions,size_t motions_size,void **slot){
+  if(!diagnostic_work || gBtlObjWork!=diagnostic_work || side<0 || side>=2 || !slot || !model || !motions || model_size>0x7fffffff || motions_size>0x7fffffff)return -865;
+  BtlResSlot *s=&diagnostic_work->res.fixed[side];if(s->flags)return -865;
++ if(original_session){
++  if(model_size>BTL_RES_MODEL_SIZE || motions_size>BTL_RES_ANIM0_SIZE || !s->file[0].buf || !s->file[1].buf)return -866;
++  original_slots[side]=*s;slot_used|=1u<<side;
++  memcpy(s->file[0].buf,model,model_size);s->file[0].size=(s32)model_size;s->file[0].id=0x590+side*10;
++  memcpy(s->file[1].buf,motions,motions_size);s->file[1].size=(s32)motions_size;s->file[1].id=0x598+side*10;
++  s->flags=BTL_RES_SLOT_USED;*slot=s;return 0;
++ }
++
+  s->file[0].buf=(void *)model;s->file[0].size=(s32)model_size;s->file[0].id=0x590+side*10;
+  s->file[1].buf=(void *)motions;s->file[1].size=(s32)motions_size;s->file[1].id=0x598+side*10;s->file[2].id=-1;
+  s->number=side;s->flags=BTL_RES_SLOT_USED;diagnostic_work->res.prealloc=1;*slot=s;return 0;
+ }
+-void XbFighterRegistry_ReleaseModelSlot(int side){if(diagnostic_work && side>=0 && side<2)memset(&diagnostic_work->res.fixed[side],0,sizeof(BtlResSlot));}
++void XbFighterRegistry_ReleaseModelSlot(int side){
++ if(!diagnostic_work || side<0 || side>=2)return;
++ if(original_session){
++  if(slot_used&(1u<<side)){diagnostic_work->res.fixed[side]=original_slots[side];slot_used&=~(1u<<side);}
++ }else memset(&diagnostic_work->res.fixed[side],0,sizeof(BtlResSlot));
++}
+ int XbFighterRegistry_Setup(int id,void *slot){
+  if(!diagnostic_work || gBtlObjWork!=diagnostic_work || id<0 || id>=2 || !BtlObj_Get(id) || !slot)return -865;
+  BtlObj *obj=BtlObj_Get(id);BtlObj_Setup(obj,BTL_OBJ_TYPE_CHARA,slot,id,1);obj->charaWork=BtlObj_GetCharaWork(id);return 0;
+--- a/engine/platform/platform/xb_model_native.c
++++ b/engine/platform/platform/xb_model_native.c
+@@ -132,3 +132,11 @@
+  if(!m || i>=m->count || !vif || !bytes)return -870;
+  DrBodyPart *p=&m->part[i];*vif=p->chain_bytes?m->model+p->chain_offset:NULL;*bytes=p->chain_bytes;return 0;
+ }
++
++int XbNativeTexture_Prepare(const void *bytes,size_t size,void **out){
++ if(!out)return -870;
++ *out=NULL;if(sizeof(void *)!=4 || !bytes)return -870;
++ TexFile *file=NULL;int e=texture(bytes,size,&file);if(!e)*out=file;return e;
++}
++void XbNativeTexture_Free(void *file){free(file);}
++void *XbNativeModel_Header(XbNativeModel *model){return model?model->model:NULL;}
+--- a/engine/platform/platform/xb_model_native.h
++++ b/engine/platform/platform/xb_model_native.h
+@@ -11,4 +11,8 @@
+ void XbNativeModel_BindFiles(XbNativeModel *,void *object);
+ unsigned XbNativeModel_Parts(XbNativeModel *);
+ int XbNativeModel_Mesh(XbNativeModel *,unsigned,const void **,size_t *);
++/* Native TexFile for original consumers; pix/clut pointers are rebuilt. */
++int XbNativeTexture_Prepare(const void *,size_t,void **);
++void XbNativeTexture_Free(void *);
++void *XbNativeModel_Header(XbNativeModel *);
+ #endif
+--- a/engine/platform/platform-sources.txt
++++ b/engine/platform/platform-sources.txt
+@@ -3,6 +3,7 @@
+ xb_battle_common.c
+ xb_battle_consumers.c
+ xb_battle_fighter.c
++xb_battle_runtime.c
+ xb_battle_stage.c
+ xb_bpe.c
+ xb_demo_resources.c
+--- /dev/null
++++ b/engine/tests/test_native_boot.c
+@@ -0,0 +1,58 @@
++/* SPDX-License-Identifier: AGPL-3.0-or-later */
++#include "port_compat.h"
++#undef malloc
++#include "xb_battle_runtime.h"
++#include "xb_battle_fighter.h"
++#include "xb_heap.h"
++#include "battle/btl_obj.h"
++#include "battle/btl_char_mgr.h"
++#include "battle/btl_ai_think.h"
++#include "battle/view_a.h"
++#include "sys/common.h"
++#include "sys/save.h"
++#include "sys/heap.h"
++#include "sys/gfxm_a.h"
++#include "sys/gfxm_b.h"
++#include <stdio.h>
++#include <stdarg.h>
++#include <assert.h>
++#include <stdlib.h>
++#include <string.h>
++BtlObjWork *gBtlObjWork;BtlObj *gBtlObjTbl[BTL_OBJ_MAX];
++BtlCharMgr *gBtlChars;AiThMgr *gBtlAi;CommonRes *gCommonRes;SaveData *gSaveData;ViewProgress *gProgress;
++ObjOutline *gObjOutline;ObjGlow *gObjGlow;GfxClutWork *gGfxAlphaKey;
++HeapBlock *gHeapStart[2],*gHeapEnd[2];s32 gHeapSize[2],gHeapDebugValue,gHeapDebugUnused,gHeapUnk70[2],gHeapUnk78[2];u8 gHeapDebugFlag;
++float D_002F2420[213],D_002EC2C0[4]={0,0,0,1},D_003337D0[4];
++extern const float real_reference[213];
++extern s32 Heap_GetFreeSize(void),Heap_GetUsedSize(void);
++void *Bpe_Decode(void *s,void *d,int *n){(void)s;(void)d;(void)n;abort();}
++void xsdk_log_write(const char *fmt,...){va_list ap;va_start(ap,fmt);vfprintf(stderr,fmt,ap);fputc('\n',stderr);va_end(ap);}
++static void *load(const char *name,size_t *n){FILE *f=fopen(name,"rb");assert(f && !fseek(f,0,SEEK_END));long s=ftell(f);assert(s>0 && !fseek(f,0,SEEK_SET));*n=(size_t)s;void *p=malloc(*n);assert(p && fread(p,1,*n,f)==*n);fclose(f);return p;}
++int main(int argc,char **argv){
++ setvbuf(stdout,NULL,_IOLBF,0);assert(argc==7);memcpy(D_002F2420,real_reference,sizeof(D_002F2420));
++ size_t cn,in;void *common=load(argv[3],&cn),*items=load(argv[4],&in);XbBattleRuntime *runtime=NULL;
++ assert(!XbBattleRuntime_Open(common,cn,items,in,&runtime));free(common);free(items);
++ assert(XbBattleRuntime_HasResources() && XbHeap_Ready());s32 before=Heap_GetFreeSize();
++
++ for(unsigned pass=0;pass<2;pass++){
++  assert(!XbBattleFighter_BeginOriginalObjects());assert(XbBattleFighter_BeginOriginalObjects()<0);
++  assert(gBtlObjWork && gObjOutline && gObjGlow && gGfxAlphaKey && gBtlObjWork->light.res);
++  assert(Heap_GetFreeSize()<before);assert(XbBattleRuntime_Close(runtime)<0);
++  XbBattleFighter *fighters[2]={0};
++  for(unsigned side=0;side<2;side++){
++   size_t mn,an;void *m=load(argv[side?5:1],&mn),*a=load(argv[side?6:2],&an);XbFighterPrepared prepared;
++   assert(!XbBattleFighter_PrepareModelAnimation(m,mn,a,an,&fighters[side],&prepared));free(m);free(a);
++   assert(!XbBattleFighter_BindCommonReference(fighters[side],real_reference,213));
++   int id=-1;assert(!XbBattleFighter_CreateModelObject(fighters[side],side,&id) && id==(int)side);
++   assert(BtlObj_Get(id)->active && BtlObj_Get(id)->charaWork);
++   assert(!XbBattleFighter_PlayMotion(fighters[side],0,2));uint32_t frame,length;
++   assert(!XbBattleFighter_StepModel(fighters[side],&frame,&length));assert(!XbBattleFighter_SamplePose(fighters[side]));assert(!XbBattleFighter_CalcMatrices(fighters[side]));
++  }
++  assert(BtlObj_GetCount()==2 && XbBattleFighter_EndObjectDiagnostic()<0);
++  for(unsigned side=0;side<2;side++)XbBattleFighter_FreeModelAnimation(fighters[side]);
++  assert(!XbBattleFighter_EndObjectDiagnostic());assert(!gBtlObjWork && !gObjOutline && !gObjGlow && !gGfxAlphaKey);
++  assert(Heap_GetFreeSize()==before);
++  printf("PASS original BtlObj_Init(1)/Term, real models and draw-module allocation, original heap restored: pass=%u free=%d\n",pass,before);
++ }
++ assert(!XbBattleRuntime_Close(runtime));assert(!gCommonRes && !XbBattleRuntime_HasResources());return 0;
++}
+--- /dev/null
++++ b/engine/tests/test_native_managers.c
+@@ -0,0 +1,76 @@
++/* SPDX-License-Identifier: AGPL-3.0-or-later */
++#include "port_compat.h"
++#undef malloc
++#include "xb_battle_runtime.h"
++#include "xb_battle_fighter.h"
++#include "xb_battle_stage.h"
++#include "xb_typed_data.h"
++#include "battle/btl_char_mgr.h"
++#include "battle/btl_ai_think.h"
++#include "battle/btl_obj.h"
++#include "battle/btl_input.h"
++#include "sys/pad.h"
++#include "battle/battle_setup.h"
++#include "sys/heap.h"
++#include "sys/save.h"
++#include <stdio.h>
++#include <stdarg.h>
++#include <stdlib.h>
++#include <stdint.h>
++#include <string.h>
++#include <assert.h>
++#include <math.h>
++extern AiThMgr *gBtlAi;
++extern void BtlChar_ResetAll(void),BtlAiMgr_Reset(void);
++extern void BtlChar_SetFlag(void *,int);
++extern s32 Heap_GetFreeSize(void);
++extern float D_002F2420[213];
++void xsdk_log_write(const char *fmt,...){va_list ap;va_start(ap,fmt);vfprintf(stderr,fmt,ap);fputc('\n',stderr);va_end(ap);}
++static void *load(const char *root,const char *name,size_t *n){char path[2048];assert(snprintf(path,sizeof(path),"%s/%s",root,name)<(int)sizeof(path));FILE *f=fopen(path,"rb");assert(f && !fseek(f,0,SEEK_END));long s=ftell(f);assert(s>0);rewind(f);*n=(size_t)s;void *p=malloc(*n);assert(p && fread(p,1,*n,f)==*n);fclose(f);return p;}
++static int read_program(void *root,const char *name,uint8_t **bytes,size_t *n){*bytes=load(root,!strcmp(name,"DBZP.BIN")?"BIN/DBZP.BIN":name,n);return 0;}
++int main(int argc,char **argv){
++ setvbuf(stdout,NULL,_IOLBF,0);assert(argc==3);
++ XbDataFiles files={read_program,argv[2]};int rc=XbTypedData_Load(&files,&gXbTypedMainCatalog,0);printf("typed data: %d\n",rc);assert(!rc && gPortDataStripped==2);
++ size_t n2,n4,ns;void *c2=load(argv[1],"common-2.bin",&n2),*c4=load(argv[1],"common-4.bin",&n4),*stage=load(argv[1],"stage.bin",&ns);
++ XbBattleRuntime *runtime=NULL;rc=XbBattleRuntime_Open(c2,n2,c4,n4,&runtime);printf("runtime: %d\n",rc);assert(!rc);free(c2);free(c4);s32 heap=Heap_GetFreeSize();
++ XbBattleStageCollision *collision=NULL;assert(!XbBattleStage_PrepareCollision(stage,ns,&collision));assert(!XbBattleStage_PrepareStarts(collision,stage,ns));free(stage);assert(!XbBattleStage_InstallCollision(collision));
++ for(unsigned pass=0;pass<2;pass++){
++  assert(!XbTypedData_Load(&files,&gXbTypedMainCatalog,XBTD_VALIDATE_ONLY));assert(Heap_GetFreeSize()==heap);
++  assert(!XbBattleFighter_BeginOriginalObjects());XbBattleFighter *fighters[2];
++  for(unsigned side=0;side<2;side++){
++   size_t mn,an;void *model=load(argv[1],side?"right-model.bin":"left-model.bin",&mn),*anim=load(argv[1],side?"right-animation.bin":"left-animation.bin",&an);XbFighterPrepared info;
++   assert(!XbBattleFighter_PrepareModelAnimation(model,mn,anim,an,&fighters[side],&info));free(model);free(anim);
++   assert(!XbBattleFighter_BindCommonReference(fighters[side],D_002F2420,213));int id=-1;
++   assert(!XbBattleFighter_CreateModelObject(fighters[side],side,&id) && id==(int)side);
++  }
++  puts("objects ready; entering original roster/AI reset");
++  rc=XbBattleRuntime_BeginManagers(runtime);printf("original managers: %d\n",rc);assert(!rc);
++  assert(gBtlChars && gBtlChars->count==2 && gBtlAi && gBtlAi->data);
++  XbBattleRuntimeInfo runtime_info;assert(!XbBattleRuntime_GetInfo(runtime,&runtime_info));
++  assert(runtime_info.health[0]==40000 && runtime_info.health[1]==40000 && runtime_info.ai_level[1]==13);
++  assert(XbBattleRuntime_BeginManagers(runtime)<0);
++  for(unsigned side=0;side<2;side++){
++   BtlMgrChr *chr=&gBtlChars->chars[side];assert(chr->side==(int)side && chr->objId==(int)side && chr->memberCount==1);
++   assert(chr->members[0].present && chr->members[0].chara==(int)side && chr->members[0].cpuLevel==13);
++   assert(chr->members[0].gauge.health>0 && chr->members[0].gauge.health==chr->members[0].gauge.healthMax);
++   assert(gBtlAi->work[side].objId==(int)side && gBtlAi->work[side].param && gBtlAi->work[side].level==13);
++   printf("side=%u hp=%d ki=%d AI=%d level=%d\n",side,chr->members[0].gauge.health,chr->members[0].gauge.ki,gBtlAi->work[side].type,gBtlAi->work[side].level);
++  }
++  assert(isfinite(gBtlAi->radiusSum) && gBtlAi->radiusSum>0);
++  /* Isolated original input phase: a physical-pad fixture, then release.
++   * Flag 2 normally comes from the battle sequence; no sequence is claimed. */
++  BtlInputChr *input=(BtlInputChr *)&gBtlChars->chars[0];
++  BtlChar_SetFlag(input,2);gPad[0].held=PAD_SQUARE;gPad[0].status=0;gPad[0].left[0]=0.5f;gPad[0].left[1]=0;
++  BtlInput_Sample(input);assert(input->input.rec.buttons&BTLB_RUSH);
++  BtlInput_Update(input);assert(input->input.held&BTLB_RUSH);assert(input->input.pressed&BTLB_RUSH);
++  gPad[0].held=0;BtlInput_Sample(input);BtlInput_Update(input);assert(input->input.released&BTLB_RUSH);
++  puts("PASS original input sample/remap/press/release with physical-pad fixture");
++  BtlChar_ResetAll();BtlAiMgr_Reset();
++  assert(!XbBattleRuntime_EndManagers(runtime) && !gBtlChars && !gBtlAi && !gSaveData);
++  for(unsigned side=0;side<2;side++)XbBattleFighter_FreeModelAnimation(fighters[side]);
++  assert(!XbBattleFighter_EndObjectDiagnostic());assert(Heap_GetFreeSize()==heap);
++  printf("PASS original roster reset / AI init / reset / terminate: pass=%u heap restored\n",pass);
++ }
++ assert(!XbBattleStage_UninstallCollision(collision));assert(!XbBattleStage_FreeCollision(collision));assert(!XbBattleRuntime_Close(runtime));
++ puts("PASS no Battle_Update/Battle_Main, GPU or SDK transport executed; marker stays 2");return 0;
++}
+--- a/engine/tools/build_engine_diagnostic.py
++++ b/engine/tools/build_engine_diagnostic.py
+@@ -45,9 +45,9 @@
+ for name in ['func_002967C0','sceSifCallRpc','XbSfx_Mix','ADXT_Create','_ctype_','gPortDataStripped']:
+     assert name in defined,name
+ subprocess.run(['python3',str(sdk/'tools/elf2xex.py'),'--title-id','0x44523630',
+-                '--title-name','DragonRage360 0.43 D9 Spawn and Tables Diagnostic' if r.get('typed_catalog_linked') else 'DragonRage360 0.34 L1 Diagnostic',str(elf),str(xex)],check=True)
++                '--title-name','DragonRage360 0.44 D10 Original Object Boot Diagnostic' if r.get('typed_catalog_linked') else 'DragonRage360 0.34 L1 Diagnostic',str(elf),str(xex)],check=True)
+ report={'kind':'native diagnostic with linked combat code; NOT a playable game',
+-        'version':'0.43-D9' if r.get('typed_catalog_linked') else '0.34-L1','Battle_Main_address':hex(defined['Battle_Main'][1]),
++        'version':'0.44-D10' if r.get('typed_catalog_linked') else '0.34-L1','Battle_Main_address':hex(defined['Battle_Main'][1]),
+         'Battle_Main_linked':True,'Game_Main_linked':False,'battle_called':False,
+         'strong_or_weak_undefined':0,'native_game_data_loaded':False,'typed_catalog_linked':bool(r.get('typed_catalog_linked')),'partial_preview_available':bool(r.get('typed_catalog_linked')), 
+         'boot_combat_available':False,'hardware_executed':False,
+--- a/engine/tools/fixed_profile_source.py
++++ b/engine/tools/fixed_profile_source.py
+@@ -8,6 +8,25 @@
+ import re
+ 
+ def transform(source, text):
++    if source=='src/battle/btl_input.c':
++        anchor='        u32 bit = 1 << i;'
++        if text.count(anchor)!=2:raise ValueError('input bit-counter source changed')
++        return text.replace(anchor,'        u32 bit = 1u << i;'), []
++    if source=='src/sys/save.c':
++        anchor='#include "sys/save.h"'
++        if text.count(anchor)!=1:raise ValueError('save include source changed')
++        text=text.replace(anchor,anchor+'\n/* Character masks include bit 63: shift an unsigned 64-bit value. */\n#undef SAVE_CHARA_MASK\n#define SAVE_CHARA_MASK(id) (1ULL << ((id) % 64))')
++        return text, []
++    if source=='src/battle/btl_obj.c':
++        anchor='    light->res = (u8 *)res->data[0] + ((((u32 *)res->data[0])[1] >> 2) << 2);\n    Res_RelocateOffsets(&light->res, light->res, light->res);'
++        if text.count(anchor)!=1:raise ValueError('original light resource binding changed')
++        text=text.replace(anchor,'    extern int XbBattleRuntime_BindLight(void **);\n    if (!XbBattleRuntime_BindLight(&light->res)) {\n'+anchor+'\n    }')
++        return text, []
++    if source=='src/battle/btl_char_mgr.c':
++        anchor='            chr->objTbl[i] = FILE_TABLE(obj->file[i], 3);'
++        if text.count(anchor)!=1:raise ValueError('original member table binding changed')
++        text=text.replace(anchor,'            extern int XbFighter_MemberTable(void *,int,void **);\n            void *native_table=NULL;\n            if (XbFighter_MemberTable(obj,i,&native_table)) chr->objTbl[i]=native_table;\n            else '+anchor.strip())
++        return text, []
+     if source=='src/battle/stg_a_b.c':
+         start='s32 BtlStage_GetStartPlace(s32 side, Vec4 *pos, Vec4 *rot, s32 alt) {\n'
+         place='s32 BtlStage_GetPlace(Vec4 *pos, Vec4 *rot) {\n'
+--- /dev/null
++++ b/engine/tools/test_native_boot.py
+@@ -0,0 +1,71 @@
++#!/usr/bin/env python3
++# SPDX-License-Identifier: AGPL-3.0-or-later
++from pathlib import Path
++import argparse,subprocess,sys,os,json
++p=argparse.ArgumentParser();p.add_argument('upstream',type=Path);p.add_argument('model',type=Path);p.add_argument('motions',type=Path);p.add_argument('output',type=Path);p.add_argument('--i386-root',type=Path);p.add_argument('--qemu',type=Path);p.add_argument('--program',type=Path);p.add_argument('--other-model',type=Path);p.add_argument('--other-motions',type=Path);p.add_argument('--boot-input',type=Path);p.add_argument('--xsdk',type=Path);a=p.parse_args();up=a.upstream.resolve();out=a.output.resolve();out.mkdir(parents=True,exist_ok=True);e=Path(__file__).resolve().parents[1];project=e.parent
++sys.path.insert(0,str(up/'port/tools'));import portsrc
++s,_,_=portsrc.enable_attempts((up/'src/battle/bobj_a.c').read_text());from fixed_profile_source import transform
++s,_=transform('src/battle/bobj_a.c',s);mathtext,_,_=portsrc.enable_attempts((up/'src/sys/math3d.c').read_text());mathsrc=out/'math3d.c';mathsrc.write_text(mathtext);original=out/'bobj_a.c';original.write_text(s)
++mathftext,_,_=portsrc.enable_attempts((up/'src/sys/mathf.c').read_text());mathfsrc=out/'mathf.c';mathfsrc.write_text(mathftext)
++original_geometry=[]
++for stem in ('col_a','col_b','stg_d','btl_obj','bobj_b_b'):
++ text,_,_=portsrc.enable_attempts((up/'src/battle'/(stem+'.c')).read_text());
++ if a.boot_input:text,_=transform('src/battle/'+stem+'.c',text)
++ src=out/(stem+'.c');src.write_text(text);original_geometry.append(src)
++for stem in ('gfxm_e_b','gfxm_b_b','gfxm_e_c'):
++ text,_,_=portsrc.enable_attempts((up/'src/sys'/(stem+'.c')).read_text());text,_=transform('src/sys/'+stem+'.c',text);src=out/(stem+'.c');src.write_text(text);original_geometry.append(src)
++sources=[e/'tests/test_native_fighter.c',e/'platform/platform/xb_battle_fighter.c',e/'platform/platform/xb_fighter_tables.c',e/'platform/platform/xb_fighter_registry.c',e/'platform/platform/xb_model_native.c',up/'src/sys/list.c',original,*[project/'src'/(s+'.c') for s in ('dr_body_model','dr_face_vif','dr_container','dr_anim','dr_bpe','dr_skeleton','dr_disc','dr_texfile','dr_gs_texture')],up/'src/port/vu0_a.c',up/'src/port/vu0_b.c',mathsrc,mathfsrc,up/'port/src/mathf_pc.c',*original_geometry,up/'port/src/plat_fastvec.c']
++if a.boot_input:
++ if not a.xsdk or not a.i386_root or not a.qemu:raise ValueError('boot test requires xsdk, i386 root and qemu')
++ sources[0]=e/'tests/test_native_boot.c'
++ sources.append(up/'port/src/softfloat_ps2.c')
++ for stem in ('gfxm_a','gfxm_b'):
++  text,_,_=portsrc.enable_attempts((up/'src/sys'/(stem+'.c')).read_text());src=out/(stem+'.c');src.write_text(text);original_geometry.append(src);sources.append(src)
++ for src in [e/'combat/heap.c',up/'src/sys/align.c',e/'platform/platform/xb_plat_mem.c',e/'platform/platform/xb_resconv.c',e/'platform/platform/xb_battle_common.c',e/'platform/platform/xb_battle_runtime.c']:
++  sources.append(src)
++if a.program:
++ import struct
++ b=a.program.read_bytes();phoff=struct.unpack_from('<I',b,28)[0];phsize,phcount=struct.unpack_from('<HH',b,42)
++ for i in range(phcount):
++  typ,off,va,pa,fs,ms,fl,al=struct.unpack_from('<8I',b,phoff+i*phsize)
++  if typ==1 and va<=0x2f2420 and 0x2f2420+852<=va+fs:
++   raw=b[off+0x2f2420-va:off+0x2f2420-va+852];break
++ else:raise ValueError('real reference table absent from supplied ELF')
++ import hashlib
++ if hashlib.sha256(b).hexdigest()!='811188ba9b416500d921cd4d9514df0cbf42f3a41a99cf5aac5a3da37171bf99':raise ValueError('unrecognized USA program')
++ values=struct.unpack('<213f',raw);ref=out/'real_reference.c'
++ declarations='#include "battle/bobj_a.h"\n'
++ declarations+='const float real_reference[213]={'+','.join(float(v).hex()+'f' for v in values)+'};\n'
++ def memory(va,n):
++  for i in range(phcount):
++   typ,off,base,pa,fs,ms,fl,al=struct.unpack_from('<8I',b,phoff+i*phsize)
++   if typ==1 and base<=va and va+n<=base+fs:return b[off+va-base:off+va-base+n]
++  raise ValueError(hex(va))
++ for addr,count in [(0x2c6c20,7),(0x2c6c40,5)]:
++  vals=struct.unpack('<'+str(count*2)+'h',memory(addr,count*4));declarations+='BobjTalkStep D_%08X[%d]={'%(addr,count)+','.join('{%d,%d}'%(vals[i*2],vals[i*2+1]) for i in range(count))+'};\n'
++ for addr in range(0x2c6c58,0x2c6e58,64):
++  raw=memory(addr,64);keys=[struct.unpack_from('<3fI',raw,i*16) for i in range(4)]
++  declarations+='BobjJawKey D_%08X[4]={'%addr+','.join('{'+','.join(float(v).hex()+'f' for v in k[:3])+',%d}'%k[3] for k in keys)+'};\n'
++ ref.write_text(declarations);sources.append(ref)
++common=['gcc','-std=gnu99','-O1','-g','-fcommon','-fno-strict-aliasing','-ffunction-sections','-fdata-sections','-fsanitize=address,undefined','-fno-omit-frame-pointer','-I'+str(e/'platform/platform'),'-I'+str(project/'src'),'-I'+str(up/'include'),'-I'+str(up/'port/include'),'-I'+str(up/'port/src')]
++if a.program:common+=['-DHAVE_REAL_REFERENCE']
++if a.boot_input:common+=['-I'+str(a.xsdk.resolve()/'include')]
++extra=[];linkextra=[]
++if a.i386_root:
++ root=a.i386_root.resolve();lib=root/'usr/lib32';extra=['-m32','-B'+str(lib)+'/', '-B'+str(root/'usr/lib/gcc/x86_64-linux-gnu/13/32')+'/', '-isystem',str(root/'usr/include'),'-isystem',str(root/'usr/include/x86_64-linux-gnu'),'-isystem','/usr/include/x86_64-linux-gnu']
++ linkextra=['-m32','-B'+str(lib)+'/', '-B'+str(root/'usr/lib/gcc/x86_64-linux-gnu/13/32')+'/', '-L'+str(lib),'-Wl,--dynamic-linker='+str(lib/'ld-linux.so.2'),'-Wl,-rpath,'+str(lib)]
++common+=extra
++sanitize='undefined,bounds' if a.i386_root else 'address,undefined'
++common=[('-fsanitize='+sanitize if x.startswith('-fsanitize=') else x) for x in common]
++objects=[];logs=[]
++for i,src in enumerate(sources):
++ obj=out/(str(i)+'.o');flags=['-include',str(up/'port/include/port_compat.h')] if src in (original,mathsrc,mathfsrc,*original_geometry) else []
++ if a.boot_input and src.name=='heap.c':flags+=['-DPORT_BIGENDIAN','-include',str(up/'port/include/port_compat.h')]
++ if a.boot_input and src.name=='align.c':flags+=['-include',str(up/'port/include/port_compat.h')]
++ if a.boot_input and src.name=='xb_resconv.c':flags+=['-DXB_HOST_TEST']
++ if src.name in ('vu0_a.c','vu0_b.c'):flags+=['-include','math.h','-include',str(up/'port/src/vu0_names.h'),'-DREF_VU0_EXTERN_ARITH']
++ r=subprocess.run(common+flags+['-c',str(src),'-o',str(obj)],capture_output=True,text=True);logs.append(r.stdout+r.stderr);(out/'compile.txt').write_text(''.join(logs));r.check_returncode();objects.append(obj)
++r=subprocess.run(['gcc',*linkextra,'-fsanitize='+sanitize,*map(str,objects),'-Wl,--gc-sections','-lm','-o',str(out/'native-fighter')],capture_output=True,text=True);logs.append(r.stdout+r.stderr);(out/'compile.txt').write_text(''.join(logs));r.check_returncode()
++r=subprocess.run(([str(a.qemu.resolve()),'-E','LD_LIBRARY_PATH='+str(a.i386_root.resolve()/'usr/lib32')] if a.qemu else [])+[str(out/'native-fighter'),str(a.model.resolve()),str(a.motions.resolve())]+([str(a.boot_input.resolve()/'common-2.bin'),str(a.boot_input.resolve()/'common-4.bin')] if a.boot_input else [])+([str(a.other_model.resolve()),str(a.other_motions.resolve())] if a.other_model and a.other_motions else []),capture_output=True,text=True,env=dict(os.environ,ASAN_OPTIONS='detect_leaks=0:halt_on_error=1',UBSAN_OPTIONS='halt_on_error=1'));(out/'native-fighter-test.txt').write_text(r.stdout+r.stderr);print(r.stdout+r.stderr,end='');r.check_returncode()
++report={'result':'PASS','fixture':'real supplied USA programs and selected matching disc resources','execution':'QEMU-i386 Linux user mode','original_BtlObj_Init_1_and_Term_executed':True,'two_lifecycle_passes':True,'original_heap_fully_restored_each_pass':True,'original_draw_module_allocation_and_free':True,'real_two_model_CreateChara_and_pose_step':True,'original_BtlChar_AllocAll_executed':False,'original_BtlAiMgr_Init_executed':False,'GPU_executed':False,'PowerPC_executed':False,'sanitizers':sanitize}
++(out/'native-fighter-test.json').write_text(json.dumps(report,indent=2)+'\n');print(json.dumps(report,indent=2))
+--- /dev/null
++++ b/engine/tools/test_native_managers.py
+@@ -0,0 +1,83 @@
++#!/usr/bin/env python3
++# SPDX-License-Identifier: AGPL-3.0-or-later
++"""Original native boot under i386. Xbox SDK imports TRAP if called.
++No function/callback is replaced in the port or in its data tables. The test
++cannot prove Xbox CPU arithmetic, GPU, audio or a complete battle scene.
++"""
++from pathlib import Path
++import argparse,concurrent.futures,subprocess,json,re,sys,os,hashlib
++p=argparse.ArgumentParser();p.add_argument('upstream',type=Path);p.add_argument('xsdk',type=Path);p.add_argument('i386_root',type=Path);p.add_argument('qemu',type=Path);p.add_argument('native_build',type=Path);p.add_argument('catalog',type=Path);p.add_argument('resources',type=Path);p.add_argument('programs',type=Path);p.add_argument('output',type=Path);a=p.parse_args()
++e=Path(__file__).resolve().parents[1];project=e.parent;up=a.upstream.resolve();sdk=a.xsdk.resolve();root=a.i386_root.resolve();build=a.native_build.resolve();out=a.output.resolve();out.mkdir(parents=True,exist_ok=True)
++gen=out/'prepared';gen.mkdir(exist_ok=True);objs=out/'objects';objs.mkdir(exist_ok=True);logs=out/'logs';logs.mkdir(exist_ok=True)
++sys.path.insert(0,str(up/'port/tools'));import portsrc,eeconst
++from fixed_profile_source import transform
++import native_data_sections,float_build
++report=json.loads((build/'battle-integration.json').read_text());assert report['link']=='PASS'
++flags=['-m32','-malign-double','-std=gnu99','-O1','-g','-fcommon','-fno-builtin','-fno-strict-aliasing','-ffunction-sections','-fdata-sections','-ffp-contract=off','-fsanitize=undefined,bounds','-fno-omit-frame-pointer','-B'+str(root/'usr/lib32')+'/', '-B'+str(root/'usr/lib/gcc/x86_64-linux-gnu/13/32')+'/', '-isystem',str(root/'usr/include'),'-isystem',str(root/'usr/include/x86_64-linux-gnu'),'-isystem','/usr/include/x86_64-linux-gnu','-I'+str(up/'include'),'-I'+str(up/'port/include'),'-I'+str(up/'port/src'),'-I'+str(project/'src'),'-I'+str(e/'graphics'),'-I'+str(e/'capture/port/src/gs'),'-I'+str(e/'platform/platform'),'-I'+str(sdk/'include'),'-DPORT_BIGENDIAN','-DDR_FIXED_BATTLE','-DDR_XBOX360']
++# Header changes invalidate cached objects as well as changes to C text.
++headers=hashlib.sha256()
++for directory in [up/'include',up/'port/include',up/'port/src',project/'src',e/'graphics',e/'platform/platform',sdk/'include']:
++ for header in sorted(directory.rglob('*.h')):
++  headers.update(str(header).encode());headers.update(header.read_bytes())
++header_digest=headers.hexdigest()
++sources=[]
++for row in report['files']:
++ rel=row['source']
++ if rel.startswith('generated/'):continue
++ path=Path(row['original_source'])
++ sources.append((rel,path))
++# Native title objects have genuine portable C producers/graphics bridges.
++makefile=(project/'Makefile').read_text();native=re.search(r'^OBJECTS := (.+)$',makefile,re.M)[1].split()
++for obj in native:
++ if obj in ['build/main.o']:continue
++ match=re.search('^'+re.escape(obj)+r': ([^\s]+\.c)',makefile,re.M)
++ path=project/(match[1] if match else 'src/'+Path(obj).stem+'.c')
++ sources.append(('title/'+path.relative_to(project).as_posix(),path))
++sources+=[('test/harness.c',e/'tests/test_native_managers.c'),('test/catalog.c',a.catalog.resolve())]
++def compile_one(item):
++ rel,path=item;key=rel.replace('/','_').replace('.','_');obj=objs/(key+'.o');log=logs/(key+'.txt');extra=[]
++ if rel.startswith('port/data/'):
++  text=native_data_sections.prepare(rel,path.read_text());source=gen/(key+'.s');source.write_text(text);cmd=['gcc','-m32','-c',str(source),'-o',str(obj)]
++ else:
++  source=path
++  game=rel.startswith(('src/sys/','src/battle/','src/menu/')) or rel=='src/main.c' or rel=='engine/combat/dma_tex.c'
++  if game:
++   text,_,_=portsrc.enable_attempts(path.read_text());text,_=transform(rel,text);source=gen/(key+'.c');source.write_text(text)
++   extra+=['-include',str(up/'port/include/port_compat.h'),'-include',str(up/'port/include/port_libm.h')]
++   if rel=='src/main.c':extra+=['-Dmain=dr_ps2_original_main']
++  if 'newlib_libm/' in rel:extra+=['-fno-sanitize=shift,signed-integer-overflow','-include',str(up/'port/third_party/newlib_libm/newlib_shim.h'),'-include',str(e/'combat/newlib_compat.h')]
++  if rel.startswith('src/port/'):extra+=['-include','math.h','-include',str(up/'port/src/vu0_names.h'),'-DREF_VU0_EXTERN_ARITH','-include',str(up/'port/include/port_libm.h')]
++  if path.name=='mathf_pc.c':extra+=['-include',str(up/'port/include/port_libm.h')]
++  if path.name=='softfloat_ps2.c':extra+=float_build.helper_flags()
++  if path.name in ['xb_gamedata.c','xb_resconv.c']:extra+=['-DXB_HOST_TEST']
++  # The native-source replacement itself still needs the source directory.
++  cmd=['gcc',*flags,*extra,'-I'+str(path.parent),'-c',str(source),'-o',str(obj)]
++ stamp=objs/(key+'.sha256');digest=hashlib.sha256((json.dumps(cmd)+source.read_text()+header_digest).encode()).hexdigest()
++ if obj.exists() and stamp.exists() and stamp.read_text()==digest:return {'source':rel,'compiled':True,'object':str(obj),'log':str(log)}
++ r=subprocess.run(cmd,capture_output=True,text=True)
++ if not r.returncode:stamp.write_text(digest)
++ log.write_text(r.stdout+r.stderr)
++ return {'source':rel,'compiled':r.returncode==0,'object':str(obj),'log':str(log)}
++with concurrent.futures.ThreadPoolExecutor(max_workers=6) as pool:rows=list(pool.map(compile_one,sources))
++(out/'compile.json').write_text(json.dumps(rows,indent=2)+'\n')
++failed=[row for row in rows if not row['compiled']]
++if failed:
++ for row in failed:print(row['source']+'\n'+Path(row['log']).read_text()[-2500:])
++ raise SystemExit('compilation failures: '+str(len(failed)))
++objects=[row['object'] for row in rows]
++link=['gcc','-m32','-B'+str(root/'usr/lib32')+'/', '-B'+str(root/'usr/lib/gcc/x86_64-linux-gnu/13/32')+'/', '-L'+str(root/'usr/lib32'),'-Wl,--dynamic-linker='+str(root/'usr/lib32/ld-linux.so.2'),'-Wl,-rpath,'+str(root/'usr/lib32'),'-fsanitize=undefined,bounds',*objects,'-Wl,--gc-sections','-lm','-o',str(out/'managers')]
++r=subprocess.run(link,capture_output=True,text=True);(out/'link.txt').write_text(r.stdout+r.stderr)
++missing=sorted(set(re.findall(r"undefined reference to [`‘]([^'’]+)['’]",r.stderr)))
++# Only host test transport imports are trapped. Missing engine/platform/game
++# symbols remain link errors; no pretend implementation can make this pass.
++allowed=[name for name in missing if re.fullmatch(r'(xsdk_[A-Za-z0-9_]+|Xam[A-Za-z0-9_]+|Nt[A-Za-z0-9_]+|Ke[A-Za-z0-9_]+|Mm[A-Za-z0-9_]+|Ex[A-Za-z0-9_]+|DbgPrint)',name)]
++if allowed:
++ trap=gen/'sdk_import_traps.c';trap.write_text('#include <stdio.h>\n#include <stdlib.h>\n'+''.join('__attribute__((noreturn)) void '+name+'(void){fputs("UNEXPECTED SDK CALL: '+name+'\\n",stderr);abort();}\n' for name in allowed))
++ obj=objs/'sdk_import_traps.o';subprocess.run(['gcc',*flags,'-c',str(trap),'-o',str(obj)],check=True)
++ link.insert(link.index('-Wl,--gc-sections'),str(obj));r=subprocess.run(link,capture_output=True,text=True);(out/'link.txt').write_text(r.stdout+r.stderr)
++if r.returncode:
++ print(r.stderr[-8000:]);raise SystemExit('strict host link failed')
++run=subprocess.run([str(a.qemu.resolve()),'-E','LD_LIBRARY_PATH='+str(root/'usr/lib32'),str(out/'managers'),str(a.resources.resolve()),str(a.programs.resolve())],capture_output=True,text=True,env=dict(os.environ,UBSAN_OPTIONS='halt_on_error=1'))
++(out/'test.txt').write_text(run.stdout+run.stderr);print(run.stdout+run.stderr);run.check_returncode()
++result={'result':'PASS','host_execution':'QEMU-i386','original_full_roster_reset_and_AI_init':True,'original_object_Init_Term':True,'original_input_sample_remap_press_release':True,'typed_catalog_real_data_and_callbacks':True,'SDK_import_traps':allowed,'SDK_calls_during_test':0,'PowerPC_execution':False,'GPU_execution':False,'Battle_Update_or_Main':False,'sanitizers':'undefined,bounds; vendor newlib bit arithmetic excludes shift and signed-overflow checks'}
++(out/'result.json').write_text(json.dumps(result,indent=2)+'\n');print(json.dumps(result))
+--- a/engine/tools/test_platform_sources.py
++++ b/engine/tools/test_platform_sources.py
+@@ -6,7 +6,7 @@
+ from platform_sources import reviewed_sources,PlatformSourceError
+ p=argparse.ArgumentParser();p.add_argument('output',type=Path);p.add_argument('--d6',type=Path);a=p.parse_args();a.output.mkdir(parents=True,exist_ok=True)
+ project=Path(__file__).resolve().parents[2]
+-assert len(reviewed_sources(project))==32
++assert len(reviewed_sources(project))==33
+ cases=[]
+ with tempfile.TemporaryDirectory(prefix='platform-inventory-') as d:
+     dest=Path(d)
+--- a/src/demo_ui.c
++++ b/src/demo_ui.c
+@@ -99,7 +99,7 @@
+     p->rect(52,52,68,68,ORANGE);
+     text(p,66,66,2,0xFF211000,"DR");
+     text(p,144,48,2,WHITE,"DRAGON RAGE");
+-    text(p,146,94,1,GOLD,"XBOX 360  /  DEMO 0.43-D9");
++    text(p,146,94,1,GOLD,"XBOX 360  /  DEMO 0.44-D10");
+     text(p,930,56,1,u->connected?0xFF3DDC84:GOLD,u->connected?"CONTROLE CONECTADO":"CONECTE O CONTROLE");
+     text(p,930,88,1,MUTED,"Interface + leitor de ISO");
+     p->rect(52,154,300,480,PANEL);
+--- a/src/main.c
++++ b/src/main.c
+@@ -20,11 +20,23 @@
+ #include "xb_battle_stage.h"
+ #include "xb_battle_fighter.h"
+ #include "xb_battle_common.h"
++#include "xb_battle_runtime.h"
++#include <xsdk/log.h>
+ static XbBattleCommon *native_common;
++static XbBattleRuntime *native_runtime;
++static int native_managers;
++static int native_typed_values_loaded;
+ static XbBattleFighter *native_fighters[2];
+ static int native_object_diagnostic;
+ static XbBattleStageCollision *native_stage;
+-static void release_native_stage(void){for(unsigned i=0;i<2;i++){XbBattleFighter_FreeModelAnimation(native_fighters[i]);native_fighters[i]=NULL;}if(native_object_diagnostic && !XbBattleFighter_EndObjectDiagnostic())native_object_diagnostic=0;XbBattleCommon_Free(native_common);native_common=NULL;if(native_stage){int e=XbBattleStage_UninstallCollision(native_stage);if(!e)e=XbBattleStage_FreeCollision(native_stage);if(!e)native_stage=NULL;}}
++static void release_native_stage(void){
++ if(native_managers){int e=XbBattleRuntime_EndManagers(native_runtime);if(e){xsdk_log_write("native manager cleanup refused: %d",e);return;}native_managers=0;}
++ for(unsigned i=0;i<2;i++){XbBattleFighter_FreeModelAnimation(native_fighters[i]);native_fighters[i]=NULL;}
++ if(native_object_diagnostic){int e=XbBattleFighter_EndObjectDiagnostic();if(e){xsdk_log_write("native object cleanup refused: %d",e);return;}native_object_diagnostic=0;}
++ if(native_runtime){int e=XbBattleRuntime_Close(native_runtime);if(e){xsdk_log_write("native common cleanup refused: %d",e);return;}native_runtime=NULL;}
++ XbBattleCommon_Free(native_common);native_common=NULL;
++ if(native_stage){int e=XbBattleStage_UninstallCollision(native_stage);if(!e)e=XbBattleStage_FreeCollision(native_stage);if(!e)native_stage=NULL;}
++}
+ #endif
+ #include "xb_disc.h"
+ #endif
+@@ -252,15 +264,17 @@
+     void *common_pack=NULL;size_t common_bytes=0;XbBattleCommonInfo common_info;
+     int common_error=read_battle_resource(2,&common_pack,&common_bytes);
+     if(!common_error)common_error=XbBattleCommon_Prepare(common_pack,common_bytes,&native_common,&common_info);
+-    free(common_pack);
++    if(common_error){free(common_pack);common_pack=NULL;}
+     if(common_error){xsdk_log_write("native common battle tables: refused error=%d; no manager boot",common_error);return common_error;}
+     void *item_pack=NULL;size_t item_bytes=0;
+     common_error=read_battle_resource(4,&item_pack,&item_bytes);
+     if(!common_error)common_error=XbBattleCommon_AttachItems(native_common,item_pack,item_bytes);
+-    free(item_pack);if(common_error)return common_error;
++    if(common_error){free(item_pack);free(common_pack);return common_error;}
+     XbBattleConsumerProbe consumer;
+     common_error=XbBattleCommon_ProbeConsumers(native_common,&consumer);
+     xsdk_log_write("original table consumers: error=%d animations=%u voices=%u characters=%u items=%u; temporary reader view, NOT fighter manager boot",common_error,consumer.animations,consumer.voices,consumer.characters,consumer.items);
++    if(!common_error)common_error=XbBattleRuntime_Open(common_pack,common_bytes,item_pack,item_bytes,&native_runtime);
++    free(item_pack);free(common_pack);
+     if(common_error)return common_error;
+     void *ai_data=NULL;size_t ai_bytes=0;
+     common_error=XbBattleCommon_GetAiData(native_common,&ai_data,&ai_bytes);
+@@ -268,7 +282,7 @@
+     xsdk_log_write("native common AI resource: address=%p bytes=%u; internal native pointers prepared; manager NOT initialized",ai_data,(unsigned)ai_bytes);
+     xsdk_log_write("native common battle tables: roster=%u/%u/%u/%u/%u/%u AI_steps=%u rules=%u profiles=%u; owned CPU views, BtlChar/BtlAi NOT initialized",
+         common_info.roster_records[0],common_info.roster_records[1],common_info.roster_records[2],common_info.roster_records[3],common_info.roster_records[4],common_info.roster_records[5],common_info.ai_steps,common_info.ai_rules,common_info.ai_profiles);
+-    int registry=XbBattleFighter_BeginObjectDiagnostic();if(registry)return registry;native_object_diagnostic=1;
++    int registry=XbBattleFighter_BeginOriginalObjects();if(registry)return registry;native_object_diagnostic=1;
+     for(unsigned side=0;side<2;side++){
+         void *model=NULL,*anims=NULL;size_t mn=0,an=0;XbFighterPrepared stats;int e;
+         e=read_battle_resource(0x590+side*10,&model,&mn);
+@@ -277,7 +291,7 @@
+         free(model);free(anims);
+         if(e){xsdk_log_write("fighter model-animation preparation: side=%u refused error=%d",side,e);return e;}
+         int id=-1;e=XbBattleFighter_CreateModelObject(native_fighters[side],side,&id);
+-        xsdk_log_write("fighter real BtlObj_CreateChara/Setup: side=%u id=%d error=%d; native CPU resources/pools/materials; BtlChar/BtlAi NOT initialized",side,id,e);
++        xsdk_log_write("fighter real BtlObj_CreateChara/Setup: side=%u id=%d error=%d; original BtlObj_Init(1), native CPU resources/pools/materials; BtlChar/BtlAi NOT initialized",side,id,e);
+         if(!e)e=XbBattleFighter_PlayModel(native_fighters[side],7,2);
+         uint32_t frame=0,length=0;
+         if(!e)e=XbBattleFighter_StepModel(native_fighters[side],&frame,&length);
+@@ -312,7 +326,14 @@
+     if(!retarget)retarget=XbBattleFighter_SamplePose(native_fighters[0]);
+     if(!retarget)retarget=XbBattleFighter_CalcMatrices(native_fighters[0]);
+     xsdk_log_write("fighter common reference retarget: error=%d; eight native table windows per fighter; no combat boot",retarget);
+-    return retarget;
++    if(retarget)return retarget;
++    int boot=XbBattleRuntime_BeginManagers(native_runtime);
++    if(!boot)native_managers=1;
++    XbBattleRuntimeInfo runtime_info;
++    if(!boot)boot=XbBattleRuntime_GetInfo(native_runtime,&runtime_info);
++    xsdk_log_write("original CPU manager boot: error=%d; BtlObj_Init(1), Save_Init, match setup, BtlChar_AllocAll(2) and BtlAiMgr_Init; Battle_Update NOT called",boot);
++    if(!boot)for(unsigned side=0;side<2;side++)xsdk_log_write("original initialized fighter: side=%u HP=%d Ki=%d AI_type=%d AI_level=%d; GPU battle remains unavailable",side,runtime_info.health[side],runtime_info.ki[side],runtime_info.ai_type[side],runtime_info.ai_level[side]);
++    return boot;
+ }
+ #endif
+ static int test_stage_collision(void)
+@@ -360,7 +381,18 @@
+     if(native_stage){snprintf(ui.modal,sizeof(ui.modal),"Falha ao liberar o cenário anterior. Consulte default.log.");return;}
+ #endif
+     int error=XbDisc_Mount(ui.paths[ui.selection]);
+-    if(!error)error=XbTypedData_LoadFromDisc(&gXbTypedMainCatalog,XBTD_ALLOW_PARTIAL);
++    if(!error){
++        unsigned flags=XBTD_ALLOW_PARTIAL;
++#ifdef DR_ENGINE_LINKED
++        /* Reapplying DATA would erase live heap pointers while Heap_Init's
++         * private ready flag remains set. Subsequent runs validate only. */
++        if(native_typed_values_loaded)flags|=XBTD_VALIDATE_ONLY;
++#endif
++        error=XbTypedData_LoadFromDisc(&gXbTypedMainCatalog,flags);
++#ifdef DR_ENGINE_LINKED
++        if(!error)native_typed_values_loaded=1;
++#endif
++    }
+     xsdk_log_write("%s: typed native-data load error=%d regions=%u ops=%u complete=%u data_stripped=%u; combat BLOCKED",
+         error?"FAIL":"PASS",error,(unsigned)gXbTypedMainCatalog.region_count,
+         (unsigned)gXbTypedMainCatalog.op_count,gXbTypedMainCatalog.complete,(unsigned)gPortDataStripped);
+@@ -434,10 +466,10 @@
+ #ifdef DR_ENGINE_LINKED
+     extern int Battle_Main(void);
+     extern volatile uint32_t gPortDataStripped;
+-    xsdk_log_write("DragonRage360 0.43-D9: native diagnostic; Battle_Main linked at %p",(void *)(uintptr_t)Battle_Main);
++    xsdk_log_write("DragonRage360 0.44-D10: native diagnostic; Battle_Main linked at %p",(void *)(uintptr_t)Battle_Main);
+     xsdk_log_write("engine: data_stripped=%u; combat boot BLOCKED: character/AI managers, common resources and battle boot are incomplete",(unsigned)gPortDataStripped);
+ #else
+-    xsdk_log_write("DragonRage360 0.43-D9: component diagnostic; Battle_Main not linked in this build.");
++    xsdk_log_write("DragonRage360 0.44-D10: component diagnostic; Battle_Main not linked in this build.");
+ #endif
+     xsdk_log_write("%s: BPE decode + animation endian synthetic self-test",dr_resource_selftest()?"PASS":"FAIL");
+     xsdk_log_write("%s: bounded BIN + motion + skeleton synthetic self-test",dr_container_selftest()?"PASS":"FAIL");
+--- a/tests/check_xex.py
++++ b/tests/check_xex.py
+@@ -97,11 +97,11 @@
+         raise AssertionError(name)
+     cat=struct.unpack('>6I',data_at_symbol('gXbTypedMainCatalog',24))
+     assert cat[0]==1 and cat[1] in (0,1) and cat[3]==33 and cat[5]>2000
+-    assert {'XbTypedData_Load','XbTypedData_LoadFromDisc','XbTypedData_RequireBattleData','dr_stage_collision_open','dr_stage_collision_query','XbBattleStage_PrepareCollision','XbBattleStage_InstallCollision','XbBattleStage_QueryCollision','XbBattleFighter_PrepareModelAnimation','XbBattleFighter_PlayModel','XbBattleFighter_StepModel','XbBattleFighter_PlayMotion','XbBattleFighter_PlayRetargeted','XbBattleFighter_SamplePose','XbBattleFighter_CalcMatrices','XbBattleFighter_UpdateVolumes','XbBattleFighter_PrepareTextures','XbBattleFighter_GetMesh','XbBattleFighter_GetFaceGeometry','XbFighterTable_Convert','XbBattleFighter_BindCommonReference','XbBattleFighter_PlayCommonRetargeted','XbBattleFighter_CreateModelObject','XbBattleFighter_FreeModelAnimation','XbFighterRegistry_Begin','XbFighterRegistry_ModelCapacity','XbFighterRegistry_ModelSlot','XbFighterRegistry_CreateModel','XbNativeModel_Prepare','XbFighter_BindOwnedTables','XbFighter_BindOwnedFiles','XbFighterRegistry_Remove','XbFighterRegistry_End'}<=defined
++    assert {'XbTypedData_Load','XbTypedData_LoadFromDisc','XbTypedData_RequireBattleData','dr_stage_collision_open','dr_stage_collision_query','XbBattleStage_PrepareCollision','XbBattleStage_InstallCollision','XbBattleStage_QueryCollision','XbBattleFighter_PrepareModelAnimation','XbBattleFighter_PlayModel','XbBattleFighter_StepModel','XbBattleFighter_PlayMotion','XbBattleFighter_PlayRetargeted','XbBattleFighter_SamplePose','XbBattleFighter_CalcMatrices','XbBattleFighter_UpdateVolumes','XbBattleFighter_PrepareTextures','XbBattleFighter_GetMesh','XbBattleFighter_GetFaceGeometry','XbFighterTable_Convert','XbBattleFighter_BindCommonReference','XbBattleFighter_PlayCommonRetargeted','XbBattleFighter_CreateModelObject','XbBattleFighter_FreeModelAnimation','XbFighterRegistry_BeginOriginal','BtlObj_Init','BtlObj_Term','XbBattleRuntime_Open','XbBattleRuntime_Close','XbBattleRuntime_BeginManagers','XbBattleRuntime_EndManagers','BtlChar_AllocAll','BtlAiMgr_Init','XbFighterRegistry_ModelCapacity','XbFighterRegistry_ModelSlot','XbFighterRegistry_CreateModel','XbNativeModel_Prepare','XbFighter_BindOwnedTables','XbFighter_BindOwnedFiles','XbFighterRegistry_Remove','XbFighterRegistry_End'}<=defined
+     assert {'XbBattleCommon_Prepare','XbBattleCommon_Convert','XbBattleCommon_GetAiData','XbBattleCommon_Free','XbBattleFighter_SetEye','XbBattleFighter_SetFace','XbBattleFighter_StepFace','BtlObj_UpdateFace','BtlObjFace_StepBlink','BObjFace_StepLipData'}<=defined
+     assert data_at_symbol('gPortDataStripped',4)==b'\x00\x00\x00\x02'
+     report.update(typed_main_catalog_linked=True,typed_catalog_complete=bool(cat[1]),
+         typed_regions=cat[3],typed_operations=cat[5],partial_data_preview_available=True,
+-        native_game_data_loaded=False,stage_collision_diagnostic_linked=True,stage_collision_original_readers_linked=True,stage_collision_install_path_linked=True,fighter_model_animation_preparation_linked=True,native_pose_body_attack_and_texture_paths_linked=True,full_fighter_spawn=False,original_object_registry_linked=True,active_model_object_lifecycle_linked=True,typed_character_table_windows=8,common_reference_retarget_linked=True,character_and_AI_managers_integrated=False,native_common_CPU_resources_linked=True,original_CPU_facial_state_path_linked=True,audio_clock_facial_sync=False,scope='0.42-D8: six common roster windows and bounded common AI data; eight character reader windows; CPU blink/mouth/lip path; original CreateChara/Setup model lifecycle with native CPU resources/pools/materials; no BtlChar/BtlAi initialization; linked Battle_Main and reviewed native data catalog; original-only pools excluded with native reference proof; explicit typed-data startup preview commits only validated known fields, with readiness marker 2 retained. Native data catalog excludes 46 proven original-only pool bytes; full battle resource initialization, original Game_Main and combat execution remain absent. No hardware validation.')
++        native_game_data_loaded=False,stage_collision_diagnostic_linked=True,stage_collision_original_readers_linked=True,stage_collision_install_path_linked=True,fighter_model_animation_preparation_linked=True,native_pose_body_attack_and_texture_paths_linked=True,full_fighter_spawn=False,original_object_registry_linked=True,active_model_object_lifecycle_linked=True,typed_character_table_windows=8,common_reference_retarget_linked=True,character_and_AI_initialization_path_linked=True,complete_combat_boot_integrated=False,native_common_CPU_resources_linked=True,original_CPU_facial_state_path_linked=True,audio_clock_facial_sync=False,original_BtlObj_Init_Term_boot_linked=True,common4_native_consumer_probe_linked=True,native_grounded_starts_linked=True,scope='0.44-D10: original object Init/Term boot with private common resources; six common roster windows and bounded common AI data; eight character reader windows; CPU blink/mouth/lip path; original CreateChara/Setup model lifecycle with native CPU resources/pools/materials; original BtlChar/BtlAi initialization path linked; execution verified separately on i386 only; linked Battle_Main and reviewed native data catalog; original-only pools excluded with native reference proof; explicit typed-data startup preview commits only validated known fields, with readiness marker 2 retained. Native data catalog excludes 46 proven original-only pool bytes; full battle resource initialization, original Game_Main and combat execution remain absent. No hardware validation.')
+ report_path.write_text(json.dumps(report,ensure_ascii=False,indent=2)+'\n')
+ print(json.dumps(report,ensure_ascii=False,indent=2))

@@ -1,0 +1,1327 @@
+--- a/LEIA-ME.txt
++++ b/LEIA-ME.txt
+@@ -1,3 +1,17 @@
++# Atualização 0.32 — overlay nativo e ADXT
++
++As 13 APIs ADXT e a consulta de prefetch têm implementação nativa.
++Overlay_Load deixou de copiar MIPS sobre código PowerPC: usa catálogo gerado
++para os 72 objetos nativos dos menus (119 regiões e 46 relocações de ponteiros).
++Restam 207 nomes no vínculo com Game_Main e Battle_Main, antes 221.
++387/387 unidades PowerPC, zero conflitos de ABI. Testes de host com ISO/ADX
++reais passaram; GPU/áudio/kernel foram simulados onde indicado.
++**O pedido completo ainda não está atendido. Não há luta executável.**
++O default.xex é o diagnóstico 0.32, sem Game_Main/Battle_Main e sem o catálogo
++dos menus. Consulte RELATORIO-0.32.md e TESTE-XBOX-0.32.md.
++
++--- Histórico ---
++
+ # Atualização 0.31 — ISO e DMA da inicialização
+ 
+ Cinco chamadas de arquivo e duas de DMA implementadas e verificadas.
+--- a/LICENSES.md
++++ b/LICENSES.md
+@@ -71,3 +71,6 @@
+ de recursos e BPE/heap adaptados sao AGPL-3.0-or-later. O passe de compilacao
+ ps2_float_pass.cc e seus testes/ferramentas indicados sao GPL-3.0-or-later;
+ texto em licenses/float-pass-GPL-3.txt. Ele nao e incorporado ao XEX.
++
++
++0.32: engine/platform/platform/xb_adxt.c está sob AGPL-3.0-or-later, com algoritmo de ADX adaptado de port/src/gs/snd_adx.c do upstream 3ca419c7966b11438e2dc3c9a7e1914f102ed545. O transporte de áudio usa as APIs públicas do xsdk (MIT). Os fontes e avisos das versões anteriores permanecem no pacote.
+--- a/Makefile
++++ b/Makefile
+@@ -2,6 +2,8 @@
+ .DEFAULT_GOAL := all
+ TOOLCHAIN ?= ../xsdk-gcc/bin/powerpc-xsdk-elf-
+ CC := $(TOOLCHAIN)gcc
++# Retain real native component APIs for static verification in the diagnostic.
++NATIVE_API_ROOTS := -Wl,--undefined=ADXT_Init -Wl,--undefined=ADXT_Create -Wl,--undefined=ADXT_SetReloadSct -Wl,--undefined=ADXT_SetSvrFreq -Wl,--undefined=ADXT_StartAfs -Wl,--undefined=ADXT_StartFname -Wl,--undefined=ADXT_Stop -Wl,--undefined=ADXT_Pause -Wl,--undefined=ADXT_SetOutVol -Wl,--undefined=ADXT_GetOutVol -Wl,--undefined=ADXT_SetOutPan -Wl,--undefined=ADXT_SetOutputMono -Wl,--undefined=ADXT_GetStat -Wl,--undefined=XbOverlay_PrepareBuild -Wl,--undefined=XbOverlay_Load
+ CFLAGS := -mcpu=cell -fno-pic -std=gnu17 -MMD -MP -O2 -g -ffunction-sections -fdata-sections -Wall -Wextra -Werror -I$(XSDK)/include -Isrc -Iengine/graphics -Iengine/capture/port/src/gs -Iengine/platform/platform -DDR_XBOX360
+ OBJECTS := build/dr_dma_engine.o build/dr_gs_native.o build/dr_dma_producer.o build/dr_gs_stream.o build/gs_draw.o build/gs_core.o build/gs_sony.o build/dr_gs_backend.o build/dr_gs_replay.o build/dr_capture_demo.o build/dr_capture_platform.o build/main.o build/demo_ui.o build/dr_disc.o build/bt3_wire.o build/net_check.o build/lobby.o build/dr_anim.o build/dr_bpe.o build/dr_resource_selftest.o build/dr_container.o build/dr_skeleton.o build/dr_xenos.o build/dr_gs_texture.o build/dr_graphics_demo.o build/dr_body_demo.o build/dr_texfile.o build/dr_body_pipeline.o build/dr_body_model.o build/dr_elf.o build/dr_face_vif.o build/dr_targets.o build/dr_vu1.o build/dr_vu1_selftest.o build/save_unlock.o build/save_export.o
+ .PHONY: all clean host-test
+@@ -14,7 +16,7 @@
+ 	mkdir -p build
+ 	$(CC) $(CFLAGS) -c $< -o $@
+ build/default.elf: $(OBJECTS) $(XSDK)/build/libxsdk.a
+-	$(CC) -static -nostdlib -T $(XSDK)/src/xsdk.ld -Wl,--gc-sections,-Map,build/default.map -o $@ $(OBJECTS) -Wl,--start-group $(XSDK)/build/libxsdk.a -lc -lm -lgcc -Wl,--end-group
++	$(CC) -static -nostdlib -T $(XSDK)/src/xsdk.ld -Wl,--gc-sections,-Map,build/default.map -o $@ $(OBJECTS) $(NATIVE_API_ROOTS) -Wl,--start-group $(XSDK)/build/libxsdk.a -lc -lm -lgcc -Wl,--end-group
+ build/default.xex: build/default.elf
+ 	python3 $(XSDK)/tools/elf2xex.py --title-id 0x44523630 --title-name "DragonRage360 Demo" $< $@
+ host-test:
+--- a/PENDENCIAS.md
++++ b/PENDENCIAS.md
+@@ -1,3 +1,17 @@
++# Atualização 0.32 — overlay nativo e ADXT
++
++As 13 APIs ADXT e a consulta de prefetch têm implementação nativa.
++Overlay_Load deixou de copiar MIPS sobre código PowerPC: usa catálogo gerado
++para os 72 objetos nativos dos menus (119 regiões e 46 relocações de ponteiros).
++Restam 207 nomes no vínculo com Game_Main e Battle_Main, antes 221.
++387/387 unidades PowerPC, zero conflitos de ABI. Testes de host com ISO/ADX
++reais passaram; GPU/áudio/kernel foram simulados onde indicado.
++**O pedido completo ainda não está atendido. Não há luta executável.**
++O default.xex é o diagnóstico 0.32, sem Game_Main/Battle_Main e sem o catálogo
++dos menus. Consulte RELATORIO-0.32.md e TESTE-XBOX-0.32.md.
++
++--- Histórico ---
++
+ # Atualização 0.31 — ISO e DMA da inicialização
+ 
+ Cinco chamadas de arquivo e duas de DMA implementadas e verificadas.
+--- /dev/null
++++ b/RELATORIO-0.32.md
+@@ -0,0 +1,162 @@
++# 0.32 — overlay residente nativo e ADXT
++
++O pedido completo ainda não está atendido. As 13 entradas ADXT e a consulta
++de leitura usada pelo player de vídeo receberam implementação nativa. O
++vínculo passa de 221 para 207 nomes pendentes. O caminho que copiava o overlay
++MIPS sobre uma função PowerPC foi substituído por restauração de dados nativos.
++Battle_Main e Game_Main continuam fora do default.xex: não há luta executável.
++
++## Vínculo e contagem
++
++O vínculo estrito força Battle_Main e Game_Main. Compilaram 387/387 unidades
++PowerPC, sem conflito de ABI. Os 294 objetos submetidos à passagem de aritmética
++não apresentaram instruções float nativas na inspeção. As novas unidades são
++os dois componentes de plataforma e o catálogo nativo gerado.
++
++Saíram da lista: ADXT_Init, ADXT_Create, ADXT_SetReloadSct, ADXT_SetSvrFreq,
++ADXT_StartAfs, ADXT_StartFname, ADXT_Stop, ADXT_Pause, ADXT_SetOutVol,
++ADXT_GetOutVol, ADXT_SetOutPan, ADXT_SetOutputMono, ADXT_GetStat e
++func_00277A70. Essa última consulta o estado real de prefetch síncrono do player.
++
++Restam 207 nomes: 104 com referência em código e 103 somente em dados na
++auditoria dos objetos, incluindo seções depois descartadas por GC. Não foram
++removidas tabelas nem gerados retornos vazios para encerrar o vínculo. Seguem
++pendentes as nove sceMpeg*, RPC/IOP/SPU2, resets GS, interfaces, rede e outros
++rótulos. A lista exata está em engine/reports/0.32/battle-integration.json.
++
++## O novo Overlay_Load
++
++O perfil PORT_BIGENDIAN usa engine/combat/main.c. Overlay_Load chama
++XbOverlay_Load; não usa sceRead com MainMenu_StartBallLoops como destino.
++Game_Main exige XbOverlay_PrepareBuild antes do boot e verifica o erro de cada
++carregamento antes de chamar Progress_Main. Catálogo ausente, ISO incorreta
++ou remonte interrompem esse caminho. Não há laço infinito tentando sobrescrever
++o código nativo.
++
++Os menus já são funções C compiladas para PowerPC. Seus inicializadores e
++ponteiros são produzidos pelo compilador e pelo linker nativos; eles não são
++instruções nem ponteiros extraídos do DBZP.BIN. O novo carregador captura esse
++estado inicial e restaura somente os dados que pertencem ao overlay original.
++Código e constantes imutáveis ficam residentes no executável.
++
++O catálogo é gerado automaticamente dos 72 objetos de menus compilados:
++
++| Catálogo desta compilação | Cobertura |
++| --- | ---: |
++| Regiões graváveis | 119 |
++| Regiões restauradas no reload | 75 |
++| Regiões persistentes das extensões port_* | 44 |
++| Bytes graváveis catalogados | 83.288 |
++| Relocações de ponteiros nos dados graváveis | 46 |
++| Relocações alocadas inventariadas, incluindo código/constantes | 34.986 |
++
++build_overlay_catalog.py gera um fragmento de layout a partir do xsdk.ld,
++os limites simbólicos das regiões e o catálogo C. Dados COMMON são associados
++ao símbolo nativo final, pois o linker pode coalescer definições de objetos
++diferentes. As extensões port_language, port_screen e port_tbo são inventariadas
++mas preservadas, evitando resetar estado que não existia no overlay PS2.
++
++As relocações nativas continuam sob responsabilidade do linker. O carregador
++confere os 46 valores de ponteiro antes de capturá-los; não tenta relocar um
++endereço MIPS com uma soma arbitrária. Os destinos locais necessários receberam aliases
++globais apenas para essas verificações: os bytes de todas as seções alocadas
++e os atributos de ABI são comparados antes/depois do objcopy.
++
++audit_overlay_catalog.py verifica cobertura de todas as seções graváveis,
++limites/tamanhos no mapa e hashes dos objetos. Também produz um inventário de
++seções e relocações de código e constantes que o linker trata normalmente.
++Esse mapa pertence a um vínculo que ainda falhou: ele não é um executável nem
++prova de funcionamento do menu.
++
++XbOverlay_Prepare valida limites de DATA, sobreposições, tamanhos, políticas
++e ponteiros. Faz cópias privadas dos descritores e do estado inicial antes de
++chamar a leitura externa, impedindo que alterações dos descritores durante a
++leitura redirecionem uma restauração. Reentrada é recusada. O custo do snapshot
++é limitado a 4 MiB; o desta compilação usa cerca de 83 KiB.
++
++DBZP.BIN é lido somente para identificar a versão USA: 563.996 bytes e
++FNV-1a 0x91a321108fc31289. Esse checksum não é autenticação criptográfica.
++Nenhum byte dele é copiado para código ou dados do programa nativo. Um remonte
++invalida o carregamento; o novo fluxo não executa código MIPS.
++
++Este é o catálogo completo do estado **nativo compilado dos menus** desta
++compilação. Não é um schema de todos os recursos da ISO nem o manifesto tipado
++completo das tabelas do executável principal SLUS_216.78. Essa outra parte do
++boot continua pendente. O catálogo deve ser regenerado a cada compilação;
++nunca reutilize endereços de um mapa antigo como destinos.
++
++## ADXT nativo
++
++xb_adxt.c implementa os 13 pontos de entrada usados pelo jogo. Abre o cliente
++de áudio real do xsdk e registra um serviço no vblank. Cria até 16 players,
++lê arquivos AFS/soltos pela plataforma ISO, valida o cabeçalho e os limites,
++decodifica ADPCM e mistura os players no frame do SDK: 256 amostras a 48 kHz,
++float planar, canais frontais esquerdo/direito e os outros quatro zerados.
++
++O perfil suporta ADX tipo 3/version 4, blocos de 18 bytes, mono/estéreo e
++16/24/48 kHz. Valida total de frames, assinatura, criptografia e pontos de loop.
++O histórico do preditor é salvo/restaurado no início do loop, inclusive quando
++o fim não coincide com um bloco. Conversão para 48 kHz usa sample-hold;
++não é um resampler de alta qualidade como o SDL.
++
++Há volume em décimos de dB, pan por canal, mono, pausa e parada. O ganho é
++calculado quando o volume muda, não por frame de áudio. Arquivos são
++prefetched integralmente: limite de 32 MiB por arquivo e 64 MiB somados nos
++players. ReloadSct determina o tamanho das leituras e SvrFreq limita a quota
++de serviço da fila. Não há thread concorrendo com o leitor ISO.
++
++GetStat usa duração em vblanks de 59,94 Hz, independente da disponibilidade
++de slots na fila. O avanço do PCM é separado desse relógio. Isso não integra
++os players à captura de estado do rollback: rollback do jogo inteiro continua
++sem validação. Tampouco implementa os bancos VAG/efeitos SPU2 usados por RPC.
++
++A fila do SDK pode manter cerca de 43 ms de áudio pronto. Pausa/parada afetam
++os próximos frames; a cauda já enfileirada pode ser ouvida. Um frame de jogo
++demorado pode provocar underrun, pois o serviço está no vblank da thread
++principal. Não foram medidos latência, custo de CPU ou som em hardware.
++
++## Validação
++
++Os testes de overlay restauraram dados nativos mistos e ponteiros 100 vezes,
++confirmaram código intacto e recusaram destinos em código, regiões sobrepostas,
++relocações erradas, IO/checksum inválidos, reentrada e alteração dos descritores.
++Uma fixture ELF PowerPC separada verificou, com o linker real, ponteiros para
++funções, strings e COMMON. Ela não substitui nenhuma função no vínculo do jogo.
++
++Outro teste usa o wrapper de console real, xb_disc.c/dr_disc.c e a ISO real,
++com somente o transporte NT substituído por stdio. Conferiu a identidade do
++DBZP, restauração de ponteiros e recusa de unmount/remount. O catálogo de dados
++desse teste é uma fixture de host; o catálogo completo do motor foi auditado
++separadamente e ainda não foi executado em PowerPC.
++
++ADX reais testados: AFS2 índices 0 (24 kHz mono), 32763 (16 kHz mono) e
++64974 (24 kHz estéreo). Centenas de frames, com amostras não nulas, conferiram
++com as próprias rotinas decode/adx_coefs do upstream compiladas separadamente.
++48 kHz, pan/mono/volume, pausa, loops de 64 e 63 amostras, duração por ticks,
++fila cheia, limites de cache e falhas de dispositivo tiveram fixtures próprias.
++O transporte xsdk de áudio e XbFile_* é simulado nesse teste; não houve saída
++de som no console. Testes usaram ASan/UBSan com detect_leaks=0.
++
++O default.xex 0.32 contém as implementações ADXT e do carregador genérico,
++retidas explicitamente pelo Makefile para verificação estática. O launcher
++não inicializa áudio automaticamente e não contém o catálogo completo dos
++menus nem Game_Main/Battle_Main. Ele permanece um diagnóstico. Sua validação
++estática passou; Xbox/emulador, pixels e luta não foram testados.
++
++## Reprodução
++
++Upstream 3ca419c7966b11438e2dc3c9a7e1914f102ed545; xsdk
++57b02f1e60667e37d22c3aa613d23d2486514ff8; powerpc-xsdk-elf GCC 15.3.0.
++
++```sh
++python3 engine/tools/test_adxt.py UPSTREAM XSDK ISO OUT --sanitize
++python3 engine/tools/test_overlay.py CC XSDK DBZP.BIN OUT --sanitize
++python3 engine/tools/test_overlay_disc.py XSDK ISO OUT --sanitize
++python3 engine/tools/link_battle.py UPSTREAM CC XSDK OUT --float-mode native-ps2 --platform --root Game_Main
++python3 engine/tools/audit_overlay_catalog.py OUT
++python3 engine/tools/audit_engine_refs.py OUT AUDIT_OUT
++```
++
++Evidências e catálogo simbólico desta compilação: engine/reports/0.32.
++O patch textual desde 0.31 está em extras/port-0.32.patch. Nenhum arquivo ADX,
++ISO, AFS ou executável PS2 é distribuído neste pacote.
+--- /dev/null
++++ b/TESTE-XBOX-0.32.md
+@@ -0,0 +1,24 @@
++# Diagnóstico 0.32: limites de teste
++
++Este default.xex continua sendo o launcher de diagnóstico. Ele não chama
++Game_Main/Battle_Main e não contém os 72 objetos de menus ou seu catálogo.
++As APIs ADXT e do carregador genérico foram retidas para verificação estática;
++não há botão novo de áudio e o launcher não começa a tocar música automaticamente.
++
++As ações gráficas e de ISO da 0.31 continuam disponíveis. Registre default.log
++e a imagem se testar em Xbox real. Nenhuma versão desta entrega foi executada
++em console ou emulador.
++
++Para integrar um futuro título do motor, regenere o catálogo com link_battle.py,
++mantenha a ISO USA montada durante o jogo e preserve os erros de preparação.
++O catálogo é específico dos objetos/layout dessa compilação. Não use endereços
++do mapa de um vínculo incompleto como lista externa de destinos.
++
++O boot modificado chama XbOverlay_PrepareBuild e só restaura os menus quando
++há catálogo nativo válido e identidade de disco correta. Um erro é bloqueio
++de boot, não deve ser transformado em sucesso. Ainda faltam 207 referências e
++o restante da inicialização nativa, incluindo dados principais e integrações
++de combate. Não force a chamada ao jogo neste launcher.
++
++Os testes de áudio usam o transporte xsdk simulado. Ouvir música/vozes,
++medir underruns/latência e jogar partidas completas ainda são testes pendentes.
+--- a/engine/README.md
++++ b/engine/README.md
+@@ -1,3 +1,17 @@
++# Atualização 0.32 — overlay nativo e ADXT
++
++As 13 APIs ADXT e a consulta de prefetch têm implementação nativa.
++Overlay_Load deixou de copiar MIPS sobre código PowerPC: usa catálogo gerado
++para os 72 objetos nativos dos menus (119 regiões e 46 relocações de ponteiros).
++Restam 207 nomes no vínculo com Game_Main e Battle_Main, antes 221.
++387/387 unidades PowerPC, zero conflitos de ABI. Testes de host com ISO/ADX
++reais passaram; GPU/áudio/kernel foram simulados onde indicado.
++**O pedido completo ainda não está atendido. Não há luta executável.**
++O default.xex é o diagnóstico 0.32, sem Game_Main/Battle_Main e sem o catálogo
++dos menus. Consulte RELATORIO-0.32.md e TESTE-XBOX-0.32.md.
++
++--- Histórico ---
++
+ # Atualização 0.31 — ISO e DMA da inicialização
+ 
+ Cinco chamadas de arquivo e duas de DMA implementadas e verificadas.
+--- /dev/null
++++ b/engine/combat/main.c
+@@ -0,0 +1,180 @@
++#include "common.h"
++#ifdef PORT_BIGENDIAN
++#include "xb_overlay.h"
++#endif
++#include "main.h"
++#include "sys/heap.h"
++#include "sys/file.h"
++#include "sys/dma.h"
++
++/* Sony kernel / libkernl */
++extern s32 GetThreadId(void);
++extern s32 ChangeThreadPriority(s32 tid, s32 prio);
++extern void FlushCache(s32 mode);
++
++/* Sony SIF / file I/O / loadfile */
++extern void sceSifInitRpc(u32 mode);
++extern s32 sceSifRebootIop(char *img);
++extern s32 sceSifSyncIop(void);
++extern s32 sceSifLoadModule(char *name, s32 argLen, char *args);
++extern s32 sceFsReset(void);
++extern s32 sceOpen(char *name, s32 flags);
++extern s32 sceClose(s32 fd);
++extern s32 sceLseek(s32 fd, s32 offset, s32 whence);
++extern s32 sceRead(s32 fd, void *buf, s32 size);
++
++/* Sony libcdvd */
++extern s32 sceCdInit(s32 mode);
++extern s32 sceCdMmode(s32 media);
++
++#define SCE_RDONLY 1
++#define SCE_SEEK_SET 0
++#define SCE_SEEK_END 2
++#define SCECdINIT 0
++#define SCECdDVD 2
++
++/* Subsystem set-up called once from Game_Main. */
++extern void Gfx_Init(void);
++extern void Snd_Init(void);
++extern void Movie_Init(void);
++extern void Common_Init(void);
++extern void Common_LoadBoot(void);
++extern void Common_Reload(void);
++extern void Progress_Init(void);
++extern void Save_Init(void);
++extern void Job_Init(void);
++extern void Vu0_Init(void);
++extern void Dbg_Init(void);
++extern void Pad_Init(void);
++extern void McCard_Init(void);
++extern void Font_Init(s32);
++extern void FontIcon_Init(void);
++extern void Fade_Init(void);
++extern void PadWatch_Init(void);
++extern void Sys_InitIopHeap(void);
++
++extern void Progress_Main(s32); /* DBZP.BIN entry: menu / mode dispatcher */
++extern void Battle_Main(s32);
++
++extern OverlayEntry gOverlayTbl[];
++extern u8 MainMenu_StartBallLoops[]; /* overlay load address */
++
++/* Program entry called by crt0: runs the game, which never returns. (The compiler adds the call to __main, the static
++ * constructor runner, by itself.) */
++s32 main(void) {
++    Game_Main();
++    return 0;
++}
++
++/* Reads overlay `idx` from disc to its fixed address, retrying until the open and the read succeed. */
++#ifdef PORT_BIGENDIAN
++s32 Overlay_Load(s32 idx) {return XbOverlay_Load(idx);}
++#else
++s32 Overlay_Load(s32 idx) {
++    s32 fd;
++    s32 size;
++
++    do {
++        fd = sceOpen(gOverlayTbl[idx].path, SCE_RDONLY);
++    } while (fd < 0);
++    size = sceLseek(fd, 0, SCE_SEEK_END);
++    sceLseek(fd, 0, SCE_SEEK_SET);
++    FlushCache(0);
++    while (sceRead(fd, MainMenu_StartBallLoops, size) != size) {
++    }
++    FlushCache(2);
++    sceClose(fd);
++    return 0;
++}
++
++#endif
++
++/* Reboots the IOP with the IOPRP300 image from disc and brings SIF RPC, the CD drive and file I/O back up. */
++void Sys_RebootIop(void) {
++    sceSifInitRpc(0);
++    sceCdInit(SCECdINIT);
++    sceCdMmode(SCECdDVD);
++    while (!sceSifRebootIop("cdrom0:\\IRX\\IOPRP300.IMG;1")) {
++    }
++    while (!sceSifSyncIop()) {
++    }
++    sceSifInitRpc(0);
++    sceCdInit(SCECdINIT);
++    sceCdMmode(SCECdDVD);
++    sceFsReset();
++}
++
++/* Loads the 13 IOP modules from disc (each retried until it loads), then binds the IOP heap service. */
++void Sys_LoadIopModules(void) {
++    while (sceSifLoadModule("cdrom0:\\IRX\\SIO2MAN.IRX;1", 0, NULL) < 0) {
++    }
++    while (sceSifLoadModule("cdrom0:\\IRX\\MCMAN.IRX;1", 0, NULL) < 0) {
++    }
++    while (sceSifLoadModule("cdrom0:\\IRX\\MCSERV.IRX;1", 0, NULL) < 0) {
++    }
++    while (sceSifLoadModule("cdrom0:\\IRX\\DBCMAN.IRX;1", 0, NULL) < 0) {
++    }
++    while (sceSifLoadModule("cdrom0:\\IRX\\SIO2D.IRX;1", 0, NULL) < 0) {
++    }
++    while (sceSifLoadModule("cdrom0:\\IRX\\DS2U_D.IRX;1", 0, NULL) < 0) {
++    }
++    while (sceSifLoadModule("cdrom0:\\IRX\\LIBSD.IRX;1", 0, NULL) < 0) {
++    }
++    while (sceSifLoadModule("cdrom0:\\IRX\\SDRDRV.IRX;1", 0, NULL) < 0) {
++    }
++    while (sceSifLoadModule("cdrom0:\\IRX\\MODHSYN.IRX;1", 0, NULL) < 0) {
++    }
++    while (sceSifLoadModule("cdrom0:\\IRX\\MODSESQ2.IRX;1", 0, NULL) < 0) {
++    }
++    while (sceSifLoadModule("cdrom0:\\IRX\\CDVDSTM.IRX;1", 0, NULL) < 0) {
++    }
++    while (sceSifLoadModule("cdrom0:\\IRX\\SOUNDS.IRX;1", 0, NULL) < 0) {
++    }
++    while (sceSifLoadModule("cdrom0:\\IRX\\CRI_ADXI.IRX;1", 0, NULL) < 0) {
++    }
++    Sys_InitIopHeap();
++}
++
++/* Initialises every subsystem in order, then alternates forever between the menu overlay and a battle. */
++void Game_Main(void) {
++#ifdef PORT_BIGENDIAN
++    if(XbOverlay_PrepareBuild()!=0)return;
++#endif
++    Sys_RebootIop();
++    Sys_LoadIopModules();
++    ChangeThreadPriority(GetThreadId(), 2);
++    Heap_Init();
++    Gfx_Init();
++    Snd_Init();
++    File_Init();
++    Movie_Init();
++    Common_Init();
++    Common_LoadBoot();
++    Common_Reload();
++    Progress_Init();
++    Save_Init();
++    Job_Init();
++    Vu0_Init();
++    Dma_InitBuffers();
++    Dbg_Init();
++    Pad_Init();
++    McCard_Init();
++    Font_Init(1);
++    FontIcon_Init();
++    Fade_Init();
++    PadWatch_Init();
++    for (;;) {
++#ifdef PORT_BIGENDIAN
++        if(Overlay_Load(0)!=0)return;
++#else
++        Overlay_Load(0);
++#endif
++        Progress_Main(0);
++        Battle_Main(0);
++    }
++}
++
++/* Queues a GS scissor packet for the view's scissor rectangle. */
++void View_ApplyScissor(ViewScissor *view) {
++    Dma_AddScissor(view->scissorX0, view->scissorX1, view->scissorY0, view->scissorY1);
++}
+--- /dev/null
++++ b/engine/platform/platform/xb_adxt.c
+@@ -0,0 +1,158 @@
++/* SPDX-License-Identifier: AGPL-3.0-or-later
++ * Native ADXT subset for the USA disc's type-3, version-4, 18-byte ADPCM.
++ * Decode equations/coefficients match the public pinned port's snd_adx.c.
++ * No CRI/SDL binary or PS2 code is linked. Whole files are prefetched from ISO;
++ * playback/mixing and ISO access share the main thread's vblank hook.
++ */
++#include "xb_adxt.h"
++#include "xb_file.h"
++#include "xb_time.h"
++#include "xsdk/audio.h"
++#include <stdint.h>
++#include <stdlib.h>
++#include <string.h>
++#include <math.h>
++enum { PLAYERS=16,MAX_FILE=32*1024*1024,MAX_TOTAL=64*1024*1024,STOP=0,PLAY=3,END=5 };
++enum { BAD=-650,FORMAT=-651,IO=-652,MEMORY=-653,DEVICE=-654 };
++typedef struct {
++    int used,max_channels,status,paused,volume,pan[2],reload,freq,reading;
++    uint8_t *file;size_t size,data;uint32_t channels,rate,total,pos,loop_start,loop_end;
++    int loop,loop_have,rendering,c1,c2,hist[2][2],loop_hist[2][2];
++    int16_t cache[64];unsigned cache_n,cache_at,phase;int hold;
++    int16_t left,right;int64_t ticks;float gain;
++} Player;
++static Player players[PLAYERS];static int opened,hooked,error,mono,device_dead;
++static int reject(int e){error=e;return e;}
++int XbAdx_LastError(void){return error;}
++static Player *player(void *h) {
++    uintptr_t a=(uintptr_t)h,b=(uintptr_t)players;
++    if(a<b || a-b>=sizeof(players) || (a-b)%sizeof(Player) || !players[(a-b)/sizeof(Player)].used){reject(BAD);return NULL;}
++    return &players[(a-b)/sizeof(Player)];
++}
++static uint32_t be16(const uint8_t *p){return (uint32_t)p[0]<<8|p[1];}
++static uint32_t be32(const uint8_t *p){return (uint32_t)p[0]<<24|(uint32_t)p[1]<<16|(uint32_t)p[2]<<8|p[3];}
++static void stop(Player *p){free(p->file);p->file=NULL;p->size=0;p->status=STOP;p->rendering=0;p->ticks=0;p->hold=0;p->cache_n=p->cache_at=0;}
++int XbAdx_Close(void) {
++    for(unsigned i=0;i<PLAYERS;i++){stop(players+i);players[i].used=0;}
++    device_dead=1;
++    if(opened && !NT_SUCCESS(xsdk_audio_close()))return reject(DEVICE);
++    opened=0;mono=0;error=0;device_dead=0;return 0;
++}
++void ADXT_Init(void) {
++    if(XbAdx_Close())return;
++    if(!hooked){if(XbTime_OnVBlank(XbAdx_Tick)){reject(DEVICE);return;}hooked=1;}
++    if(!NT_SUCCESS(xsdk_audio_open(8))){reject(DEVICE);return;}
++    opened=1;
++}
++void *ADXT_Create(int channels,void *work,int worksize) {
++    if(!opened || device_dead || channels<1 || channels>2 || !work || worksize<128){reject(BAD);return NULL;}
++    for(unsigned i=0;i<PLAYERS;i++)if(!players[i].used){
++        Player *p=players+i;memset(p,0,sizeof(*p));p->used=1;p->max_channels=channels;
++        p->pan[0]=p->pan[1]=-128;p->reload=16;p->freq=30;p->gain=1.0f/32768.0f;return p;
++    }
++    reject(MEMORY);return NULL;
++}
++void ADXT_SetReloadSct(void *h,int n){Player *p=player(h);if(p && n>0 && n<=512)p->reload=n;else reject(BAD);}
++void ADXT_SetSvrFreq(void *h,int n){Player *p=player(h);if(p && n>0 && n<=60)p->freq=n;else reject(BAD);}
++void ADXT_Stop(void *h){Player *p=player(h);if(p)stop(p);}
++void ADXT_Pause(void *h,int on){Player *p=player(h);if(p)p->paused=!!on;}
++void ADXT_SetOutVol(void *h,int vol){Player *p=player(h);if(p && vol>=-960 && vol<=0){p->volume=vol;p->gain=vol<=-960?0.0f:powf(10.0f,vol/200.0f)/32768.0f;}else reject(BAD);}
++int ADXT_GetOutVol(void *h){Player *p=player(h);return p?p->volume:0;}
++void ADXT_SetOutPan(void *h,int ch,int pan){Player *p=player(h);if(p && ch>=0 && ch<2 && (pan==-128 || (pan>=-16 && pan<=15)))p->pan[ch]=pan;else reject(BAD);}
++void ADXT_SetOutputMono(int on){mono=!!on;}
++int ADXT_GetStat(void *h){Player *p=player(h);return p?p->status:STOP;}
++/* Native synchronous prefetch state, not an IOP driver status guess. */
++int func_00277A70(void *h){Player *p=player(h);return p?p->reading:0;}
++static int adopt(Player *p,uint8_t *file,size_t size) {
++    stop(p);error=0;
++    if(size<0x40 || size>MAX_FILE || be16(file)!=0x8000 || file[4]!=3 || file[5]!=18 || file[6]!=4 ||
++       file[7]<1 || file[7]>(unsigned)p->max_channels || file[0x12]!=4 || (file[0x13]&8)){free(file);return reject(FORMAT);}
++    size_t start=be16(file+2)+4;uint32_t rate=be32(file+8),total=be32(file+12),hp=be16(file+16);
++    uint64_t need=((uint64_t)total+31)/32*18*file[7];
++    if((rate!=16000 && rate!=24000 && rate!=48000) || !total || hp>=rate/2 || start<0x20 || start>size || need>size-start || memcmp(file+start-6,"(c)CRI",6)){free(file);return reject(FORMAT);}
++    p->loop=start>=0x38 && be32(file+0x24)!=0;p->loop_start=be32(file+0x28);p->loop_end=be32(file+0x30);
++    if(p->loop && (p->loop_start%32 || p->loop_start>=p->loop_end || p->loop_end>total)){free(file);return reject(FORMAT);}
++    double z=cos(2.0*3.14159265358979323846*hp/rate),a=1.41421356237309504880-z,b=1.41421356237309504880-1.0;
++    double c=(a-sqrt((a+b)*(a-b)))/b;
++    p->c1=(int)(c*8192.0);p->c2=(int)(c*c*-4096.0);
++    p->file=file;p->size=size;p->data=start;p->channels=file[7];p->rate=rate;p->total=total;
++    p->pos=0;p->cache_n=p->cache_at=p->phase=0;p->hold=p->loop_have=0;memset(p->hist,0,sizeof(p->hist));
++    p->ticks=p->loop?-1:(int64_t)(((uint64_t)total*60000+(uint64_t)rate*1001-1)/((uint64_t)rate*1001));
++    p->status=PLAY;p->rendering=1;return 0;
++}
++static int within_budget(Player *replace,size_t size) {
++    size_t used=size;
++    for(unsigned i=0;i<PLAYERS;i++)if(players+i!=replace && players[i].file){used+=players[i].size;if(used>MAX_TOTAL)return 0;}
++    return used<=MAX_TOTAL;
++}
++int XbAdx_StartBytes(void *h,const void *bytes,size_t size) {
++    Player *p=player(h);if(!p)return BAD;
++    if(!bytes || size>MAX_FILE){stop(p);return reject(FORMAT);}
++    if(!within_budget(p,size)){stop(p);return reject(MEMORY);}
++    uint8_t *copy=malloc(size?size:1);if(!copy){stop(p);return reject(MEMORY);}memcpy(copy,bytes,size);return adopt(p,copy,size);
++}
++static void start_file(Player *p,int part,int id,const char *name) {
++    dr_span span;stop(p);p->reading=1;
++    if(XbFile_Locate(part,id,name,&span) || !span.size || span.size>MAX_FILE){p->reading=0;reject(IO);return;}
++    if(!within_budget(p,(size_t)span.size)){p->reading=0;reject(MEMORY);return;}
++    uint8_t *bytes=malloc((size_t)span.size);if(!bytes){p->reading=0;reject(MEMORY);return;}
++    size_t at=0,chunk=(size_t)p->reload*2048;
++    while(at<span.size){size_t n=(size_t)span.size-at;if(n>chunk)n=chunk;if(XbFile_Read(&span,at,bytes+at,n)!=n){free(bytes);p->reading=0;reject(IO);return;}at+=n;}
++    p->reading=0;adopt(p,bytes,(size_t)span.size);
++}
++void ADXT_StartAfs(void *h,int part,int id){Player *p=player(h);if(p)start_file(p,part,id,NULL);}
++void ADXT_StartFname(void *h,char *name){Player *p=player(h);if(p){if(!name){stop(p);reject(BAD);}else start_file(p,0,0,name);}}
++static int next_sample(Player *p,int16_t *left,int16_t *right) {
++    uint32_t end=p->loop?p->loop_end:p->total;
++    if(p->pos>=end){if(!p->loop)return 0;p->pos=p->loop_start;memcpy(p->hist,p->loop_hist,sizeof(p->hist));p->cache_n=p->cache_at=0;}
++    if(p->cache_at==p->cache_n){
++        if(p->loop && p->pos==p->loop_start && !p->loop_have){memcpy(p->loop_hist,p->hist,sizeof(p->hist));p->loop_have=1;}
++        const uint8_t *block=p->file+p->data+(size_t)(p->pos/32)*18*p->channels;
++        for(unsigned ch=0;ch<p->channels;ch++){
++            const uint8_t *src=block+ch*18;int h1=p->hist[ch][0],h2=p->hist[ch][1],scale=(int)be16(src)+1;
++            for(unsigned i=0;i<32;i++){int nib=(src[2+i/2]>>((i&1)?0:4))&15;if(nib&8)nib-=16;
++                int64_t acc=(int64_t)p->c1*h1+(int64_t)p->c2*h2;int sample=nib*scale+(int)(acc>>12);
++                if(sample>32767)sample=32767;
++                if(sample<-32768)sample=-32768;
++                p->cache[i*2+ch]=(int16_t)sample;h2=h1;h1=sample;}
++            p->hist[ch][0]=h1;p->hist[ch][1]=h2;
++        }
++        p->cache_at=0;p->cache_n=end-p->pos<32?end-p->pos:32;
++    }
++    *left=p->cache[p->cache_at*2];*right=p->channels==2?p->cache[p->cache_at*2+1]:0;
++    p->cache_at++;p->pos++;return 1;
++}
++int XbAdx_Mix(float *frame) {
++    if(!opened || device_dead || !frame)return reject(BAD);
++    memset(frame,0,sizeof(float)*XSDK_AUDIO_FRAME_FLOATS);
++    for(unsigned k=0;k<PLAYERS;k++){
++        Player *p=players+k;if(!p->used || !p->rendering || p->paused || !p->file)continue;
++        float gain=p->gain;
++        float gl[2],gr[2];
++        for(unsigned ch=0;ch<2;ch++){int pan=mono?0:p->pan[ch]==-128?(p->channels==1?0:ch==0?-15:15):p->pan[ch];
++            if(pan<-15)pan=-15;
++            gl[ch]=pan<=0?1.0f:(15-pan)/15.0f;gr[ch]=pan>=0?1.0f:(15+pan)/15.0f;}
++        for(unsigned i=0;i<256;i++){
++            if(!p->hold){if(!next_sample(p,&p->left,&p->right)){p->rendering=0;break;}p->hold=1;}
++            frame[i]+=gain*(p->left*gl[0]+p->right*gl[1]);frame[256+i]+=gain*(p->left*gr[0]+p->right*gr[1]);
++            p->phase+=p->rate;if(p->phase>=48000){p->phase-=48000;p->hold=0;}
++        }
++    }
++    for(unsigned i=0;i<512;i++){if(frame[i]>1)frame[i]=1;if(frame[i]<-1)frame[i]=-1;}
++    return 0;
++}
++void XbAdx_Tick(void) {
++    if(!opened || device_dead)return;
++    unsigned quota=1;
++    for(unsigned i=0;i<PLAYERS;i++)if(players[i].used && (players[i].status==PLAY || players[i].rendering)){
++        Player *p=players+i;unsigned need=(188u+(unsigned)p->freq-1)/(unsigned)p->freq+1;if(need>8)need=8;if(need>quota)quota=need;
++        if(!p->paused && p->ticks>0 && --p->ticks==0)p->status=END;
++    }
++    for(unsigned i=0;i<quota;i++){
++        float *frame=NULL;NTSTATUS s=xsdk_audio_next_frame(0,&frame);
++        if(s==STATUS_IO_TIMEOUT)break;
++        if(!NT_SUCCESS(s) || !frame){reject(DEVICE);break;}
++        if(XbAdx_Mix(frame))break;
++        xsdk_audio_queue_frame();
++    }
++}
+--- /dev/null
++++ b/engine/platform/platform/xb_adxt.h
+@@ -0,0 +1,26 @@
++/* SPDX-License-Identifier: MIT */
++#ifndef XB_ADXT_H
++#define XB_ADXT_H
++#include <stddef.h>
++void ADXT_Init(void);
++void *ADXT_Create(int,void *,int);
++void ADXT_SetReloadSct(void *,int);
++void ADXT_SetSvrFreq(void *,int);
++void ADXT_StartAfs(void *,int,int);
++void ADXT_StartFname(void *,char *);
++void ADXT_Stop(void *);
++void ADXT_Pause(void *,int);
++void ADXT_SetOutVol(void *,int);
++int ADXT_GetOutVol(void *);
++void ADXT_SetOutPan(void *,int,int);
++void ADXT_SetOutputMono(int);
++int ADXT_GetStat(void *);
++int XbAdx_LastError(void);
++void XbAdx_Tick(void);
++int XbAdx_Close(void);
++/* Same-owner CPU mixer, 256 stereo samples in the first two planar channels
++ * of an xsdk 6-channel float frame. Does not advance the game's tick clock. */
++int XbAdx_Mix(float *);
++/* Typed native source entry, also used to compare real ADX resources in tests. */
++int XbAdx_StartBytes(void *,const void *,size_t);
++#endif
+--- /dev/null
++++ b/engine/platform/platform/xb_overlay.c
+@@ -0,0 +1,85 @@
++/* SPDX-License-Identifier: MIT */
++#include "xb_overlay.h"
++#include <stdlib.h>
++#include <string.h>
++enum { LIMIT=4*1024*1024,REGIONS=2048 };
++static struct {XbOverlayRegion *regions;size_t count;uint8_t *initial;int busy,ready;} ov;
++static int contains(uintptr_t lo,uintptr_t hi,uintptr_t at,size_t n)
++{return hi>=lo && at>=lo && at<=hi && n<=hi-at;}
++static int intersects(uintptr_t a,size_t an,uintptr_t b,size_t bn)
++{return a<=b?b-a<an:a-b<bn;}
++int XbOverlay_Ready(void){return ov.ready;}
++int XbOverlay_Close(void) {
++    if(ov.busy)return XBOV_STATE;
++    free(ov.initial);free(ov.regions);memset(&ov,0,sizeof(ov));return 0;
++}
++int XbOverlay_Prepare(const XbOverlayCatalog *c,const XbDataFiles *files) {
++    if(ov.busy || ov.ready)return XBOV_STATE;
++    if(!c)return XBOV_CATALOG;
++    XbOverlayCatalog local=*c;c=&local;
++    if(c->version!=1 || !c->units || !c->regions || !c->count ||
++       c->count>REGIONS || c->reloc_count>65536 || (c->reloc_count && !c->relocs) ||
++       !c->entry || !files || !files->read || !c->source_size || c->source_size>LIMIT)return XBOV_CATALOG;
++    size_t total=0;uintptr_t lo=(uintptr_t)c->data_begin,hi=(uintptr_t)c->data_end;
++    if(hi<=lo || contains(lo,hi,(uintptr_t)c->entry,1))return XBOV_RANGE;
++    for(size_t i=0;i<c->count;i++) {
++        const XbOverlayRegion *r=c->regions+i;uintptr_t a=(uintptr_t)r->begin,b=(uintptr_t)r->end;
++        if((r->policy!=XBOV_RESET && r->policy!=XBOV_PRESERVE) || b<a || b-a!=r->expected || !r->expected || r->expected>LIMIT-total || !contains(lo,hi,a,r->expected))return XBOV_RANGE;
++        for(size_t j=0;j<i;j++)if(intersects(a,r->expected,(uintptr_t)c->regions[j].begin,c->regions[j].expected))return XBOV_RANGE;
++        total+=r->expected;
++    }
++    for(size_t i=0;i<c->reloc_count;i++) {
++        const XbOverlayReloc *r=c->relocs+i;int found=0;
++        if(r->width!=4 && r->width!=8)return XBOV_RELOC;
++        for(size_t j=0;j<c->count;j++)if(contains((uintptr_t)c->regions[j].begin,(uintptr_t)c->regions[j].end,(uintptr_t)r->slot,r->width))found=1;
++        if(!found)return XBOV_RELOC;
++        uint64_t value=0;if(r->width==4){uint32_t word;memcpy(&word,r->slot,4);value=word;}else memcpy(&value,r->slot,8);
++        if(value!=(uint64_t)r->expected)return XBOV_RELOC;
++    }
++    /* Source bytes only establish identity. No source instruction or pointer
++     * is ever a destination, a callable entry or a value in the native reset. */
++    ov.busy=1;
++    XbOverlayRegion *regions=malloc(c->count*sizeof(*regions));uint8_t *initial=malloc(total);
++    if(!regions || !initial){free(regions);free(initial);ov.busy=0;return XBOV_MEMORY;}
++    memcpy(regions,c->regions,c->count*sizeof(*regions));
++    size_t at=0;
++    for(size_t i=0;i<c->count;i++){memcpy(initial+at,regions[i].begin,regions[i].expected);at+=regions[i].expected;}
++    uint8_t *source=NULL;size_t size=0;
++    int error=files->read(files->ctx,"DBZP.BIN",&source,&size);
++    uint64_t hash=0xcbf29ce484222325ull;
++    if(!error && source && size==c->source_size)for(size_t i=0;i<size;i++)hash=(hash^source[i])*0x100000001b3ull;
++    if(error || !source || size!=c->source_size || hash!=c->source_fnv) {free(source);free(regions);free(initial);ov.busy=0;return XBOV_SOURCE;}
++    free(source);
++    ov.regions=regions;ov.count=c->count;ov.initial=initial;ov.ready=1;ov.busy=0;return 0;
++}
++int XbOverlay_Restore(int index) {
++    if(ov.busy || !ov.ready)return XBOV_STATE;
++    if(index!=0)return XBOV_CATALOG;
++    ov.busy=1;size_t at=0;
++    for(size_t i=0;i<ov.count;i++){if(ov.regions[i].policy==XBOV_RESET)memcpy(ov.regions[i].begin,ov.initial+at,ov.regions[i].expected);at+=ov.regions[i].expected;}
++    ov.busy=0;return 0;
++}
++#ifndef XB_HOST_TEST
++#include "xb_disc.h"
++/* Absent in the standalone launcher. The strict engine build always generates
++ * a strong catalogue; missing catalogue is a boot error, never success. */
++extern const XbOverlayCatalog gXbOverlayCatalog __attribute__((weak));
++static uint64_t mount_generation;
++static int overlay_read(void *ctx,const char *name,uint8_t **out,size_t *size) {
++    (void)ctx;dr_span span;*out=NULL;*size=0;
++    if(strcmp(name,"DBZP.BIN") || XbDisc_FindFile("disc/BIN/DBZP.BIN",&span) || span.size>LIMIT)return -1;
++    *out=malloc((size_t)span.size);if(!*out)return -1;
++    if(XbDisc_ReadSpan(&span,0,*out,(size_t)span.size)){free(*out);*out=NULL;return -1;}
++    *size=(size_t)span.size;return 0;
++}
++int XbOverlay_PrepareBuild(void) {
++    if(!&gXbOverlayCatalog || !XbDisc_Get())return XBOV_CATALOG;
++    XbDataFiles files={overlay_read,NULL};int e=XbOverlay_Prepare(&gXbOverlayCatalog,&files);
++    if(!e)mount_generation=XbDisc_Generation();
++    return e;
++}
++int XbOverlay_Load(int index) {
++    if(!XbDisc_Get() || mount_generation!=XbDisc_Generation())return XBOV_STATE;
++    return XbOverlay_Restore(index);
++}
++#endif
+--- /dev/null
++++ b/engine/platform/platform/xb_overlay.h
+@@ -0,0 +1,28 @@
++/* SPDX-License-Identifier: MIT */
++#ifndef XB_OVERLAY_H
++#define XB_OVERLAY_H
++#include <stddef.h>
++#include <stdint.h>
++#include "xb_gamedata.h"
++enum { XBOV_OK=0,XBOV_CATALOG=-610,XBOV_STATE=-611,XBOV_RANGE=-612,
++       XBOV_RELOC=-613,XBOV_SOURCE=-614,XBOV_MEMORY=-615 };
++enum { XBOV_RESET=1,XBOV_PRESERVE=2 };
++typedef struct {uint8_t *begin,*end;size_t expected;unsigned policy;} XbOverlayRegion;
++typedef struct {const void *slot;uintptr_t expected;unsigned width;} XbOverlayReloc;
++typedef struct {
++    uint32_t version,units;const XbOverlayRegion *regions;size_t count;
++    const XbOverlayReloc *relocs;size_t reloc_count;
++    uint8_t *data_begin,*data_end;size_t source_size;uint64_t source_fnv;
++    void (*entry)(int);
++} XbOverlayCatalog;
++/* Trusted build catalogue only. Destinations are resident native DATA, never
++ * file addresses. Native relocations have already been applied by the linker.
++ * Snapshot captures initial native globals before any menu has run. */
++int XbOverlay_Prepare(const XbOverlayCatalog *,const XbDataFiles *);
++int XbOverlay_Restore(int index);
++int XbOverlay_Close(void);
++int XbOverlay_Ready(void);
++/* Console binding to generated catalogue and current mounted ISO. */
++int XbOverlay_PrepareBuild(void);
++int XbOverlay_Load(int index);
++#endif
+--- /dev/null
++++ b/engine/tests/test_xb_adxt.c
+@@ -0,0 +1,108 @@
++/* SPDX-License-Identifier: MIT; native audio code, mocked xsdk transport. */
++#include "xb_adxt.h"
++#include "xb_file.h"
++#include "xb_time.h"
++#include "xsdk/audio.h"
++#include "reference.h"
++#include <assert.h>
++#include <stdio.h>
++#include <stdlib.h>
++#include <string.h>
++#include <math.h>
++static int available,queued,read_calls;static float device_frame[XSDK_AUDIO_FRAME_FLOATS];
++static NTSTATUS open_result=STATUS_SUCCESS,next_result=STATUS_SUCCESS,close_result=STATUS_SUCCESS;
++static void (*tick_hook)(void);
++NTSTATUS xsdk_audio_open(uint32_t n){assert(n==8);return open_result;}
++NTSTATUS xsdk_audio_close(void){return close_result;}
++NTSTATUS xsdk_audio_next_frame(uint32_t timeout,float **p){assert(!timeout);if(!NT_SUCCESS(next_result))return next_result;if(!available)return STATUS_IO_TIMEOUT;*p=device_frame;return STATUS_SUCCESS;}
++void xsdk_audio_queue_frame(void){assert(available>0);available--;queued++;}
++int XbTime_OnVBlank(void (*fn)(void)){assert(!tick_hook);tick_hook=fn;return 0;}
++static uint8_t *fixture;static size_t fixture_size;
++int XbFile_Locate(int part,int id,const char *name,dr_span *s){assert((part==2 && id==0 && !name) || (part==0 && id==0 && name && !strcmp(name,"TEST.ADX")));*s=(dr_span){0,fixture_size,0};return 0;}
++size_t XbFile_Read(const dr_span *s,uint64_t off,void *data,size_t n){assert(s->size==fixture_size && off<=s->size && n<=s->size-off);read_calls++;memcpy(data,fixture+off,n);return n;}
++static unsigned be16(const uint8_t *p){return p[0]*256u+p[1];}
++static unsigned be32(const uint8_t *p){return p[0]*16777216u+p[1]*65536u+p[2]*256u+p[3];}
++static void word(uint8_t *p,uint32_t n){p[0]=(uint8_t)(n>>24);p[1]=(uint8_t)(n>>16);p[2]=(uint8_t)(n>>8);p[3]=(uint8_t)n;}
++static unsigned work[128];
++static void *create(void){void *p=ADXT_Create(2,work,sizeof(work));assert(p);return p;}
++static void compare(uint8_t *data,size_t size){
++    void *h=create();assert(!XbAdx_StartBytes(h,data,size));
++    RefPlayer ref={0};ref.file=data;ref.size=(uint32_t)size;ref.data=be16(data+2)+4;
++    ref.channels=data[7];ref.rate=be32(data+8);ref.total=be32(data+12);ref.pan[0]=ref.pan[1]=-128;
++    Ref_coefs(be16(data+16),ref.rate,&ref.c1,&ref.c2);
++    int16_t pcm[32768];int samples=Ref_decode(&ref,pcm,512);assert(samples>256);
++    float frame[XSDK_AUDIO_FRAME_FLOATS];unsigned ratio=48000/ref.rate;
++    unsigned frames=(unsigned)samples*ratio/256;if(frames>192)frames=192;
++    unsigned nonzero=0;
++    for(unsigned block=0;block<frames;block++) {
++        assert(!XbAdx_Mix(frame));
++        for(unsigned i=0;i<256;i++){
++            unsigned at=((block*256+i)/ratio)*2;
++            assert(fabsf(frame[i]-pcm[at]/32768.0f)<0.000001f);
++            assert(fabsf(frame[256+i]-pcm[at+1]/32768.0f)<0.000001f);
++            nonzero+=pcm[at]!=0 || pcm[at+1]!=0;
++        }
++        for(unsigned i=512;i<XSDK_AUDIO_FRAME_FLOATS;i++)assert(frame[i]==0);
++    }
++    assert(nonzero>0);
++    ADXT_Stop(h);assert(ADXT_GetStat(h)==0);
++}
++int main(int argc,char **argv){
++    assert(argc>=2);ADXT_Init();assert(!XbAdx_LastError() && tick_hook);
++    size_t n=0x40+1024/32*18;uint8_t *data=calloc(1,n);assert(data);
++    data[0]=0x80;data[3]=0x3c;data[4]=3;data[5]=18;data[6]=4;data[7]=1;data[0x12]=4;
++    word(data+8,48000);word(data+12,1024);data[16]=1;data[17]=0xf4;memcpy(data+0x40-6,"(c)CRI",6);
++    for(size_t i=0x40;i<n;i+=18){data[i+1]=4;memset(data+i+2,0x12,16);}
++    compare(data,n);
++    for(int arg=1;arg<argc;arg++){
++        FILE *f=fopen(argv[arg],"rb");assert(f);assert(!fseek(f,0,SEEK_END));size_t size=(size_t)ftell(f);rewind(f);
++        uint8_t *bytes=malloc(size);assert(bytes && fread(bytes,1,size,f)==size);fclose(f);
++        compare(bytes,size);free(bytes);
++    }
++    assert(!XbAdx_Close());ADXT_Init();void *h=create();fixture=data;fixture_size=n;
++    ADXT_SetReloadSct(h,1);ADXT_SetSvrFreq(h,30);ADXT_StartAfs(h,2,0);assert(read_calls>0 && ADXT_GetStat(h)==3);
++    ADXT_Pause(h,1);float frame[XSDK_AUDIO_FRAME_FLOATS];assert(!XbAdx_Mix(frame));for(unsigned i=0;i<XSDK_AUDIO_FRAME_FLOATS;i++)assert(!frame[i]);
++    for(unsigned i=0;i<100;i++)tick_hook();
++    assert(ADXT_GetStat(h)==3);
++    ADXT_Pause(h,0);ADXT_SetOutVol(h,-600);assert(ADXT_GetOutVol(h)==-600);
++    ADXT_StartFname(h,"TEST.ADX");available=2;queued=0;tick_hook();assert(queued==2 && ADXT_GetStat(h)==3);
++    available=0;tick_hook();assert(ADXT_GetStat(h)==5); /* logical clock independent of queue availability */
++    assert(!XbAdx_StartBytes(h,data,n));ADXT_SetOutVol(h,-960);assert(!XbAdx_Mix(frame));for(unsigned i=0;i<512;i++)assert(!frame[i]);
++    ADXT_SetOutVol(h,0);ADXT_SetOutPan(h,0,15);assert(!XbAdx_StartBytes(h,data,n));assert(!XbAdx_Mix(frame));
++    for(unsigned i=0;i<256;i++)assert(frame[i]==0);
++    assert(frame[256]>0);
++    ADXT_SetOutPan(h,0,-128);ADXT_SetOutputMono(1);assert(!XbAdx_StartBytes(h,data,n));assert(!XbAdx_Mix(frame));for(unsigned i=0;i<256;i++)assert(frame[i]==frame[256+i]);ADXT_SetOutputMono(0);
++    word(data+0x24,1);word(data+0x28,0);word(data+0x30,64);assert(!XbAdx_StartBytes(h,data,n));assert(!XbAdx_Mix(frame));
++    for(unsigned i=64;i<256;i++)assert(frame[i]==frame[i%64]);
++    word(data+0x30,63);assert(!XbAdx_StartBytes(h,data,n));assert(!XbAdx_Mix(frame));
++    for(unsigned i=63;i<256;i++)assert(frame[i]==frame[i%63]);
++    ADXT_Pause(h,0);for(unsigned i=0;i<100;i++)tick_hook();
++    assert(ADXT_GetStat(h)==3);
++    uint8_t *bad=malloc(n);assert(bad);
++    for(unsigned kind=0;kind<8;kind++){
++        memcpy(bad,data,n);
++        if(kind==0)bad[0]=0;
++        if(kind==1)bad[4]=4;
++        if(kind==2)word(bad+8,0);
++        if(kind==3)bad[7]=3;
++        if(kind==4)bad[0x13]=8;
++        if(kind==5)word(bad+12,0xffffffff);
++        if(kind==6)bad[0x40-1]=0;
++        if(kind==7)word(bad+0x28,1);
++        assert(XbAdx_StartBytes(h,bad,n)!=0 && ADXT_GetStat(h)==0);
++    }
++    ADXT_Pause((void *)(uintptr_t)1,1);assert(XbAdx_LastError()!=0);
++    ADXT_SetSvrFreq(h,0);assert(XbAdx_LastError()!=0);ADXT_SetReloadSct(h,-1);assert(XbAdx_LastError()!=0);
++    next_result=STATUS_INVALID_PARAMETER;tick_hook();assert(XbAdx_LastError()!=0);next_result=STATUS_SUCCESS;
++    assert(!XbAdx_Close());ADXT_Init();
++    size_t large_size=22u*1024*1024;uint8_t *large=calloc(1,large_size);assert(large);memcpy(large,data,64);
++    word(large+12,(uint32_t)((large_size-64)/18*32));
++    void *big1=create(),*big2=create(),*big3=create();assert(!XbAdx_StartBytes(big1,large,large_size) && !XbAdx_StartBytes(big2,large,large_size));
++    assert(XbAdx_StartBytes(big3,large,large_size)!=0 && ADXT_GetStat(big1)==3 && ADXT_GetStat(big2)==3 && ADXT_GetStat(big3)==0);free(large);
++    close_result=STATUS_INVALID_PARAMETER;assert(XbAdx_Close()!=0 && !ADXT_Create(2,work,sizeof(work)));close_result=STATUS_SUCCESS;
++    assert(!XbAdx_Close());ADXT_Init();for(unsigned i=0;i<16;i++)assert(ADXT_Create(2,work,sizeof(work)));assert(!ADXT_Create(2,work,sizeof(work)));
++    assert(!XbAdx_Close());open_result=STATUS_INVALID_PARAMETER;ADXT_Init();assert(!ADXT_Create(2,work,sizeof(work)));
++    open_result=STATUS_SUCCESS;ADXT_Init();assert(create());assert(!XbAdx_Close());
++    free(data);free(bad);
++    puts("PASS: native ADXT, real 16/24k and synthetic 48k ADX PCM matches original decoder sample-hold resampling; controls, loop predictor restore, deterministic tick status, bounded ISO read path and 6-channel xsdk queue mocks; invalid formats/device errors rejected; no hardware audio");
++}
+--- a/engine/tests/test_xb_iso_file.c
++++ b/engine/tests/test_xb_iso_file.c
+@@ -82,4 +82,5 @@
+     assert(XbDisc_Mount("game:/absent.iso")!=0 && !XbDisc_Get());
+     assert(!image);
+     puts("PASS: real ISO through actual xb_disc/dr_disc/Sony byte-file adapter; NT transport mocked; bounds, EOF, short reads, seeks, errors, descriptors, stale mounts and exact ELF/overlay extraction; no game execution");
++    return 0;
+ }
+--- /dev/null
++++ b/engine/tests/test_xb_overlay.c
+@@ -0,0 +1,52 @@
++/* SPDX-License-Identifier: MIT; host native DATA reset, not gameplay. */
++#include "xb_overlay.h"
++#include <assert.h>
++#include <stdlib.h>
++#include <stdio.h>
++#include <string.h>
++static struct {int selected;double scale;void (*callback)(int);uint8_t bytes[33];} menu;
++static unsigned calls;static void entry(int n){calls+=(unsigned)n;}
++static const char *source_path;static int mutate,io_error;
++static XbOverlayCatalog catalog;static XbOverlayRegion region;
++static int read_source(void *ctx,const char *name,uint8_t **out,size_t *size) {
++    (void)ctx;assert(!strcmp(name,"DBZP.BIN"));
++    assert(XbOverlay_Restore(0)==XBOV_STATE && XbOverlay_Close()==XBOV_STATE);
++    assert(XbOverlay_Prepare(&catalog,NULL)==XBOV_STATE);
++    if(io_error)return -1;
++    FILE *f=fopen(source_path,"rb");assert(f);assert(!fseek(f,0,SEEK_END));*size=(size_t)ftell(f);rewind(f);
++    *out=malloc(*size);assert(*out && fread(*out,1,*size,f)==*size);fclose(f);
++    if(mutate){region.begin=(uint8_t *)(uintptr_t)entry;region.end=region.begin+region.expected;catalog.count=0;menu.selected=999;}
++    return 0;
++}
++int main(int argc,char **argv) {
++    assert(argc==2);source_path=argv[1];menu.selected=42;menu.scale=1.75;menu.callback=entry;
++    for(unsigned i=0;i<33;i++)menu.bytes[i]=(uint8_t)(i*3);
++    unsigned char expected[sizeof(menu)],code[16];memcpy(expected,&menu,sizeof(menu));memcpy(code,(const void *)(uintptr_t)entry,16);
++    XbOverlayReloc reloc={&menu.callback,(uintptr_t)entry,sizeof(void *)};
++    region=(XbOverlayRegion){(uint8_t *)&menu,(uint8_t *)(&menu+1),sizeof(menu),XBOV_RESET};
++    catalog=(XbOverlayCatalog){1,1,&region,1,&reloc,1,(uint8_t *)&menu,(uint8_t *)(&menu+1),563996,0x91a321108fc31289ull,entry};
++    XbDataFiles files={read_source,NULL};
++    assert(XbOverlay_Restore(0)==XBOV_STATE);
++    XbOverlayCatalog bad=catalog;bad.version=2;assert(XbOverlay_Prepare(&bad,&files)==XBOV_CATALOG);
++    bad=catalog;bad.data_end=bad.data_begin;assert(XbOverlay_Prepare(&bad,&files)==XBOV_RANGE);
++    XbOverlayRegion wrong=region;wrong.begin=(uint8_t *)(uintptr_t)entry;wrong.end=wrong.begin+wrong.expected;
++    bad=catalog;bad.regions=&wrong;assert(XbOverlay_Prepare(&bad,&files)==XBOV_RANGE);
++    XbOverlayRegion overlap[2]={region,region};bad=catalog;bad.count=2;bad.regions=overlap;assert(XbOverlay_Prepare(&bad,&files)==XBOV_RANGE);
++    reloc.expected++;assert(XbOverlay_Prepare(&catalog,&files)==XBOV_RELOC);reloc.expected--;
++    reloc.width=2;assert(XbOverlay_Prepare(&catalog,&files)==XBOV_RELOC);reloc.width=sizeof(void *);
++    bad=catalog;bad.source_fnv^=1;assert(XbOverlay_Prepare(&bad,&files)==XBOV_SOURCE && !memcmp(expected,&menu,sizeof(menu)));
++    io_error=1;assert(XbOverlay_Prepare(&catalog,&files)==XBOV_SOURCE);io_error=0;
++    mutate=1;assert(!XbOverlay_Prepare(&catalog,&files));assert(menu.selected==999 && XbOverlay_Ready());
++    assert(XbOverlay_Prepare(&catalog,&files)==XBOV_STATE);
++    assert(XbOverlay_Restore(1)==XBOV_CATALOG && menu.selected==999);
++    for(unsigned i=0;i<100;i++){
++        memset(&menu,0xcc,sizeof(menu));assert(!XbOverlay_Restore(0));assert(!memcmp(expected,&menu,sizeof(menu)));
++        menu.callback(1);
++    }
++    assert(calls==100 && !memcmp(code,(const void *)(uintptr_t)entry,16));
++    assert(!XbOverlay_Close() && !XbOverlay_Ready() && XbOverlay_Restore(0)==XBOV_STATE);
++    mutate=0;region=(XbOverlayRegion){(uint8_t *)&menu,(uint8_t *)(&menu+1),sizeof(menu),XBOV_PRESERVE};
++    catalog.count=1;assert(!XbOverlay_Prepare(&catalog,&files));menu.selected=567;
++    assert(!XbOverlay_Restore(0) && menu.selected==567);assert(!XbOverlay_Close());
++    puts("PASS: actual native overlay loader, real USA source identity; native pointers/mixed fields restored 100 times; code unchanged; malformed regions, relocs, IO/hash errors, alias mutation and recursion refused; no PS2 bytes executed");
++}
+--- /dev/null
++++ b/engine/tests/test_xb_overlay_disc.c
+@@ -0,0 +1,28 @@
++/* SPDX-License-Identifier: MIT; reuses only the host NT transport fixture. */
++#define main unused_sony_file_tests
++#include "test_xb_iso_file.c"
++#undef main
++#include "xb_overlay.h"
++static uint8_t native_data[64];
++static unsigned entry_calls;
++static void native_entry(int n){entry_calls+=(unsigned)n;}
++static const XbOverlayRegion native_region={native_data,native_data+64,64,XBOV_RESET};
++static const XbOverlayReloc native_reloc={native_data+8,(uintptr_t)native_entry,sizeof(void *)};
++const XbOverlayCatalog gXbOverlayCatalog={1,1,&native_region,1,&native_reloc,1,native_data,native_data+64,563996,0x91a321108fc31289ull,native_entry};
++int main(int argc,char **argv){
++    assert(argc==2);image_path=argv[1];assert(XbOverlay_PrepareBuild()==XBOV_CATALOG);
++    assert(!XbDisc_Mount("game:/test.iso"));
++    memset(native_data,0x11,64);void (*fn)(int)=native_entry;memcpy(native_data+8,&fn,sizeof(fn));
++    uint8_t initial[64];memcpy(initial,native_data,64);
++    assert(!XbOverlay_PrepareBuild());memset(native_data,0xaa,64);
++    assert(!XbOverlay_Load(0) && !memcmp(initial,native_data,64));
++    memcpy(&fn,native_data+8,sizeof(fn));fn(1);assert(entry_calls==1);
++    assert(XbOverlay_Load(1)==XBOV_CATALOG);
++    XbDisc_Unmount();memset(native_data,0xbb,64);assert(XbOverlay_Load(0)==XBOV_STATE && native_data[0]==0xbb);
++    assert(!XbDisc_Mount("game:/test.iso"));assert(XbOverlay_Load(0)==XBOV_STATE);
++    assert(!XbOverlay_Close());memcpy(native_data,initial,64);assert(!XbOverlay_PrepareBuild());
++    fail_read=1; /* Restore consumes native snapshots, not another disc/code read. */
++    memset(native_data,0xcc,64);assert(!XbOverlay_Load(0) && !memcmp(initial,native_data,64));fail_read=0;
++    assert(!XbOverlay_Close());XbDisc_Unmount();assert(!image);
++    puts("PASS: actual console overlay binding and actual ISO mount/parser, only NT transport mocked; real DBZP identity checked; native pointers restored; remount/unmount refused; no MIPS execution");
++}
+--- /dev/null
++++ b/engine/tools/audit_overlay_catalog.py
+@@ -0,0 +1,41 @@
++#!/usr/bin/env python3
++# SPDX-License-Identifier: MIT
++"""Inventory native menu sections/relocations and check reset catalogue coverage.
++Does not execute PowerPC or turn a failed engine link into an executable.
++"""
++import json,struct,re,argparse,hashlib
++from pathlib import Path
++from build_overlay_catalog import read_object
++p=argparse.ArgumentParser();p.add_argument('build',type=Path);a=p.parse_args()
++catalog=json.loads((a.build/'overlay/catalog.json').read_text());full=[];mutable=[]
++for unit in catalog['objects']:
++    report=json.loads((a.build/'battle-integration.json').read_text())
++    row=next(x for x in report['files'] if x['source']==unit['source'])
++    path=Path(row['object']);data,h,ss,names,syms=read_object(path)
++    assert hashlib.sha256(data).hexdigest()==unit['object_sha256']
++    sections=[];relocations=[]
++    for i,s in enumerate(ss):
++        if s[2]&2 and s[5]:
++            sections.append({'section':names[i],'size':s[5],'flags':s[2],'type':s[1]})
++            if s[2]&3==3:mutable.append((unit['source'],names[i],s[5]))
++        if s[1] in (4,9) and ss[s[7]][2]&2:
++            assert s[1]==4 and s[9]==12
++            for at in range(s[4],s[4]+s[5],12):
++                offset,info,add=struct.unpack_from('>IIi',data,at);sym=syms[info>>8]
++                relocations.append({'section':names[s[7]],'offset':offset,'PPC_type':info&255,'symbol':sym[0],'symbol_section':names[sym[4]] if 0<sym[4]<len(ss) else sym[4],'symbol_value':sym[1],'addend':add})
++    full.append({'source':unit['source'],'sections':sections,'native_relocations':relocations})
++declared=[(r['object'],r['section'],r['bytes']) for r in catalog['regions'] if r['section']!='COMMON']
++assert sorted(mutable)==sorted(declared) and len(declared)==len(set(declared))
++# The failed strict link's map still supplies layout evidence. No incomplete
++# ELF or undefined-symbol suppression is needed for these boundary checks.
++text=(a.build/'battle-link.map').read_text()
++addresses={m.group(2):int(m.group(1),16) for m in re.finditer(r'^\s*0x([0-9a-fA-F]+)\s+(__xbo_(?:start|end|size)_\d+|__xbo_data_(?:begin|end))\s*=',text,re.M)}
++low,high=addresses['__xbo_data_begin'],addresses['__xbo_data_end'];total=0
++for i,r in enumerate(catalog['regions']):
++    start,end=addresses[f'__xbo_start_{i}'],addresses[f'__xbo_end_{i}']
++    expected=r['bytes'] if r['bytes'] is not None else addresses[f'__xbo_size_{i}']
++    assert low<=start<end<=high and end-start==expected
++    total+=expected
++reset=sum(r['policy']==1 for r in catalog['regions']);preserved=sum(r['policy']==2 for r in catalog['regions'])
++result={'result':'PASS','native_units':len(full),'native_reset_regions':reset,'persistent_port_regions':preserved,'total_mutable_bytes':total,'mutable_pointer_relocations_validated_by_runtime':len(catalog['relocations']),'all_allocated_relocations_in_inventory':sum(len(u['native_relocations']) for u in full),'writable_coverage_complete':True,'strict_link_succeeded':report['link']=='PASS','hardware_execution':False,'scope':'complete native C menu section/relocation inventory; immutable code/rodata remain under native linker; PS2 main-program resource/table schema is separate','units':full}
++(a.build/'overlay/full-inventory.json').write_text(json.dumps(result,indent=2)+'\n');print(json.dumps({k:v for k,v in result.items() if k!='units'},indent=2))
+--- /dev/null
++++ b/engine/tools/build_overlay_catalog.py
+@@ -0,0 +1,106 @@
++#!/usr/bin/env python3
++# SPDX-License-Identifier: MIT
++"""Catalogue ALL resident native menu writable sections and their relocations.
++
++No PS2 data types/addresses are guessed. C initializers and the native linker
++produce the bytes/pointers that reload restores. Original MIPS code is identity
++input only. Unmodelled relocation types are a build error, not zero-filled.
++"""
++from pathlib import Path
++import struct,json,subprocess,hashlib
++
++def read_object(path):
++    b=path.read_bytes()
++    if b[:6]!=b'\x7fELF\x01\x02':raise ValueError('expected ELF32-BE')
++    h=struct.unpack_from('>16sHHIIIIIHHHHHH',b)
++    sections=[struct.unpack_from('>10I',b,h[6]+i*h[11]) for i in range(h[12])]
++    def blob(s):return b[s[4]:s[4]+s[5]]
++    def string(s,off):return s[off:s.index(0,off)].decode()
++    strings=blob(sections[h[13]])
++    names=[string(strings,s[0]) for s in sections]
++    symtab=next(s for s in sections if s[1]==2);symnames=blob(sections[symtab[6]])
++    symbols=[]
++    for at in range(symtab[4],symtab[4]+symtab[5],16):
++        n,value,size,info,other,shndx=struct.unpack_from('>IIIBBH',b,at)
++        symbols.append((string(symnames,n),value,size,info,shndx))
++    return b,h,sections,names,symbols
++
++def generate(rows,cc,sdk,out):
++    chosen=[r for r in rows if r['source'].startswith('src/menu/') and r['compiled']]
++    if not chosen or any(r['functions_without_C'] for r in chosen):raise ValueError('incomplete native menu C')
++    gen=out/'overlay';gen.mkdir(exist_ok=True)
++    regions=[];relocs=[];objects=[];decls=set();aliases=[];data=[];bss=[]
++    objcopy=cc.with_name(cc.name[:-3]+'objcopy')
++    for unit,row in enumerate(chosen):
++        path=Path(row['object']);before,h,ss,names,syms=read_object(path)
++        owned={};options=[]
++        for i,s in enumerate(ss):
++            if s[2]&3!=3 or not s[5]:continue
++            if s[1] not in (1,8) or s[2]&0x400 or s[2]&4:raise ValueError('unsupported menu writable section '+names[i])
++            key=len(regions);owned[i]=key
++            regions.append({'object':row['source'],'section':names[i],'bytes':s[5],'kind':'zero' if s[1]==8 else 'initialized','policy':2 if row['source'].startswith('src/menu/port_') else 1})
++            start=f'__xbo_start_{key}';end=f'__xbo_end_{key}'
++            selector=f' . = ALIGN({max(1,s[8])}); {start} = .; KEEP("{path}"({names[i]})) {end} = .;'
++            (bss if s[1]==8 else data).append(selector)
++        common=[s for s in syms if s[4]==0xfff2]
++        for symbol in common:
++            # COMMON can be coalesced with a definition from another object;
++            # its native symbol, not an input-file location counter, owns it.
++            name,value,size,binding,shndx=symbol
++            if any(r.get('common_symbol')==name for r in regions):
++                if any(r.get('common_symbol')==name and r['bytes']!=size for r in regions):raise ValueError('ambiguous common size')
++                continue
++            key=len(regions);regions.append({'object':row['source'],'section':'COMMON','bytes':size,'common_symbol':name,'policy':2 if row['source'].startswith('src/menu/port_') else 1})
++            bss.append(f' __xbo_start_{key} = {name}; __xbo_end_{key} = {name}+{size};')
++        exported={}
++        for s in ss:
++            if s[1] not in (4,9) or s[7] not in owned:continue
++            if s[1]!=4 or s[9]!=12:raise ValueError('expected PPC RELA')
++            for at in range(s[4],s[4]+s[5],12):
++                offset,info,addend=struct.unpack_from('>IIi',before,at)
++                if info&255!=1:raise ValueError('only native R_PPC_ADDR32 data relocations supported')
++                number=info>>8;name,value,size,binding,shndx=syms[number]
++                if binding>>4==0:
++                    if not 0<shndx<len(ss):raise ValueError('bad local relocation')
++                    if number not in exported:
++                        alias=f'__xbo_target_{unit}_{number}';exported[number]=alias
++                        options+=['--add-symbol',f'{alias}={names[shndx]}:{value},global']
++                        aliases.append({'object':row['source'],'alias':alias,'section':names[shndx],'value':value})
++                    name=exported[number]
++                if not name:raise ValueError('unnamed external relocation')
++                decls.add(name)
++                relocs.append({'region':owned[s[7]],'offset':offset,'symbol':name,'addend':addend,'type':1})
++        if options:
++            dest=path.with_suffix('.catalog.o')
++            subprocess.run([str(objcopy),*options,str(path),str(dest)],check=True)
++            after,hh,sss,nn,_=read_object(dest)
++            if hh[7]!=h[7] or nn!=names:raise ValueError('objcopy changed ABI/sections')
++            for old,new in zip(ss,sss):
++                if old[2]&2 and (old[1:4]!=new[1:4] or old[5]!=new[5] or
++                    old[1]!=8 and before[old[4]:old[4]+old[5]]!=after[new[4]:new[4]+new[5]]):raise ValueError('objcopy changed allocated payload')
++            dest.replace(path)
++        objects.append({'source':row['source'],'source_sha256':row['source_sha256'],'object_sha256':hashlib.sha256(path.read_bytes()).hexdigest()})
++    # All mutable sections are now covered, not just sections reachable from a
++    # single function. Read-only constants/code remain resident native ELF data.
++    script=(sdk/'src/xsdk.ld').read_text()
++    for anchor,insert in [('\t.data : {','\n\t\t__xbo_data_begin = .;\n'+'\n'.join(data)),('\t.bss : {','\n'+'\n'.join(bss))]:
++        if script.count(anchor)!=1:raise ValueError('unexpected SDK linker script')
++        script=script.replace(anchor,anchor+insert)
++    anchor='*(.sbss .sbss.* .bss .bss.* COMMON)'
++    script=script.replace(anchor,anchor+'\n\t\t__xbo_data_end = .;')
++    ld=gen/'overlay.ld';ld.write_text(script)
++    lines=['/* Generated from native objects, no game bytes. */','#include "xb_overlay.h"','extern void Progress_Main(int);','extern unsigned char __xbo_data_begin[],__xbo_data_end[];']
++    for i,r in enumerate(regions):
++        lines.append(f'extern unsigned char __xbo_start_{i}[],__xbo_end_{i}[];')
++        if r['bytes'] is None:lines.append(f'extern unsigned char __xbo_size_{i}[];')
++    for name in sorted(decls-{'Progress_Main'}):lines.append(f'extern unsigned char {name}[];')
++    lines+=['static const XbOverlayRegion regions[]={']
++    for i,r in enumerate(regions):
++        size=str(r['bytes']) if r['bytes'] is not None else f'(size_t)__xbo_size_{i}'
++        lines.append(f'{{__xbo_start_{i},__xbo_end_{i},{size},{r["policy"]}}},')
++    lines+=['};','static const XbOverlayReloc relocs[]={']
++    for r in relocs:lines.append(f'{{__xbo_start_{r["region"]}+{r["offset"]},((uintptr_t){r["symbol"]}+(intptr_t)({r["addend"]})),4}},')
++    lines+=['};',f'const XbOverlayCatalog gXbOverlayCatalog={{1,{len(chosen)},regions,{len(regions)},relocs,{len(relocs)},__xbo_data_begin,__xbo_data_end,563996,0x91a321108fc31289ull,Progress_Main}};']
++    source=gen/'overlay_catalog.c';source.write_text('\n'.join(lines)+'\n')
++    (gen/'catalog.json').write_text(json.dumps({'native_menu_units':len(chosen),'regions':regions,'relocations':relocs,'exported_local_targets':aliases,'objects':objects,'source_identity':'USA DBZP.BIN, size+FNV-1a, not a cryptographic authenticity check','MIPS_bytes_copied_to_native_memory':False,'scope':'all compiled native menu writable sections/common symbols and their native pointer relocations; immutable constants and machine code stay resident under native linker control'},indent=2)+'\n')
++    return source,ld
+--- a/engine/tools/link_battle.py
++++ b/engine/tools/link_battle.py
+@@ -54,7 +54,7 @@
+               '-I'+str(project/'src'),'-I'+str(project/'engine/platform/platform'),'-I'+str(sdk/'include')]
+     def compile_one(f):
+         rel=f.relative_to(repo).as_posix() if f.is_relative_to(repo) else f.relative_to(project).as_posix()
+-        local={'src/battle/battle.c':'engine/combat/battle.c','src/sys/bpe.c':'engine/combat/bpe.c','src/sys/heap.c':'engine/combat/heap.c','src/sys/gfx.c':'engine/combat/gfx.c'}
++        local={'src/main.c':'engine/combat/main.c','src/battle/battle.c':'engine/combat/battle.c','src/sys/bpe.c':'engine/combat/bpe.c','src/sys/heap.c':'engine/combat/heap.c','src/sys/gfx.c':'engine/combat/gfx.c'}
+         input_file=project/local[rel] if rel in local and (project/local[rel]).exists() else f
+         input_bytes=input_file.read_bytes()
+         lowered=False
+@@ -116,6 +116,14 @@
+         for row in rows:
+             if not row['compiled']:print(row['source']+': '+Path(row['log']).read_text()[:3000])
+         return 0 if report['compiled']==report['total'] else 1
++    overlay_ld=sdk/'src/xsdk.ld'
++    if a.platform and all(r['compiled'] for r in rows):
++        import build_overlay_catalog
++        source,overlay_ld=build_overlay_catalog.generate(rows,cc,sdk,out)
++        target=obj/'native_overlay_catalog.o';log=logs/'native_overlay_catalog.txt'
++        result=subprocess.run([str(cc),*common,'-mhard-float','-std=gnu99',*includes,'-c',str(source),'-o',str(target)],capture_output=True,text=True)
++        log.write_text(result.stdout+result.stderr)
++        rows.append({'source':'generated/overlay_catalog.c','source_sha256':hashlib.sha256(source.read_bytes()).hexdigest(),'compiled':result.returncode==0,'source_unchanged_during_compile':True,'software_arithmetic_lowered':False,'object':str(target),'log':str(log),'C_attempts_enabled':[],'functions_without_C':[]})
+     nm=cc.with_name(cc.name[:-3]+'nm')
+     compiled=[Path(row['object']) for row in rows if row['compiled']]
+     arithmetic_audit={'objects':0,'native_arithmetic':[],'runtime_verified':False}
+@@ -156,7 +164,7 @@
+         native += [project/'build'/(f.stem+'.o') for f in sorted((project/'engine/platform/platform').glob('*.c'))]
+     if any(not f.exists() for f in native):raise SystemExit('build the native launcher first')
+     title=out/'battle-link.elf';title.unlink(missing_ok=True)
+-    cmd=[str(cc),'-static','-nostdlib','-T',str(sdk/'src/xsdk.ld'),
++    cmd=[str(cc),'-static','-nostdlib','-T',str(overlay_ld),
+          '-Wl,--gc-sections,'+','.join('--undefined='+r for r in roots)+',-Map,'+str(out/'battle-link.map'),
+          '-o',str(title),*map(str,native),*map(str,compiled),'-Wl,--start-group',
+          str(sdk/'build/libxsdk.a'),'-lc','-lm','-lgcc','-Wl,--end-group']
+--- /dev/null
++++ b/engine/tools/test_adxt.py
+@@ -0,0 +1,46 @@
++#!/usr/bin/env python3
++# SPDX-License-Identifier: MIT
++"""Compare native ADX against actual pinned upstream decoder, with real disc resources."""
++from pathlib import Path
++import argparse,subprocess,struct,hashlib,os,json
++p=argparse.ArgumentParser();p.add_argument('upstream',type=Path);p.add_argument('xsdk',type=Path);p.add_argument('iso',type=Path);p.add_argument('output',type=Path);p.add_argument('--sanitize',action='store_true');a=p.parse_args()
++e=Path(__file__).resolve().parents[1];out=a.output.resolve();out.mkdir(parents=True,exist_ok=True)
++src=a.upstream/'port/src/gs/snd_adx.c';text=src.read_text()
++def function(name):
++ start=text.index(name);start=text.rfind('\n',0,start)+1;br=text.index('{',start);depth=1;at=br+1
++ while depth:
++  if text[at]=='{':depth+=1
++  if text[at]=='}':depth-=1
++  at+=1
++ return text[start:at]
++header='''#include <stdint.h>
++typedef struct {uint8_t *file;uint32_t size,data,channels,rate,total,pos,loopStart,loopEnd;int loop,c1,c2,hist[2][2],pan[2];} RefPlayer;
++void Ref_coefs(uint32_t,uint32_t,int *,int *);
++int Ref_decode(RefPlayer *,int16_t *,int);
++'''
++(out/'reference.h').write_text(header)
++ref='#include "reference.h"\n#include <stddef.h>\n#include <math.h>\nstatic int sMono;\n#define PAN_AUTO (-128)\n#define FRAME 18\n'
++ref+=function('static uint32_t be16(')+'\n'
++ref+=function('static void adx_coefs(').replace('static void adx_coefs','void Ref_coefs')+'\n'
++ref+=function('static int decode(').replace('static int decode(Player *','int Ref_decode(RefPlayer *')+'\n'
++(out/'reference.c').write_text(ref)
++# Validated USA image's AFS2; source bytes are temporary test inputs, not distributed.
++iso=a.iso.open('rb');afs=1466093568;iso.seek(afs);magic,count=struct.unpack('<4sI',iso.read(8));assert magic==b'AFS\0'
++table=[struct.unpack('<II',iso.read(8)) for _ in range(count)];chosen={}
++for index,(offset,size) in enumerate(table):
++ if size<0x40 or size>4*1024*1024:continue
++ iso.seek(afs+offset);h=iso.read(0x40)
++ if h[:2]!=b'\x80\0' or h[4:7]!=b'\x03\x12\x04' or h[7] not in (1,2) or h[0x12]!=4:continue
++ rate,total=struct.unpack_from('>II',h,8)
++ key=(rate,h[7])
++ if rate in (16000,24000,48000) and total>=1024 and key not in chosen:
++  iso.seek(afs+offset);data=iso.read(size);path=out/f'real-{rate}-{h[7]}.adx';path.write_bytes(data)
++  chosen[key]={'file':str(path),'index':index,'size':size,'sha256':hashlib.sha256(data).hexdigest()}
++ if len(chosen)>=6:break
++iso.close();assert len(chosen)>=3
++cmd=['gcc','-std=gnu17','-O1','-g','-Wall','-Wextra','-Werror','-I'+str(e/'platform/platform'),'-I'+str(e.parent/'src'),'-I'+str(a.xsdk.resolve()/'include'),'-I'+str(out)]
++if a.sanitize:cmd+=['-fsanitize=address,undefined','-fno-omit-frame-pointer']
++exe=out/'test-adxt';subprocess.run(cmd+[str(e/'tests/test_xb_adxt.c'),str(e/'platform/platform/xb_adxt.c'),str(out/'reference.c'),'-lm','-o',str(exe)],check=True)
++r=subprocess.run([str(exe),*[v['file'] for v in chosen.values()]],capture_output=True,text=True,env=dict(os.environ,ASAN_OPTIONS='detect_leaks=0'))
++(out/'adxt.txt').write_text(r.stdout+r.stderr);print(r.stdout+r.stderr,end='');r.check_returncode()
++(out/'adxt.json').write_text(json.dumps({'result':'PASS','reference_source_sha256':hashlib.sha256(src.read_bytes()).hexdigest(),'real_inputs':list(chosen.values()),'xsdk_audio':'mocked, real API frame layout','ISO_transport':'XbFile_* mocked with real resource bytes; separate real xb_disc test covers transport','hardware_audio':False,'PPC_execution':False,'whole_game_rollback_validated':False},indent=2)+'\n')
+--- /dev/null
++++ b/engine/tools/test_overlay.py
+@@ -0,0 +1,37 @@
++#!/usr/bin/env python3
++# SPDX-License-Identifier: MIT
++"""Host reset tests plus an isolated real PPC linker relocation fixture."""
++from pathlib import Path
++import subprocess,json,os,argparse,struct,hashlib,sys
++import build_overlay_catalog
++p=argparse.ArgumentParser();p.add_argument('compiler',type=Path);p.add_argument('xsdk',type=Path);p.add_argument('dbzp',type=Path);p.add_argument('output',type=Path);p.add_argument('--sanitize',action='store_true');a=p.parse_args()
++e=Path(__file__).resolve().parents[1];out=a.output.resolve();out.mkdir(parents=True,exist_ok=True);platform=e/'platform/platform'
++cmd=['gcc','-std=gnu17','-O1','-g','-Wall','-Wextra','-Werror','-DXB_HOST_TEST','-I'+str(platform)]
++if a.sanitize:cmd+=['-fsanitize=address,undefined','-fno-omit-frame-pointer']
++exe=out/'overlay-test';subprocess.run(cmd+[str(e/'tests/test_xb_overlay.c'),str(platform/'xb_overlay.c'),'-o',str(exe)],check=True)
++r=subprocess.run([str(exe),str(a.dbzp.resolve())],capture_output=True,text=True,env=dict(os.environ,ASAN_OPTIONS='detect_leaks=0'))
++(out/'overlay.txt').write_text(r.stdout+r.stderr);print(r.stdout+r.stderr,end='');r.check_returncode()
++# These are test functions with observable native DATA effects, not substitutes
++# linked into the game. They let the real PPC linker resolve every fixture name.
++source=out/'fixture.c';source.write_text('int selected=42; int counter; const char *choices[]={"long enough literal one","long enough literal two","long enough literal one"}; void Progress_Main(int n){selected+=n;counter+=n;} void (*handler)(int)=Progress_Main; void xsdk_start(void){handler(1);}\n')
++cc=a.compiler.resolve();obj=out/'fixture.o'
++subprocess.run([str(cc),'-mcpu=cell','-mhard-float','-fno-pic','-fcommon','-fdata-sections','-ffunction-sections','-O2','-c',str(source),'-o',str(obj)],check=True)
++row={'source':'src/menu/fixture.c','source_sha256':hashlib.sha256(source.read_bytes()).hexdigest(),'object':str(obj),'compiled':True,'functions_without_C':[]}
++catalog,ld=build_overlay_catalog.generate([row],cc,a.xsdk.resolve(),out)
++co=out/'catalog.o';subprocess.run([str(cc),'-mcpu=cell','-mhard-float','-I'+str(platform),'-c',str(catalog),'-o',str(co)],check=True)
++elf=out/'fixture.elf';subprocess.run([str(cc),'-nostdlib','-static','-T',str(ld),'-Wl,--gc-sections,--undefined=gXbOverlayCatalog','-o',str(elf),str(obj),str(co)],check=True)
++b,h,sections,names,symbols=build_overlay_catalog.read_object(elf);syms={s[0]:s[1] for s in symbols if s[4] not in (0,0xfff2)}
++assert h[7]&0x100
++def span(addr,n):
++ for s in sections:
++  if s[1]!=8 and s[3]<=addr and n<=s[5]-(addr-s[3]):return b[s[4]+addr-s[3]:s[4]+addr-s[3]+n]
++ raise ValueError('not file-backed')
++v=struct.unpack('>9I',span(syms['gXbOverlayCatalog'],36));version,units,regs,count,rels,nrels,low,high,size=v
++assert version==units==1 and nrels>=4
++for i in range(count):
++ start,end,expected,policy=struct.unpack('>4I',span(regs+i*16,16));assert policy in (1,2); assert low<=start<end<=high and end-start==expected
++for i in range(nrels):
++ slot,expected,width=struct.unpack('>3I',span(rels+i*12,12));assert width==4 and struct.unpack('>I',span(slot,4))[0]==expected
++assert all(s[4]!=0 for s in symbols if s[0] and s[3]>>4==1)
++report={'result':'PASS','host_native_resets':100,'PPC_fixture_relocations_verified':nrels,'PPC_fixture_ABI':hex(h[7]),'PPC_execution':False,'engine_link_not_replaced_by_fixture':True,'MIPS_bytes_copied':False}
++(out/'overlay.json').write_text(json.dumps(report,indent=2)+'\n');print('PASS: isolated real PPC linker resolves native pointer/string relocations and DATA catalogue; no game or PPC execution')
+--- /dev/null
++++ b/engine/tools/test_overlay_disc.py
+@@ -0,0 +1,12 @@
++#!/usr/bin/env python3
++# SPDX-License-Identifier: MIT
++from pathlib import Path
++import argparse,subprocess,os,json
++p=argparse.ArgumentParser();p.add_argument('xsdk',type=Path);p.add_argument('iso',type=Path);p.add_argument('output',type=Path);p.add_argument('--sanitize',action='store_true');a=p.parse_args()
++e=Path(__file__).resolve().parents[1];out=a.output.resolve();out.mkdir(parents=True,exist_ok=True);platform=e/'platform/platform'
++cmd=['gcc','-std=gnu17','-O1','-g','-Wall','-Wextra','-Werror','-ffunction-sections','-fdata-sections','-Wl,--gc-sections','-I'+str(platform),'-I'+str(e.parent/'src'),'-I'+str(a.xsdk.resolve()/'include')]
++if a.sanitize:cmd+=['-fsanitize=address,undefined','-fno-omit-frame-pointer']
++exe=out/'overlay-disc';subprocess.run(cmd+list(map(str,[e/'tests/test_xb_overlay_disc.c',platform/'xb_overlay.c',platform/'xb_disc.c',e.parent/'src/dr_disc.c']))+['-o',str(exe)],check=True)
++r=subprocess.run([str(exe),str(a.iso.resolve())],capture_output=True,text=True,env=dict(os.environ,ASAN_OPTIONS='detect_leaks=0'))
++(out/'overlay-disc.txt').write_text(r.stdout+r.stderr);print(r.stdout+r.stderr,end='');r.check_returncode()
++(out/'overlay-disc.json').write_text(json.dumps({'result':'PASS','actual_console_binding':True,'actual_ISO_reader':True,'catalogue':'host test native DATA fixture; complete engine catalogue audited separately','NT_transport':'mocked','MIPS_execution':False,'PowerPC_execution':False},indent=2)+'\n')
+--- a/src/main.c
++++ b/src/main.c
+@@ -260,7 +260,7 @@
+     XbPlatform_Install();
+     DrLobby lobby;dr_lobby_init(&lobby);int logged_lobby_state=LOBBY_OFF;
+     demo_init(&ui);settings_load();
+-    xsdk_log_write("DragonRage360 demo 0.31: native VIF/VU / platform diagnostics; Battle_Main not linked.");
++    xsdk_log_write("DragonRage360 demo 0.32: native VIF/VU / platform diagnostics; Battle_Main not linked.");
+     xsdk_log_write("%s: BPE decode + animation endian synthetic self-test",dr_resource_selftest()?"PASS":"FAIL");
+     xsdk_log_write("%s: bounded BIN + motion + skeleton synthetic self-test",dr_container_selftest()?"PASS":"FAIL");
+     xsdk_log_write("%s: GS texture address synthetic self-test",dr_gs_texture_selftest()?"PASS":"FAIL");
+@@ -374,7 +374,7 @@
+         if(capture_mode) {
+             int error=dr_capture_demo_draw();
+             if(error) {xsdk_log_write("FAIL: actual capture draw rc=%d",error);if(!dr_capture_demo_close())capture_mode=false;}
+-            xsdk_text_draw(50,44,2,0xffe0e0ff,"CAPTURA ORIGINAL GS · 0.31 EXPERIMENTAL");
++            xsdk_text_draw(50,44,2,0xffe0e0ff,"CAPTURA ORIGINAL GS · 0.32 EXPERIMENTAL");
+             xsdk_text_draw(52,100,1,0xffe0e0ff,"Captura GS / VU / sombras / contorno / tabelas por ID e Z");
+             xsdk_text_draw(52,650,1,0xffe0e0ff,"Dados sintéticos · sem combate · B voltar");
+         } else if(body_mode) {
+@@ -383,7 +383,7 @@
+                 xsdk_log_write("FAIL: real body diagnostic draw rc=%d",error);
+                 if(!dr_body_demo_close())body_mode=false;
+             }
+-            xsdk_text_draw(50,44,2,0xffe0e0ff,"MODELO DA ISO · POSE DE REFERÊNCIA · 0.31");
++            xsdk_text_draw(50,44,2,0xffe0e0ff,"MODELO DA ISO · POSE DE REFERÊNCIA · 0.32");
+             xsdk_text_draw(52,100,1,0xffe0e0ff,"Corpo e materiais reais / programa 0 da VU1");
+             xsdk_text_draw(950,175,1,0xffe0e0ff,"Texturas do pacote");
+             xsdk_text_draw(52,650,1,0xffe0e0ff,"Pose fixa / sem combate · X expressão · B voltar");
+@@ -393,7 +393,7 @@
+                 xsdk_log_write("FAIL: native graphics diagnostic draw, error=%d",error);
+                 dr_graphics_demo_close();graphics_mode=false;
+             }
+-            xsdk_text_draw(50,44,2,0xff101020,"DIAGNÓSTICO GS · DATE/FBA · 0.31");
++            xsdk_text_draw(50,44,2,0xff101020,"DIAGNÓSTICO GS · DATE/FBA · 0.32");
+             xsdk_text_draw(52,100,1,0xff101020,"PSMT8 / paleta / MODULATE / alpha / aditivo");
+             xsdk_text_draw(52,650,1,0xff101020,"Dados sintéticos · Y captura original · B voltar");
+         } else demo_draw(&ui,&paint,tick);
+--- a/tests/check_xex.py
++++ b/tests/check_xex.py
+@@ -31,7 +31,7 @@
+ assert required<=defined, 'body pipeline/native modules absent from link'
+ capture_required={'Dma_Flush','Dma_ResetBuffers','Dma_AddFrame','Dma_AddScissor','Dma_AddXyOffset','Dma_AddZbuf','dr_dma_write_ad','dr_dma_producer_open_mapped','dr_dma_map_chain','Dma_AddNext','dr_gs_stream_init','dr_gs_stream_chain','dr_gs_stream_vif','dr_vu1_vif_control','sXenosBackend','GsGpu_Init','GsGpu_Draw','GsGpu_DrawVu0','GsGpu_DrawVu4','GsGpu_DrawVu6','dr_gs_replay','dr_vu0_vert_container','dr_vu4_vert_container','dr_vu6_vert_container','dr_outline_frag_container','dr_dclut_frag_container','Gs_Gif','Gs_XenosCaptureEnable','GsDraw_XenosSubmit','dr_capture_demo_open','dr_capture_demo_draw'}
+ assert capture_required<=defined, 'actual capture/backend integration absent from link'
+-native_required={'Dma_InitBuffers','Dma_SendGif','dr_dma_engine_init','dr_dma_engine_send_u64','Port_GsMarker','sceGsSyncPath','sceGsSetDefStoreImage','sceGsExecStoreImage','dr_gs_backend_sync','GsDraw_XenosReadFrameExact','sceGsSetDefDBuff','sceGsPutDrawEnv','sceGsSwapDBuff','Port_GsVif1Chain','Port_GsGifChannel','dr_gs_native_open','dr_gs_native_bind','dr_gs_native_vif1','dr_gs_native_gif','dr_gs_native_error','dr_gs_stream_gif_chain'}
++native_required={'ADXT_Init','ADXT_Create','ADXT_SetReloadSct','ADXT_SetSvrFreq','ADXT_StartAfs','ADXT_StartFname','ADXT_Stop','ADXT_Pause','ADXT_SetOutVol','ADXT_GetOutVol','ADXT_SetOutPan','ADXT_SetOutputMono','ADXT_GetStat','XbOverlay_PrepareBuild','XbOverlay_Load','Dma_InitBuffers','Dma_SendGif','dr_dma_engine_init','dr_dma_engine_send_u64','Port_GsMarker','sceGsSyncPath','sceGsSetDefStoreImage','sceGsExecStoreImage','dr_gs_backend_sync','GsDraw_XenosReadFrameExact','sceGsSetDefDBuff','sceGsPutDrawEnv','sceGsSwapDBuff','Port_GsVif1Chain','Port_GsGifChannel','dr_gs_native_open','dr_gs_native_bind','dr_gs_native_vif1','dr_gs_native_gif','dr_gs_native_error','dr_gs_stream_gif_chain'}
+ assert native_required<=defined, 'shared native VIF/GIF engine entry points absent'
+ platform_required={'sceOpen','sceClose','sceRead','sceLseek','sceCdSearchFile','XbIsoFiles_Probe','XbDisc_Generation','XbPlatform_Install','XbPlatform_ProbeFiles','XbDisc_Mount','ADXF_ReadNw','ADXF_OpenAfs',
+                    'XbRes_Install','XbRes_Report','XbRes_LoadMap','XbRes_RegisterChecked',
+@@ -73,6 +73,6 @@
+         'platform_sources_compiled':True,'platform_resource_hook_linked':True,
+         'linked_platform_symbols':sorted(platform_required),'Bpe_Decode_linked':'Bpe_Decode' in defined,
+         'experimental_backend_linked':True,'original_GS_capture_linked':True,'linked_capture_symbols':sorted(capture_required),'registration_patch_provided':True,
+-        'native_VU_shader_path_linked':True,'shadow_stencil_run_path_linked':True,'buffer_consumers_linked':['outline from frozen IDs','depth/ID CLUT with raw alpha MRT','sampled target raw alpha and primitive feedback resolves'],'bounded_DMA_VIF_consumer_linked':True,'combat_DMA_producers_adapted':False,'adapted_DMA_producer_subset_linked':['Frame','Zbuf','Scissor','XYOffset','AD register','Flush','ResetBuffers'],'native_packet_producers_compiled':['Dma_Alloc','Dma_AddData','Dma_AddRef','Dma_BeginDirect','Dma_EndDirect','Dma_AddNext'],'mapped_chain_diagnostic_linked':True,'native_DMA_buffer_initialization_linked':True,'raw_ISO_Sony_byte_file_API_linked':True,'scope':'0.31 adds shared DMA initialization and typed boot GIF plus read-only ISO Sony byte-file API and bounded ELF probe; Game_Main and Battle_Main absent. 0.30 adds ordered effect marker, blocking real GPU sync and exact CT24 RGB frame readback for supported game profile; no hardware execution. 0.27 replaces native legacy DMA/VIF/GIF traversal with bounded canonical mappings and one shared VU session; Port_Gs entry points and synthetic MPG/UNPACK/MSCAL/XGKICK probe linked. No combat boot/presentation integration. 0.25 DMA patch and platform 0.4 integrated: ADXF post-read, converter registry/map/adapters and first-file ISO probes; combat remains outside XEX. Prior 0.24 features: adapted canonical-LE register producers and adapted Dma_Flush/ResetBuffers linked to bounded DMA/VIF/GS capture in synthetic diagnostic; rectangle and other helpers byte-tested against original source; Battle_Main, full combat producers and IA/collisions/animation integration absent; no hardware pixel validation'}
++        'native_VU_shader_path_linked':True,'shadow_stencil_run_path_linked':True,'buffer_consumers_linked':['outline from frozen IDs','depth/ID CLUT with raw alpha MRT','sampled target raw alpha and primitive feedback resolves'],'bounded_DMA_VIF_consumer_linked':True,'combat_DMA_producers_adapted':False,'adapted_DMA_producer_subset_linked':['Frame','Zbuf','Scissor','XYOffset','AD register','Flush','ResetBuffers'],'native_packet_producers_compiled':['Dma_Alloc','Dma_AddData','Dma_AddRef','Dma_BeginDirect','Dma_EndDirect','Dma_AddNext'],'mapped_chain_diagnostic_linked':True,'native_DMA_buffer_initialization_linked':True,'raw_ISO_Sony_byte_file_API_linked':True,'native_ADXT_APIs_retained':True,'overlay_loader_retained':True,'native_overlay_catalog_in_launcher':False,'scope':'0.32 retains real ADXT/native overlay APIs for static verification; does not initialize audio, load menus or start combat. Strong complete native overlay catalogue generated only for strict engine link. 0.31 adds shared DMA initialization and typed boot GIF plus read-only ISO Sony byte-file API and bounded ELF probe; Game_Main and Battle_Main absent. 0.30 adds ordered effect marker, blocking real GPU sync and exact CT24 RGB frame readback for supported game profile; no hardware execution. 0.27 replaces native legacy DMA/VIF/GIF traversal with bounded canonical mappings and one shared VU session; Port_Gs entry points and synthetic MPG/UNPACK/MSCAL/XGKICK probe linked. No combat boot/presentation integration. 0.25 DMA patch and platform 0.4 integrated: ADXF post-read, converter registry/map/adapters and first-file ISO probes; combat remains outside XEX. Prior 0.24 features: adapted canonical-LE register producers and adapted Dma_Flush/ResetBuffers linked to bounded DMA/VIF/GS capture in synthetic diagnostic; rectangle and other helpers byte-tested against original source; Battle_Main, full combat producers and IA/collisions/animation integration absent; no hardware pixel validation'}
+ (root/'VALIDACAO.json').write_text(json.dumps(report,ensure_ascii=False,indent=2)+'\n')
+ print(json.dumps(report,ensure_ascii=False,indent=2))

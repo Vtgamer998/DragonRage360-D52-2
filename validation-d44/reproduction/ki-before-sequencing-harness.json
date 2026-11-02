@@ -1,0 +1,12 @@
+{
+  "elapsed_seconds": 151.2992854510003,
+  "frames_seen": [
+    0,
+    32
+  ],
+  "process_exit": null,
+  "token": "original-actions-cpu",
+  "renderer": "llvmpipe; no physical-console performance claim",
+  "host_audio_output": "dummy",
+  "audible_audio_verified": false
+}

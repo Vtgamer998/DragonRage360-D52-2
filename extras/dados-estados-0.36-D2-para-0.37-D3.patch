@@ -1,0 +1,916 @@
+--- a/LEIA-ME.txt
++++ b/LEIA-ME.txt
+@@ -1,3 +1,7 @@
++ATUALIZAÇÃO 0.37-D3: catálogo nativo complete=true com exclusões comprovadas de pools originais sem consumidor. Colisão instalada com NOT_READY; dois modelos/animações preparados. Lutadores completos, cenário completo e boot da luta AINDA PENDENTES. Novo XEX de diagnóstico, sem teste no Xbox. Consulte RELATORIO-0.37-D3.md.
++
++DOCUMENTAÇÃO HISTÓRICA ABAIXO:
++
+ ATUALIZAÇÃO 0.36-D2: consulte RELATORIO-0.36-D2.md. O XEX da raiz é o diagnóstico D2, sem luta jogável. Restam 4 faixas/54 bytes no catálogo e o boot/instalação de recursos. Colisão do cenário validada em host, não instalada no combate. Sem teste desta versão no Xbox.
+ 
+ DOCUMENTAÇÃO HISTÓRICA ABAIXO:
+--- a/Makefile
++++ b/Makefile
+@@ -105,8 +105,15 @@
+ 	python3 engine/tools/extract_iso.py $(ISO) build/typed-input --programs-only
+ 	python3 engine/tools/build_typed_manifest.py $(UPSTREAM) build/typed-base build/typed-input/disc build/typed-manifest
+ 	python3 engine/tools/test_typed_manifest.py build/typed-manifest/typed-manifest.json build/typed-input/disc build/typed-test --sanitize
++	python3 engine/tools/test_water_pool.py build/typed-input/disc/SLUS_216.78 build/typed-manifest/water-pool-proof.json
++	python3 engine/tools/test_reviewed_unused.py build/typed-manifest/typed-manifest.json build/typed-base $(CC) build/unused-native-test
+ 	python3 engine/tools/test_fixed_resources.py $(XSDK) $(ISO) build/fixed-resources --sanitize
+ 	python3 engine/tools/link_battle.py $(UPSTREAM) $(CC) $(XSDK) build/fixed-manifest --float-mode $(FLOAT_MODE) --platform --fixed-battle --typed-catalog build/typed-manifest/typed_catalog.c $(PLUGIN_ARGS)
+ 	python3 engine/tools/build_engine_diagnostic.py build/fixed-manifest $(XSDK) build/typed-diagnostic
+ 	python3 engine/tools/verify_typed_catalog.py build/typed-manifest/typed-manifest.json build/typed-diagnostic/default.elf build/typed-diagnostic/catalog-verification.json
+ 	python3 tests/check_xex.py build/typed-diagnostic build/typed-diagnostic/VALIDACAO.json
++
++# Native stage adapter uses the original typed views; port_compat fixes s64 on PPC32.
++build/xb_battle_stage.o: CFLAGS += -I$(UPSTREAM)/include -I$(UPSTREAM)/port/include -mcheck-fpr-alignment
++
++build/xb_battle_fighter.o: CFLAGS += -I$(UPSTREAM)/include -I$(UPSTREAM)/port/include -mcheck-fpr-alignment
+--- a/PENDENCIAS.md
++++ b/PENDENCIAS.md
+@@ -1,3 +1,7 @@
++ATUALIZAÇÃO 0.37-D3: catálogo nativo complete=true com exclusões comprovadas de pools originais sem consumidor. Colisão instalada com NOT_READY; dois modelos/animações preparados. Lutadores completos, cenário completo e boot da luta AINDA PENDENTES. Novo XEX de diagnóstico, sem teste no Xbox. Consulte RELATORIO-0.37-D3.md.
++
++DOCUMENTAÇÃO HISTÓRICA ABAIXO:
++
+ ATUALIZAÇÃO 0.36-D2: consulte RELATORIO-0.36-D2.md. O XEX da raiz é o diagnóstico D2, sem luta jogável. Restam 4 faixas/54 bytes no catálogo e o boot/instalação de recursos. Colisão do cenário validada em host, não instalada no combate. Sem teste desta versão no Xbox.
+ 
+ DOCUMENTAÇÃO HISTÓRICA ABAIXO:
+--- a/README.md
++++ b/README.md
+@@ -1,3 +1,17 @@
++# DragonRage360 0.37-D3 — catálogo nativo e estados parciais
++
++**Novo XEX de diagnóstico; ainda não inicia uma luta e não foi executado no Xbox/Xenia.**
++
++- Catálogo nativo `complete=true`: campo inteiro da água comprovado; 46 bytes de três pools sem consumidor nativo excluídos com auditoria e testes. Isso não significa converter todos os dados da ISO.
++- Colisão preparada em arena própria e instalada em `gBtlStage`/`gColMeshBase`, mantendo NOT_READY. Leitores originais conferidos com objetos inteiros e quebrados.
++- Dois esqueletos nativos e buffers de animação preparados; `PlayModel/Step` original testado por 200 passos em cada modelo.
++- **Faltam os lutadores completos**, seus binders/tabelas/corpos, cenário completo, gerenciadores, entrada e apresentação da luta. A guarda permanece ativa mesmo com catálogo completo.
++
++Leia [RELATORIO-0.37-D3.md](RELATORIO-0.37-D3.md). `startup_test.txt=typed-data` exercita os caminhos novos e escreve no `default.log`; execução no console ainda pendente. Os fontes da raiz já estão atualizados. O patch incremental em `extras/` parte da 0.36-D2; o binário anterior fica em `diagnostico-anterior-D2/`.
++
++---
++Documentação histórica (contagens e binário da raiz substituídos acima):
++
+ # DragonRage360 0.36-D2 — revisão dos dados e colisão do cenário
+ 
+ Novo `default.xex` recompilado e verificado estaticamente. **Ainda é diagnóstico; não inicia uma luta e não foi executado no Xbox/Xenia.**
+--- /dev/null
++++ b/RELATORIO-0.37-D3.md
+@@ -0,0 +1,90 @@
++# DragonRage360 0.37-D3 — catálogo nativo e preparação parcial do combate
++
++24/10/2026. O primeiro pedido foi tratado: o catálogo selecionado do executável nativo agora é gerado com `complete=true`. **O segundo pedido ainda não está completo:** há instalação de colisão no estado nativo e preparação de esqueletos/animações dos dois modelos, mas não existem lutadores completos inseridos numa luta. O XEX continua sendo um diagnóstico. Não foi executado no Xbox nem no Xenia.
++
++## As quatro faixas, sem tipos inventados
++
++| Faixa anterior | Decisão e prova |
++|---|---|
++| `D_002FE8D0`, 8 bytes | Primeiros 4 bytes: inteiro de 32 bits. No programa USA, `0x108B54` e `0x108B78` formam o endereço, `0x108B80` faz `LWC1 f30,0(v0)` e `0x108B84` executa `CVT.S.W`. É o inteiro 224 convertido para float pelo efeito de água. Os 4 bytes seguintes são preenchimento zero conferido. `test_water_pool.py` verifica os campos dessas instruções, a revisão SHA-256 e os dados. |
++| `D_002EC2C0 + 16`, 16 bytes | Não pertence ao vetor de 16 bytes declarado pelos leitores nativos. A auditoria dos objetos encontrou 30 relocações para o início do vetor, todas com addend zero e em consumidores revisados; suas fontes são fixadas por SHA-256. A cauda não é carregada. |
++| `D_002FE958`, 22 bytes | Pool original sem referência nas relocações alocadas das unidades nativas. Não recebe um tipo artificial e não é carregado. |
++| `D_002FEB88`, 8 bytes | Pool original sem referência nas relocações alocadas das unidades nativas. Não recebe um tipo artificial e não é carregado. |
++
++Portanto, uma faixa recebeu tipo e preenchimento comprovados; **46 bytes das outras três foram excluídos como pools sem consumidor neste build nativo**. Isso não afirma que todo leitor possível do PS2 foi provado. As exclusões estão em `native_unused_ranges` e sua evidência em `unused-native-proof.json`. Nenhum desses bytes é copiado ou zerado pelo carregador. Uma nova referência nativa, uma alteração nos leitores do vetor ou um ponteiro do catálogo para esses pools bloqueia a regeneração; os testes injetaram uma referência real e confirmaram a recusa.
++
++O catálogo tem 33 regiões, 2.738 operações, 35.318 bytes cobertos e 46 bytes explicitamente excluídos. São dados selecionados para o executável nativo, **não todos os dados da ISO**. A invariância de preenchimento zero continua distinta de tipagem por estrutura. Os 23 trechos de alinhamento revisados na D2 continuam excluídos pelo motivo separado já documentado.
++
++`complete=true` não removeu a proteção da luta. O carregador foi testado com catálogo completo, sem `ALLOW_PARTIAL`, e o marcador de prontidão permaneceu 2. A primeira chamada de `Battle_Main` continua sendo a verificação de prontidão antes de `Battle_GetWork`. A inicialização completa dos recursos e da plataforma continua obrigatória.
++
++## Colisão instalada nos leitores originais
++
++Novo `xb_battle_stage.c/.h`:
++
++- prepara uma arena própria com cabeçalhos, árvores, polígonos e vértices em representação nativa, mantendo os offsets em palavras que `ColMesh_*` espera;
++- constrói zonas, vizinhos, registros de colisão, limites e o estado inicial inteiro dos objetos destrutíveis;
++- instala os ponteiros reais `gBtlStage` e `gColMeshBase`, protegendo contra substituição de cenário já instalado;
++- mantém o cenário com a flag **NOT_READY**: ainda não possui o restante do estado necessário para todos os subsistemas;
++- chama os **originais** `StgCol_QueryZone`, `ColMesh_WalkBox`, `ColMesh_GetPoly` e `ColMesh_GetPolyVerts` sobre essas estruturas, com o filtro original de objetos inteiros/quebrados;
++- impede reentrada e liberação durante a consulta, restaura os globais de percurso e permite desinstalar e liberar a arena.
++
++Nos testes, o recurso original foi liberado antes das consultas, comprovando que os ponteiros vivos pertencem à arena. Comparação com percurso independente em Python:
++
++| Estado dos objetos | Ocorrências de triângulo | FNV64 dos valores e da ordem |
++|---|---:|---|
++| Inteiros | 12.251 | `ddc3c6e2c300bf12` |
++| Quebrados | 9.789 | `a6ddb9dbe6da84b2` |
++
++Os números diferem dos 13.583 da D2 porque a D2 percorria todas as malhas, incluindo versões inteiras e quebradas; agora o leitor original aplica o estado de cada objeto. Os testes passaram com ASan/UBSan em host. Os layouts e as máscaras de 64 bits também foram conferidos estaticamente no build PowerPC; o adaptador usa os tipos portáveis do upstream, evitando o `long` de 32 bits do PPC.
++
++Isso instala a **parte de colisão**, não o cenário completo. A flag NOT_READY não foi removida, e a simulação de física do cenário não foi iniciada.
++
++## Dois modelos com estado nativo de animação
++
++Novo `xb_battle_fighter.c/.h`, para os modelos 0 e 1 do perfil fixo:
++
++| Modelo | Registros de esqueleto | Animações comprimidas decodificadas | Slots vazios | Animações do modelo presentes/vazias |
++|---|---:|---:|---:|---:|
++| Esquerda | 69 | 361 | 53 | 1 / 7 |
++| Direita | 69 | 357 | 57 | 1 / 7 |
++
++O construtor lê a hierarquia real, cria os registros nativos `BobjBone` e os buffers decodificados com conversão por campo. Os IDs do modelo vão até 111; não foram confundidos com o limite de 71 canais de animação. Os oito ponteiros `modelAnims` seguem `BtlObj_BindTables`: entradas originais `0x1D..0x24`, indexadas a partir de 1. Nos dois modelos, somente o slot 7 contém uma animação.
++
++Um `BobjObj` próprio recebe o esqueleto, os ponteiros das animações do modelo e o estado inicial do player. As funções **originais** `BtlObjAnim_PlayModel` e `BtlObjAnim_Step` passaram por 200 avanços e voltas de loop: duração 67 no modelo esquerdo e 72 no direito. O arquivo-fonte já havia sido liberado. Os sete slots ausentes são reportados como vazios, sem sucesso fictício.
++
++**Esse objeto ainda não é um lutador de combate.** Os 414 buffers decodificados ficam guardados separadamente; não foram apresentados como se fossem dados comprimidos em `mdl.anims`. Faltam os binders de reprodução/retarget desse caminho, as tabelas e parâmetros restantes do modelo, volumes de corpo/ataque, poses e matrizes animadas, referências do renderer, texturas/facial, `BobjWork`, estado do personagem e seu registro nos gerenciadores de IA/combate. Nenhum construtor retorna prontidão para spawn completo.
++
++## Novo XEX e testes
++
++`startup_test.txt` continua `typed-data`. No novo diagnóstico:
++
++1. carrega o catálogo pela ISO montada;
++2. prepara e instala a arena de colisão com NOT_READY;
++3. executa uma consulta com os leitores originais;
++4. prepara os dois modelos/animações, inicia o slot 7 e avança um frame;
++5. registra resultados no `default.log`, mantendo o combate bloqueado.
++
++Os estados possuem memória própria e são liberados no encerramento ou antes de repetir o diagnóstico. Essas etapas estão compiladas e vinculadas, mas **a sequência ainda não foi executada no Xbox**. A interface não desenha uma luta ou os personagens animados por esse novo caminho.
++
++- Base PowerPC: 398/398 unidades; vínculo com catálogo: 399/399; zero indefinidos e zero conflitos de ABI.
++- Catálogo final: 2.738 operações e 1.779 slots de ponteiro conferidos após o vínculo; 1.473 ligações mudaram e foram realocadas simbolicamente.
++- Verificações do carregador real, catálogos incompletos/completos, falhas atômicas, hash, ponteiro, limites, reentrada e sobreposição: PASS em host com ASan/UBSan.
++- Provas das exclusões, referência nativa injetada e leitor alterado: PASS.
++- Colisão original e player original dos dois modelos: PASS em host com ASan/UBSan.
++- Verificação estática do XEX2 e guarda PowerPC de `Battle_Main`: PASS.
++- Isolamento das 103 referências de bibliotecas legadas mantido; a sondagem de `Game_Main` completo continua com 69 dependências. Não foram criados stubs.
++
++SHA-256 do novo `default.xex`:
++`564c16bb2bcbaa5b5f3e21c8d3372491e0fb431c85bfc913f713cde81c676e91`
++
++Fontes públicos mantidos nos pins da D2: upstream `3ca419c7966b11438e2dc3c9a7e1914f102ed545`, xsdk `57b02f1e60667e37d22c3aa613d23d2486514ff8`. Toolchain GCC 15.3.0 / binutils 2.47 / newlib 4.6.0.20260123 com os patches do SDK. Os adaptadores novos foram compilados para PPC com os tipos corrigidos; a arena foi também conferida com o verificador de alinhamento de FPR.
++
++Os testes usaram os mesmos recursos USA locais da D2, cobertos pelos intervalos e fingerprints já verificados. Não há ISO, programas MIPS nem arquivos de modelos/animação extraídos no pacote.
++
++## O que falta do segundo pedido
++
++Ainda é preciso terminar os binders/tabelas acima, preparar os parâmetros dos dois personagens e o cenário completo (MAPD, objetos/partes, animações, luzes, efeitos e corpos físicos), inicializar os gerenciadores, integrar entrada e apresentação e validar uma partida fixa. A preparação de colisão não equivale à inicialização de todos os consumidores de `gBtlStage`; a preparação do player não equivale a criar os lutadores. Não execute `Battle_Main` contornando a guarda.
++
++Fontes e XEX atuais na raiz; D2 anterior em `diagnostico-anterior-D2/`. Evidências em `checkpoint-dados-D3/`. O patch incremental parte exatamente da 0.36-D2 e já está aplicado aos fontes da raiz. Para reproduzir o XEX, use o alvo `make typed-data-diagnostic` com a ISO do próprio usuário e os caminhos do SDK/toolchain/upstream indicados na D2.
++
++Os testes adicionais `test_native_stage.py`, `test_native_fighter.py`, `test_reviewed_unused.py` e `test_water_pool.py` aceitam caminhos externos para os dados de teste. Consulte `--help`. Eles não inicializam uma partida nem validam hardware.
+--- /dev/null
++++ b/engine/platform/platform/xb_battle_fighter.c
+@@ -0,0 +1,80 @@
++/* SPDX-License-Identifier: AGPL-3.0-or-later */
++#include "port_compat.h"
++#undef malloc
++#include "xb_battle_fighter.h"
++#include "dr_body_model.h"
++#include "dr_container.h"
++#include "battle/bobj_a.h"
++#include <stdlib.h>
++#include <string.h>
++struct XbBattleFighter {
++ BobjObj obj;BobjBone *bones;DrBodyPart *parts;
++ void *decoded[BOBJ_ANIM_MAX];XbFighterPrepared stats;
++};
++#if UINTPTR_MAX==UINT32_MAX
++_Static_assert(sizeof(BobjObj)==0x1670,"BobjObj ABI");
++_Static_assert(sizeof(BobjBone)==64,"BobjBone ABI");
++_Static_assert(sizeof(BobjAnimLayer)==0x98,"BobjAnimLayer ABI");
++#endif
++extern void BtlObjAnim_PlayModel(BobjObj *,s32,s32);
++extern void BtlObjAnim_Step(BobjObj *);
++static int motion(const void *pack,size_t size,unsigned index,int compressed,void **out,int *empty){
++ size_t off,n,written=0;*out=NULL;*empty=0;
++ int e=dr_pack_memory_entry(pack,size,index,&off,&n,NULL);
++ if(e==DR_NOT_FOUND){*empty=1;return 0;}if(e)return e;
++ void *p=malloc(0xc000);if(!p)return -851;
++#if __BYTE_ORDER__==__ORDER_BIG_ENDIAN__
++ const int be=1;
++#else
++ const int be=0;
++#endif
++ e=dr_motion_from_memory((const uint8_t *)pack+off,n,compressed,be,p,0xc000,&written);
++ if(e==DR_LOAD_EMPTY){free(p);*empty=1;return 0;}
++ if(e){free(p);return e;}
++ if(written<0x94){free(p);return DR_LOAD_ANIMATION;}
++ void *small=realloc(p,written);*out=small?small:p;return 0;
++}
++void XbBattleFighter_FreeModelAnimation(XbBattleFighter *f){
++ if(!f)return;
++ for(unsigned i=0;i<BOBJ_ANIM_MAX;i++)free(f->decoded[i]);
++ for(unsigned i=0;i<8;i++)free(f->obj.mdl.modelAnims[i]);
++ free(f->bones);free(f->parts);free(f);
++}
++int XbBattleFighter_PrepareModelAnimation(const void *model,size_t model_size,const void *motions,size_t motions_size,XbBattleFighter **out,XbFighterPrepared *stats){
++ if(!out || !stats)return DR_MODEL_INVALID;
++ *out=NULL;memset(stats,0,sizeof(*stats));size_t off,n,bad;int e=dr_pack_memory_entry(model,model_size,2,&off,&n,NULL);if(e)return e;
++ XbBattleFighter *f=calloc(1,sizeof(*f));if(!f)return -851;
++ f->parts=calloc(256,sizeof(*f->parts));if(!f->parts){e=-851;goto fail;}
++ DrBodyModel body;e=dr_body_model_read((const uint8_t *)model+off,n,f->parts,256,&body,&bad);if(e)goto fail;
++ f->bones=calloc(body.parts,sizeof(*f->bones));if(!f->bones){e=-851;goto fail;}
++ for(unsigned i=0;i<body.parts;i++){
++  DrBodyPart *p=&f->parts[i];BobjBone *b=&f->bones[i];
++  if(p->node>=162){e=DR_MODEL_INVALID;goto fail;}
++  b->next=sizeof(*b);b->pop=p->pop;b->last=p->last;b->id=p->node;b->unk08=p->enabled;b->unk0C=(s32)dr_resource_le32((const uint8_t *)model+off+p->record_offset+12);
++  memcpy(&b->origin,p->pivot_a,16);memcpy(&b->unk20,p->pivot_b,16);memcpy(&b->rest,p->rest,16);
++ }
++ f->stats.bones=body.parts;f->obj.mdl.nodes=f->bones;
++ for(unsigned i=0;i<BOBJ_ANIM_MAX;i++){
++  int empty;e=motion(motions,motions_size,i,1,&f->decoded[i],&empty);if(e)goto fail;
++  if(empty)f->stats.empty_motions++;else f->stats.motions++;
++ }
++ /* Original BtlObj_BindTables: file0 entries i+0x1D, ONE-based. */
++ for(unsigned i=0;i<8;i++){
++  int empty;void *p;e=motion(model,model_size,0x1c+i,0,&p,&empty);if(e)goto fail;
++  f->obj.mdl.modelAnims[i]=p;if(empty)f->stats.empty_model_motions++;else f->stats.model_motions++;
++ }
++ f->obj.type=0;f->obj.xf.scale=1.0f;f->obj.hit.scale=1.0f;
++ f->obj.look.node2.w=1.0f;f->obj.look.node2E.w=1.0f;f->obj.look.node2F.w=1.0f;
++ f->obj.anim.step=1.0f; /* diagnostic: one motion frame per Step call */
++ *stats=f->stats;*out=f;return 0;
++fail:XbBattleFighter_FreeModelAnimation(f);return e;
++}
++int XbBattleFighter_PlayModel(XbBattleFighter *f,unsigned index,unsigned mode){
++ if(!f || index>=8 || mode>2)return DR_MODEL_INVALID;
++ if(!f->obj.mdl.modelAnims[index])return DR_LOAD_EMPTY;
++ BtlObjAnim_PlayModel(&f->obj,(s32)index,(s32)mode);return 0;
++}
++int XbBattleFighter_StepModel(XbBattleFighter *f,uint32_t *frame,uint32_t *length){
++ if(!f || !frame || !length || !f->obj.anim.layer[0].data)return DR_MODEL_INVALID;
++ BtlObjAnim_Step(&f->obj);*frame=(uint32_t)f->obj.anim.frame;*length=(uint32_t)f->obj.anim.layer[0].length;return 0;
++}
+--- /dev/null
++++ b/engine/platform/platform/xb_battle_fighter.h
+@@ -0,0 +1,17 @@
++/* SPDX-License-Identifier: AGPL-3.0-or-later */
++#ifndef XB_BATTLE_FIGHTER_H
++#define XB_BATTLE_FIGHTER_H
++#include <stddef.h>
++#include <stdint.h>
++typedef struct XbBattleFighter XbBattleFighter;
++typedef struct XbFighterPrepared {uint32_t bones,motions,empty_motions,model_motions,empty_model_motions;} XbFighterPrepared;
++/* Owned native skeleton and decoded motions for a real BobjObj animation
++ * player. Other model tables, body hit volumes, parameters, textures and the
++ * fighter work/AI are NOT prepared: this cannot authorize a combat spawn. */
++int XbBattleFighter_PrepareModelAnimation(const void *model,size_t model_size,
++ const void *motions,size_t motions_size,XbBattleFighter **out,XbFighterPrepared *);
++void XbBattleFighter_FreeModelAnimation(XbBattleFighter *);
++/* Actual original PlayModel/Step functions, operating on the owned BobjObj. */
++int XbBattleFighter_PlayModel(XbBattleFighter *,unsigned index,unsigned mode);
++int XbBattleFighter_StepModel(XbBattleFighter *,uint32_t *frame,uint32_t *length);
++#endif
+--- /dev/null
++++ b/engine/platform/platform/xb_battle_stage.c
+@@ -0,0 +1,131 @@
++/* SPDX-License-Identifier: AGPL-3.0-or-later */
++#include "port_compat.h"
++#undef malloc
++#include "xb_battle_stage.h"
++#include "battle/col_a.h"
++#include "battle/eft_det_b.h"
++#include "battle/stg_a.h"
++#include <stdlib.h>
++#include <string.h>
++#include <math.h>
++#include <stddef.h>
++/* Preserve the original collision reader's stage view on host and PPC32.
++ * The header fields not prepared here remain zero, except flags=NOT_READY. */
++typedef struct NativeStage {
++ unsigned char header[0x38];uint32_t zones_count;
++ StgColZone *zones;StgBounds *bounds;uint32_t objects_count;StgColObj *objects;
++} NativeStage;
++_Static_assert(sizeof(StgColResult)==32,"collision result 64-bit masks ABI");
++_Static_assert(offsetof(NativeStage,zones)==offsetof(StgColStage,zones),"collision stage zones ABI");
++_Static_assert(offsetof(NativeStage,objects)==offsetof(StgColStage,objs),"collision stage objects ABI");
++#if UINTPTR_MAX==UINT32_MAX
++_Static_assert(sizeof(NativeStage)==sizeof(BtlStage),"native BtlStage ABI");
++_Static_assert(sizeof(StgColZone)==64 && sizeof(StgColRec)==16 && sizeof(StgColObj)==80,"native zone/object ABI");
++#endif
++struct XbBattleStageCollision {
++ DrStageCollision source;
++ NativeStage stage;StgBounds bounds;ColMesh empty;
++ uint8_t *arena;void *saved_base;int installed,querying;
++};
++extern s32 *gColMeshBase;
++extern void *gStgColMesh;
++extern s32 gStgColMode;
++extern s32 StgCol_QueryZone(StgColResult *,StgColZone *,StgColBox *,void *,StgColCb);
++extern void ColMesh_GetPolyVerts(ColMesh *,ColPoly *,ColVec *,ColVec *,ColVec *);
++extern ColPoly *ColMesh_GetPoly(ColMesh *,s32);
++static XbBattleStageCollision *active;
++static uint32_t rd(const uint8_t *p){return (uint32_t)p[0]|(uint32_t)p[1]<<8|(uint32_t)p[2]<<16|(uint32_t)p[3]<<24;}
++static int range(const DrStageCollision *v,uint32_t word,size_t n,size_t *at){
++ uint64_t off=(uint64_t)word*4;if(off>v->size || n>v->size-(size_t)off)return DR_STAGE_BOUNDS;*at=(size_t)off;return 0;
++}
++static void words(void *dest,const uint8_t *src,size_t n){
++ for(size_t i=0;i<n;i+=4){uint32_t u=rd(src+i);memcpy((uint8_t *)dest+i,&u,4);}
++}
++static int native_mesh(XbBattleStageCollision *c,uint32_t word,void **out){
++ if(!word){*out=&c->empty;return 0;}
++ const DrStageCollision *v=&c->source;size_t at;if(range(v,word,24,&at))return DR_STAGE_BOUNDS;
++ const uint8_t *h=v->base+at;uint32_t n=rd(h);words(c->arena+at,h,24);*out=c->arena+at;
++ if((int32_t)n<=0)return 0;
++ size_t nodes;if(n>v->size/32 || range(v,rd(h+12),(size_t)n*32,&nodes))return DR_STAGE_BOUNDS;
++ words(c->arena+nodes,v->base+nodes,(size_t)n*32);
++ uint32_t polys=0;
++ for(uint32_t i=0;i<n;i++){
++  const uint8_t *node=v->base+nodes+(size_t)i*32;
++  if(rd(node+28)==UINT32_MAX && rd(node+24)!=UINT32_MAX){uint32_t poly=rd(node+24);if(poly>=v->size/32)return DR_STAGE_BOUNDS;if(poly+1>polys)polys=poly+1;}
++ }
++ size_t p;if(range(v,rd(h+16),(size_t)polys*32,&p))return DR_STAGE_BOUNDS;
++ words(c->arena+p,v->base+p,(size_t)polys*32);
++ uint32_t vertices=0;
++ for(uint32_t i=0;i<polys;i++)for(unsigned j=0;j<3;j++){
++  uint32_t index=rd(v->base+p+(size_t)i*32+4+j*4);if(index>=v->size/16)return DR_STAGE_BOUNDS;if(index+1>vertices)vertices=index+1;
++ }
++ size_t a;if(range(v,rd(h+20),(size_t)vertices*16,&a))return DR_STAGE_BOUNDS;
++ words(c->arena+a,v->base+a,(size_t)vertices*16);return 0;
++}
++int XbBattleStage_FreeCollision(XbBattleStageCollision *c){
++ if(!c)return 0;
++ if(c->installed || c->querying)return XB_STAGE_STATE;
++ if(c->stage.zones)for(uint32_t i=0;i<c->source.zones;i++){free(c->stage.zones[i].near);free(c->stage.zones[i].recs);}
++ free(c->stage.zones);free(c->stage.objects);free(c->arena);free(c);return 0;
++}
++int XbBattleStage_PrepareCollision(const void *pack,size_t n,XbBattleStageCollision **out){
++ if(!out)return DR_STAGE_FORMAT;
++ *out=NULL;
++ DrStageCollision v;int e=dr_stage_collision_open(pack,n,&v);if(e)return e;
++ if(v.size>0x6cb800 || v.objects>63)return DR_STAGE_BOUNDS;
++ XbBattleStageCollision *c=calloc(1,sizeof(*c));if(!c)return XB_STAGE_MEMORY;c->source=v;
++ c->arena=calloc(1,v.size);c->stage.zones=calloc(v.zones,sizeof(*c->stage.zones));
++ c->stage.objects=calloc(v.objects?v.objects:1,sizeof(*c->stage.objects));
++ if(!c->arena || !c->stage.zones || !c->stage.objects){XbBattleStage_FreeCollision(c);return XB_STAGE_MEMORY;}
++ c->stage.zones_count=v.zones;c->stage.objects_count=v.objects;
++ uint32_t not_ready=1;memcpy(c->stage.header+8,&not_ready,4);
++ c->bounds=(StgBounds){v.radius,v.top,v.bottom};c->stage.bounds=&c->bounds;
++ for(uint32_t i=0;i<v.zones;i++){
++  StgColZone *z=&c->stage.zones[i];const uint8_t *p=v.base+v.zone_offset+(size_t)i*64;
++  z->nearCount=(s32)rd(p+8);z->recCount=(s32)rd(p+20);
++  if(z->recCount>63){e=DR_STAGE_BOUNDS;goto fail;}
++  z->near=calloc(z->nearCount?z->nearCount:1,sizeof(*z->near));z->recs=calloc(z->recCount?z->recCount:1,sizeof(*z->recs));
++  if(!z->near || !z->recs){e=XB_STAGE_MEMORY;goto fail;}
++  words(&z->center,p+32,16);words(&z->half,p+48,16);
++  size_t a;if(range(&v,rd(p+12),(size_t)z->nearCount*4,&a)){e=DR_STAGE_BOUNDS;goto fail;}
++  words(z->near,v.base+a,(size_t)z->nearCount*4);
++  e=native_mesh(c,rd(p+4),&z->mesh);if(e)goto fail;
++  if(range(&v,rd(p+24),(size_t)z->recCount*16,&a)){e=DR_STAGE_BOUNDS;goto fail;}
++  for(s32 j=0;j<z->recCount;j++){
++   StgColRec *r=&z->recs[j];const uint8_t *q=v.base+a+(size_t)j*16;r->broken=(s32)rd(q);r->obj=(s32)rd(q+4);r->unkC=(s32)rd(q+12);
++   e=native_mesh(c,rd(q+8),&r->mesh);if(e)goto fail;
++  }
++ }
++ /* No source byte or pointer is needed after preparation. */
++ c->source.base=NULL;*out=c;return 0;
++fail:XbBattleStage_FreeCollision(c);return e;
++}
++int XbBattleStage_InstallCollision(XbBattleStageCollision *c){
++ if(!c || active || gBtlStage || c->installed)return XB_STAGE_STATE;
++ c->saved_base=gColMeshBase;gColMeshBase=(s32 *)c->arena;gBtlStage=(BtlStage *)(void *)&c->stage;c->installed=1;active=c;return 0;
++}
++int XbBattleStage_UninstallCollision(XbBattleStageCollision *c){
++ if(!c || active!=c || !c->installed || c->querying || (void *)gBtlStage!=&c->stage)return XB_STAGE_STATE;
++ gBtlStage=NULL;gColMeshBase=c->saved_base;c->installed=0;active=NULL;return 0;
++}
++typedef struct Query {DrStageTriangleFn fn;void *ctx;} Query;
++static s32 triangle_callback(StgColNode *node,void *opaque){
++ Query *q=opaque;ColPoly *p=ColMesh_GetPoly(gStgColMesh,node->poly);ColVec v[3];
++ ColMesh_GetPolyVerts(gStgColMesh,p,&v[0],&v[1],&v[2]);
++ DrStageTriangle t;t.flags=(uint32_t)p->flags;
++ for(unsigned i=0;i<3;i++)memcpy(t.vertex[i],&v[i],16);
++ memcpy(t.plane,&p->nrm,16);
++ return q->fn(q->ctx,(uint32_t)node->poly,&t);
++}
++int XbBattleStage_QueryCollision(XbBattleStageCollision *c,uint32_t zone,const float min[3],const float max[3],DrStageTriangleFn fn,void *ctx,int *result){
++ if(!result)return DR_STAGE_FORMAT;
++ *result=0;
++ if(!c || active!=c || !c->installed || c->querying || zone>=c->source.zones || !fn || !min || !max)return XB_STAGE_STATE;
++ for(unsigned i=0;i<3;i++)if(!isfinite(min[i]) || !isfinite(max[i]) || min[i]>max[i])return DR_STAGE_NUMBER;
++ StgColBox box;memcpy(box.min,min,12);memcpy(box.max,max,12);StgColResult r;Query q={fn,ctx};
++ s32 count=gColWalkCount,limit=gColWalkMax;u16 *buf=gColWalkBuf;ColBox *old_box=gColWalkBox;ColMeshCb cb=gColWalkCb;void *old_ctx=gColWalkCtx;
++ int mode=gStgColMode;void *mesh=gStgColMesh;c->querying=1;gStgColMode=0;
++ *result=StgCol_QueryZone(&r,&c->stage.zones[zone],&box,&q,triangle_callback);
++ gColWalkCount=count;gColWalkMax=limit;gColWalkBuf=buf;gColWalkBox=old_box;gColWalkCb=cb;gColWalkCtx=old_ctx;
++ gStgColMode=mode;gStgColMesh=mesh;c->querying=0;return 0;
++}
+--- /dev/null
++++ b/engine/platform/platform/xb_battle_stage.h
+@@ -0,0 +1,19 @@
++/* SPDX-License-Identifier: AGPL-3.0-or-later */
++#ifndef XB_BATTLE_STAGE_H
++#define XB_BATTLE_STAGE_H
++#include "dr_stage_collision.h"
++typedef struct XbBattleStageCollision XbBattleStageCollision;
++enum {XB_STAGE_STATE=-850,XB_STAGE_MEMORY=-851};
++/* Prepare a private native collision arena, including zones/neighbours,
++ * static/destructible meshes and initial unbroken object state. This is NOT
++ * full stage initialization: render objects, MAPD, animation and physics
++ * bodies are still absent. Installation keeps the stage NOT-READY flag. */
++int XbBattleStage_PrepareCollision(const void *,size_t,XbBattleStageCollision **);
++int XbBattleStage_InstallCollision(XbBattleStageCollision *);
++int XbBattleStage_UninstallCollision(XbBattleStageCollision *);
++int XbBattleStage_FreeCollision(XbBattleStageCollision *);
++/* Calls the ORIGINAL StgCol_QueryZone / ColMesh_WalkBox readers on the installed
++ * native structures. Uses their unbroken/broken filtering and leaf order. */
++int XbBattleStage_QueryCollision(XbBattleStageCollision *,uint32_t,
++ const float min[3],const float max[3],DrStageTriangleFn,void *,int *);
++#endif
+--- a/engine/schema/typed_catalog.generated.c
++++ b/engine/schema/typed_catalog.generated.c
+@@ -3753,6 +3753,8 @@
+ {6,68,4,4,1,0,0},
+ {6,72,4,4,1,0,0},
+ {6,76,4,4,1,0,0},
++{6,80,4,4,0,0,0},
++{6,84,4,1,2,0,0},
+ {7,30,2,2,0,0,0},
+ {7,32,4,4,1,0,0},
+ {7,36,4,1,2,0,0},
+@@ -3917,4 +3919,4 @@
+ {31,0,552,4,0,0,0},
+ {32,0,15568,1,0,0,0},
+ };
+-const XbTypedCatalog gXbTypedMainCatalog={1,0,regions,33,ops,2736,0xddfcaaeff7bb888bull};
++const XbTypedCatalog gXbTypedMainCatalog={1,1,regions,33,ops,2738,0x52fb527c5aa2d22bull};
+--- /dev/null
++++ b/engine/tests/test_native_fighter.c
+@@ -0,0 +1,14 @@
++/* SPDX-License-Identifier: AGPL-3.0-or-later */
++#include "xb_battle_fighter.h"
++#include "dr_container.h"
++#include <stdio.h>
++#include <assert.h>
++#include <stdlib.h>
++static void *load(const char *name,size_t *n){FILE *f=fopen(name,"rb");assert(f && !fseek(f,0,SEEK_END));long s=ftell(f);assert(s>0 && !fseek(f,0,SEEK_SET));*n=(size_t)s;void *p=malloc(*n);assert(p && fread(p,1,*n,f)==*n);fclose(f);return p;}
++int main(int argc,char **argv){assert(argc==3);size_t mn,an;void *m=load(argv[1],&mn),*a=load(argv[2],&an);XbBattleFighter *f=NULL;XbFighterPrepared s;
++ int e=XbBattleFighter_PrepareModelAnimation(m,mn,a,an,&f,&s);if(e)fprintf(stderr,"prepare error=%d\n",e);assert(!e && f);free(m);free(a);
++ assert(s.bones==69 && s.motions+s.empty_motions==414 && s.model_motions==1 && s.empty_model_motions==7);
++ assert(XbBattleFighter_PlayModel(f,0,2)==DR_LOAD_EMPTY);assert(!XbBattleFighter_PlayModel(f,7,2));uint32_t frame,length;
++ for(unsigned i=0;i<200;i++){assert(!XbBattleFighter_StepModel(f,&frame,&length));assert(frame==(i+1)%length);}
++ printf("PASS: bones=%u decoded=%u empty=%u model=%u/%u; original PlayModel/Step 200 frames length=%u; source freed; no combat spawn\n",s.bones,s.motions,s.empty_motions,s.model_motions,s.empty_model_motions,length);
++ XbBattleFighter_FreeModelAnimation(f);return 0;}
+--- /dev/null
++++ b/engine/tests/test_native_stage.c
+@@ -0,0 +1,39 @@
++/* SPDX-License-Identifier: AGPL-3.0-or-later */
++#include "xb_battle_stage.h"
++#include "battle/col_a.h"
++#include "battle/eft_det_b.h"
++#include <assert.h>
++#include <stdio.h>
++#include <stdlib.h>
++#include <string.h>
++#include <float.h>
++/* Real storage/one vector-copy primitive for the original host modules.
++ * These are not success stubs; no other discarded engine path is called. */
++StgColStage *gBtlStage;void *gStgColMesh;s32 gStgColMode;
++s32 *gColMeshBase; s32 gColWalkCount,gColWalkMax;u16 *gColWalkBuf;
++ColBox *gColWalkBox;ColMeshCb gColWalkCb;void *gColWalkCtx;
++void Vec4_Copy(ColVec *d,ColVec *s){memmove(d,s,sizeof(*d));}
++static uint64_t hash;static unsigned seen;static XbBattleStageCollision *context;
++static void word(uint32_t v){for(unsigned i=0;i<4;i++)hash=(hash^(uint8_t)(v>>(i*8)))*0x100000001b3ull;}
++static int collect(void *ctx,uint32_t poly,const DrStageTriangle *t){
++ (void)ctx;word(poly);word(t->flags);for(unsigned i=0;i<3;i++)for(unsigned j=0;j<4;j++){uint32_t bits;memcpy(&bits,&t->vertex[i][j],4);word(bits);}for(unsigned i=0;i<4;i++){uint32_t bits;memcpy(&bits,&t->plane[i],4);word(bits);}seen++;
++ assert(XbBattleStage_UninstallCollision(context)==XB_STAGE_STATE);return 1;
++}
++int main(int argc,char **argv){
++ assert(argc==2);FILE *f=fopen(argv[1],"rb");assert(f && !fseek(f,0,SEEK_END));long size=ftell(f);assert(size>0 && !fseek(f,0,SEEK_SET));size_t n=(size_t)size;uint8_t *p=malloc(n);assert(p && fread(p,1,n,f)==n);fclose(f);
++ assert(!XbBattleStage_PrepareCollision(p,n,&context) && context && !gBtlStage);
++ free(p);p=NULL; /* arena must own every live pointer */
++ assert(!XbBattleStage_InstallCollision(context));assert(gBtlStage && gBtlStage->objs && gColMeshBase);
++ assert(XbBattleStage_InstallCollision(context)==XB_STAGE_STATE && XbBattleStage_FreeCollision(context)==XB_STAGE_STATE);
++ const float min[3]={-FLT_MAX,-FLT_MAX,-FLT_MAX},max[3]={FLT_MAX,FLT_MAX,FLT_MAX};
++ for(unsigned broken=0;broken<2;broken++){
++  for(uint32_t i=0;i<gBtlStage->objCount;i++)gBtlStage->objs[i].state=broken;
++  hash=0xcbf29ce484222325ull;seen=0;
++  for(uint32_t i=0;i<100;i++){int result;assert(!XbBattleStage_QueryCollision(context,i,min,max,collect,NULL,&result));}
++  assert(seen==(broken?EXPECTED_BROKEN_N:EXPECTED_WHOLE_N));assert(hash==(broken?EXPECTED_BROKEN_HASH:EXPECTED_WHOLE_HASH));
++  printf("PASS native original collision: broken=%u triangles=%u fingerprint=%016llx\n",broken,seen,(unsigned long long)hash);
++ }
++ assert(!XbBattleStage_UninstallCollision(context) && !gBtlStage && !gColMeshBase);
++ int result=77;assert(XbBattleStage_QueryCollision(context,0,min,max,collect,NULL,&result)==XB_STAGE_STATE && !result);
++ assert(!XbBattleStage_FreeCollision(context));return 0;
++}
+--- a/engine/tools/build_engine_diagnostic.py
++++ b/engine/tools/build_engine_diagnostic.py
+@@ -45,9 +45,9 @@
+ for name in ['func_002967C0','sceSifCallRpc','XbSfx_Mix','ADXT_Create','_ctype_','gPortDataStripped']:
+     assert name in defined,name
+ subprocess.run(['python3',str(sdk/'tools/elf2xex.py'),'--title-id','0x44523630',
+-                '--title-name','DragonRage360 0.36 D2 Typed Data Diagnostic' if r.get('typed_catalog_linked') else 'DragonRage360 0.34 L1 Diagnostic',str(elf),str(xex)],check=True)
++                '--title-name','DragonRage360 0.37 D3 Typed Data Diagnostic' if r.get('typed_catalog_linked') else 'DragonRage360 0.34 L1 Diagnostic',str(elf),str(xex)],check=True)
+ report={'kind':'native diagnostic with linked combat code; NOT a playable game',
+-        'version':'0.36-D2' if r.get('typed_catalog_linked') else '0.34-L1','Battle_Main_address':hex(defined['Battle_Main'][1]),
++        'version':'0.37-D3' if r.get('typed_catalog_linked') else '0.34-L1','Battle_Main_address':hex(defined['Battle_Main'][1]),
+         'Battle_Main_linked':True,'Game_Main_linked':False,'battle_called':False,
+         'strong_or_weak_undefined':0,'native_game_data_loaded':False,'typed_catalog_linked':bool(r.get('typed_catalog_linked')),'partial_preview_available':bool(r.get('typed_catalog_linked')), 
+         'boot_combat_available':False,'hardware_executed':False,
+--- a/engine/tools/build_typed_manifest.py
++++ b/engine/tools/build_typed_manifest.py
+@@ -8,6 +8,7 @@
+ import argparse,concurrent.futures,hashlib,json,re,struct,sys,subprocess
+ import typed_dwarf
+ from reviewed_types import describe as reviewed_types
++from reviewed_unused import audit as unused_audit,with_link_objects
+ from build_overlay_catalog import read_object
+ from native_data_sections import RULES
+ 
+@@ -91,6 +92,8 @@
+             for name,schema,source in matches:
+                 candidates.setdefault(name,[]).append((schema,source));layouts_seen+=1
+     reviewed=reviewed_types(regions,raw)
++    unused,unused_proof=unused_audit(regions,with_link_objects(report["files"],build))
++    (out/"unused-native-proof.json").write_text(json.dumps(unused_proof,indent=2)+"\n")
+     ops=[];gaps=[];pointer_errors=[];evidence=[];zeroed_unknown=[];alignment_prefixes=[]
+     for region in regions:
+         rid=region['id'];limit=region['size'];source=region['source_offset'];which=region['source_file'];cells={};conflicts=set();pointers={}
+@@ -139,6 +142,7 @@
+                 values={native[n][0] for n in choices}
+                 if len(values)!=1:return None
+                 return (sorted(choices)[0],0)
++            if any(x['source_address']<=value<x['source_address']+x['length'] for x in unused):return None
+             for target in regions:
+                 oldbase=(0x100000 if target['source_file']==0 else 0x334c00)+target['source_offset']
+                 if oldbase<=value<oldbase+target['size']:
+@@ -189,12 +193,18 @@
+             ops.append({'region':gap['region'],'offset':gap['offset'],'length':gap['length'],'width':1,'kind':'zero_invariant'})
+             safe_zero_bytes+=gap['length']
+         else:nonzero_gaps.append(gap)
+-    gaps=nonzero_gaps
++    gaps=[]
++    for gap in nonzero_gaps:
++        excluded=[x for x in unused if x['region']==gap['region'] and x['offset']<=gap['offset'] and gap['offset']+gap['length']<=x['offset']+x['length']]
++        if not excluded:gaps.append(gap)
+     for gap in gaps+zeroed_unknown:
+         rg=regions[gap['region']]
+         names_before=[name for name,off in rg['labels'].items() if off<=gap['offset']]
+         nearest=max(names_before,key=lambda name:rg['labels'][name]) if names_before else rg['anchor']
+         gap.update(symbol=nearest,symbol_offset=gap['offset']-rg['labels'][nearest],source_address=(0x100000 if rg['source_file']==0 else 0x334c00)+rg['source_offset']+gap['offset'])
++    for op in ops:
++        if op['kind']=='pointer' and any(x['source_address']<=op['expected']<x['source_address']+x['length'] for x in unused):
++            raise ValueError('live pointer into reviewed unused pool')
+     # Excluded alignment must never hide a live symbolic data pointer.
+     for op in ops:
+         if op['kind']!='pointer':continue
+@@ -214,7 +224,7 @@
+         region['sha256']=hashlib.sha256(raw[region['source_file']][region['source_offset']:region['source_offset']+region['size']]).hexdigest()
+     result={'version':1,'profile':{'fighters':[0,1],'costumes':[0,0],'stage':0,'split_screen':False,'alternate_voice':False},'upstream':report['upstream'],'source_program_sha256':[hashlib.sha256(elf).hexdigest(),hashlib.sha256(raw[1]).hexdigest()],
+         'safe_zero_invariant_bytes':safe_zero_bytes,'layout_evidence':'actual PPC DWARF via binutils readelf; no host sizeof or resource-content type inference',
+-        'complete':not gaps and not pointer_errors and not zeroed_unknown,'reviewed_schemas':reviewed,'alignment_prefixes':alignment_prefixes,'suppressed_source_bytes':zeroed_unknown,'regions':regions,'operations':compact,'untyped':gaps,'unresolved_pointer_bindings':pointer_errors,'type_evidence':evidence,'compiled_variable_layouts':layouts_seen,
++        'complete':not gaps and not pointer_errors and not zeroed_unknown,'native_unused_ranges':unused,'native_unused_proof':'unused-native-proof.json','reviewed_schemas':reviewed,'alignment_prefixes':alignment_prefixes,'suppressed_source_bytes':zeroed_unknown,'regions':regions,'operations':compact,'untyped':gaps,'unresolved_pointer_bindings':pointer_errors,'type_evidence':evidence,'compiled_variable_layouts':layouts_seen,
+         'copied_game_values_in_artifact':False,'battle_boot_ready':False}
+     # Hash exactly the original bytes each op will consume, not whole commercial files.
+     hv=0xcbf29ce484222325
+--- a/engine/tools/reviewed_types.py
++++ b/engine/tools/reviewed_types.py
+@@ -97,4 +97,11 @@
+         value=data(address(name),n)
+         if b'\0' not in value:raise ValueError('unterminated reviewed C string '+name)
+         array(address(name),n,1,'main.h OverlayEntry, sys/file.c char directories, sys/movie.c char tags, sys/adx.c channel names')
++    # Original 0x108B80 LWC1 then 0x108B84 CVT.S.W: integer 224,
++    # addressed by LUI at 0x108B54 + ADDIU at 0x108B78. Only four
++    # bytes are read; the remaining four are checked endian-invariant zero.
++    array(address('D_002FE8D0'),4,4,'SLUS USA 0x108B54/78/80/84; gfxm_b.c GfxWater_DrawView integer h converted to float')
++    a=address('D_002FE8D0')+4
++    if any(data(a,4)):raise ValueError('water constant trailing padding changed')
++    array(a,4,1,'water constant: checked trailing zero padding',kind='padding')
+     return specs
+--- /dev/null
++++ b/engine/tools/reviewed_unused.py
+@@ -0,0 +1,47 @@
++# SPDX-License-Identifier: AGPL-3.0-or-later
++"""Prove that three original pool spans are outside this native build's reads.
++These bytes are NOT assigned invented C types, copied, or zero-filled.
++Any new compiled relocation into a retired symbol fails regeneration. The
++active vector is limited to its declared 16-byte views in pinned consumers.
++"""
++from pathlib import Path
++import hashlib,struct,json
++from build_overlay_catalog import read_object
++POOLS=[('D_002EC2C0',16,16),('D_002FE958',0,22),('D_002FEB88',0,8)]
++VECTOR_USERS={'src/battle/bobj_a.c','src/battle/eft_aa.c','src/battle/eft_det_a.c','src/battle/eft_det_b.c','src/battle/stg_a_b.c','src/battle/stg_a.c','src/sys/gfxm_d_c.c'}
++VECTOR_SOURCE_HASHES={'src/sys/gfxm_d_c.c': '66c744ab7e87d410a31ade10cd28cd37e30f0116b406cc1b65c4e3dffc6a0823', 'src/battle/eft_det_a.c': 'd5f4875b3dfd4f9378234627ff7a8174e67a988b404f5ee1ca0f87224e37c6f3', 'src/battle/eft_aa.c': 'bbe82fd011e4b377206b94b5a1157e98091a41dff81ddfcc9f1a39887fa03e24', 'src/battle/eft_det_b.c': '6a3a7ea6e1e1c11737911725d3b1e27ab32a39d592f5c18b9d09f1764fb15b23', 'src/battle/stg_a_b.c': 'a522b8b1679141bb62c9f4633013a07a67dcf3752c3e22531e962ab7101d578f', 'src/battle/bobj_a.c': '70a8126f82a2a6159a3b58d466b3627463df81141024ab95efd5ebcc0f77a524', 'src/battle/stg_a.c': '43ced23f5b0e63a03bc749682dff35dc07791e5d964a387901927bef81ad5e63'}
++
++def with_link_objects(rows,build):
++    result=list(rows);seen={str(Path(r['object']).resolve()) for r in rows}
++    for arg in json.loads((Path(build)/'link-arguments.json').read_text()):
++        if not arg.endswith('.o'):continue
++        path=Path(arg).resolve()
++        if str(path) not in seen:
++            result.append({'source':'native-title/'+path.name,'compiled':True,'object':str(path)})
++            seen.add(str(path))
++    return result
++
++def audit(regions,rows):
++    hits=[];byname={n:(r,o) for r in regions for n,o in r['labels'].items()}
++    for row in rows:
++        if not row['compiled']:raise ValueError('unused-data proof needs all native objects')
++        if row['source'] in VECTOR_SOURCE_HASHES and row['source_sha256']!=VECTOR_SOURCE_HASHES[row['source']]:
++            raise ValueError('changed vector consumer needs semantic review: '+row['source'])
++        b,h,sections,names,symbols=read_object(Path(row['object']))
++        for sec in sections:
++            if sec[1]!=4 or not sections[sec[7]][2]&2:continue
++            for at in range(sec[4],sec[4]+sec[5],12):
++                loc,info,addend=struct.unpack_from('>IIi',b,at);target=symbols[info>>8][0]
++                if target not in {p[0] for p in POOLS}:continue
++                if target!='D_002EC2C0' or addend!=0 or row['source'] not in VECTOR_USERS:
++                    raise ValueError('new native consumer of reviewed pool: '+str((row['source'],target,addend)))
++                hits.append({'source':row['source'],'symbol':target,'addend':addend,'relocation':info&255})
++    if not hits:raise ValueError('vector-reader evidence unexpectedly absent')
++    result=[]
++    for name,delta,size in POOLS:
++        rg,off=byname[name];lo=off+delta
++        if lo+size>rg['size']:raise ValueError('retired pool extent')
++        result.append({'region':rg['id'],'offset':lo,'length':size,'symbol':name,'symbol_offset':delta,
++         'source_address':0x100000+rg['source_offset']+lo,'reason':'no native pool consumer; active vector references restricted to declared 16-byte Vec4/StgColVec/EftDetVec readers' if delta else 'no allocated native relocation to this original-only pool symbol',
++         'policy':'leave untouched; forbidden pointer target during catalog generation; not typed data'})
++    return result,{'result':'PASS','all_compiled_units_checked':len(rows),'vector_relocations':hits,'pools':result,'scope':'pinned native build; not a claim about every PS2 reader or future resource schema'}
+--- /dev/null
++++ b/engine/tools/test_native_fighter.py
+@@ -0,0 +1,16 @@
++#!/usr/bin/env python3
++# SPDX-License-Identifier: AGPL-3.0-or-later
++from pathlib import Path
++import argparse,subprocess,sys,os,json
++p=argparse.ArgumentParser();p.add_argument('upstream',type=Path);p.add_argument('model',type=Path);p.add_argument('motions',type=Path);p.add_argument('output',type=Path);a=p.parse_args();up=a.upstream.resolve();out=a.output.resolve();out.mkdir(parents=True,exist_ok=True);e=Path(__file__).resolve().parents[1];project=e.parent
++sys.path.insert(0,str(up/'port/tools'));import portsrc
++s,_,_=portsrc.enable_attempts((up/'src/battle/bobj_a.c').read_text());original=out/'bobj_a.c';original.write_text(s)
++sources=[e/'tests/test_native_fighter.c',e/'platform/platform/xb_battle_fighter.c',original,*[project/'src'/(s+'.c') for s in ('dr_body_model','dr_face_vif','dr_container','dr_anim','dr_bpe','dr_skeleton','dr_disc')]]
++common=['gcc','-std=gnu99','-O1','-g','-fcommon','-fno-strict-aliasing','-ffunction-sections','-fdata-sections','-fsanitize=address,undefined','-fno-omit-frame-pointer','-I'+str(e/'platform/platform'),'-I'+str(project/'src'),'-I'+str(up/'include'),'-I'+str(up/'port/include'),'-I'+str(up/'port/src')]
++objects=[];logs=[]
++for i,src in enumerate(sources):
++ obj=out/(str(i)+'.o');flags=['-include',str(up/'port/include/port_compat.h')] if src==original else []
++ r=subprocess.run(common+flags+['-c',str(src),'-o',str(obj)],capture_output=True,text=True);logs.append(r.stdout+r.stderr);(out/'compile.txt').write_text(''.join(logs));r.check_returncode();objects.append(obj)
++r=subprocess.run(['gcc','-fsanitize=address,undefined',*map(str,objects),'-Wl,--gc-sections','-lm','-o',str(out/'native-fighter')],capture_output=True,text=True);logs.append(r.stdout+r.stderr);(out/'compile.txt').write_text(''.join(logs));r.check_returncode()
++r=subprocess.run([str(out/'native-fighter'),str(a.model.resolve()),str(a.motions.resolve())],capture_output=True,text=True,env=dict(os.environ,ASAN_OPTIONS='detect_leaks=0:halt_on_error=1',UBSAN_OPTIONS='halt_on_error=1'));(out/'native-fighter-test.txt').write_text(r.stdout+r.stderr);print(r.stdout+r.stderr,end='');r.check_returncode()
++(out/'native-fighter-test.json').write_text(json.dumps({'result':'PASS','original_PlayModel_and_Step':True,'frames':200,'owned_state_survives_source_free':True,'sanitizers':True,'host_only':True,'fighter_spawned_in_combat':False,'rendered':False},indent=2)+'\n')
+--- /dev/null
++++ b/engine/tools/test_native_stage.py
+@@ -0,0 +1,48 @@
++#!/usr/bin/env python3
++# SPDX-License-Identifier: AGPL-3.0-or-later
++"""Original StgCol_QueryZone and ColMesh code vs independent original-file walk."""
++from pathlib import Path
++import argparse,struct,subprocess,os,json,sys
++p=argparse.ArgumentParser();p.add_argument('upstream',type=Path);p.add_argument('stage',type=Path);p.add_argument('output',type=Path);a=p.parse_args();out=a.output.resolve();out.mkdir(parents=True,exist_ok=True);up=a.upstream.resolve();e=Path(__file__).resolve().parents[1];project=e.parent
++pack=a.stage.read_bytes();begin,end=struct.unpack_from('<II',pack,4);b=pack[begin:end]
++def u(at):return struct.unpack_from('<I',b,at)[0]
++answers=[]
++for broken in (0,1):
++ state=0xcbf29ce484222325;count=0
++ def add(data):
++  global state
++  for c in data:state=((state^c)*0x100000001b3)&0xffffffffffffffff
++ def walk(mesh,index):
++  global count
++  node=u(mesh+12)*4+index*32;left,right=struct.unpack_from('<II',b,node+24)
++  if right==0xffffffff:
++   if left==0xffffffff:return
++   poly=u(mesh+16)*4+left*32;add(struct.pack('<I',left));add(b[poly:poly+4])
++   for vert in struct.unpack_from('<3I',b,poly+4):v=u(mesh+20)*4+vert*16;add(b[v:v+16])
++   add(b[poly+16:poly+32]);count+=1
++  else:walk(mesh,left);walk(mesh,right)
++ for i in range(u(56)):
++  z=u(60)*4+i*64;words=[u(z+4)]
++  for j in range(u(z+20)):
++   r=u(z+24)*4+j*16
++   if bool(u(r))==bool(broken):words.append(u(r+8))
++  for w in words:
++   if w and u(w*4):walk(w*4,0)
++ answers.append((count,state))
++source=(e/'tests/test_native_stage.c').read_text()
++for name,(n,h) in zip(('WHOLE','BROKEN'),answers):source=source.replace('EXPECTED_'+name+'_N',str(n)).replace('EXPECTED_'+name+'_HASH',hex(h)+'ull')
++fixture=out/'fixture.c';fixture.write_text(source)
++# Enable the same original C attempts as the native engine build.
++sys.path.insert(0,str(up/'port/tools'));import portsrc
++original=[]
++for stem in ('col_a','eft_det_b'):
++ s,_,_=portsrc.enable_attempts((up/'src/battle'/(stem+'.c')).read_text());f=out/(stem+'.c');f.write_text(s);original.append(f)
++sources=[fixture,e/'platform/platform/xb_battle_stage.c',*original,*[project/'src'/(n+'.c') for n in ('dr_stage_collision','dr_container','dr_disc','dr_anim','dr_bpe','dr_skeleton')]]
++common=['gcc','-std=gnu99','-O1','-g','-fcommon','-fno-strict-aliasing','-ffunction-sections','-fdata-sections','-fsanitize=address,undefined','-fno-omit-frame-pointer','-I'+str(e/'platform/platform'),'-I'+str(project/'src'),'-I'+str(up/'include'),'-I'+str(up/'port/include'),'-I'+str(up/'port/src')]
++objects=[];logs=[]
++for i,src in enumerate(sources):
++ obj=out/(str(i)+'.o');flags=['-include',str(up/'port/include/port_compat.h')] if src in original else []
++ r=subprocess.run(common+flags+['-c',str(src),'-o',str(obj)],capture_output=True,text=True);logs.append(r.stdout+r.stderr);(out/'compile.txt').write_text(''.join(logs));r.check_returncode();objects.append(obj)
++r=subprocess.run(['gcc','-fsanitize=address,undefined',*map(str,objects),'-Wl,--gc-sections','-lm','-o',str(out/'native-stage')],capture_output=True,text=True);logs.append(r.stdout+r.stderr);(out/'compile.txt').write_text(''.join(logs));r.check_returncode()
++r=subprocess.run([str(out/'native-stage'),str(a.stage.resolve())],capture_output=True,text=True,env=dict(os.environ,ASAN_OPTIONS='detect_leaks=0:halt_on_error=1',UBSAN_OPTIONS='halt_on_error=1'));(out/'native-stage-test.txt').write_text(r.stdout+r.stderr);print(r.stdout+r.stderr,end='');r.check_returncode()
++(out/'native-stage-test.json').write_text(json.dumps({'result':'PASS','original_collision_readers':True,'native_global_stage_and_mesh_base_installed':True,'owned_arena_survives_source_free':True,'whole_and_broken_reference':answers,'sanitizers':True,'host_only':True,'full_stage_boot_ready':False},indent=2)+'\n')
+--- a/engine/tools/test_reviewed_types.py
++++ b/engine/tools/test_reviewed_types.py
+@@ -6,8 +6,8 @@
+ from reviewed_types import describe
+ from refine_typed_manifest import sources,refine
+ p=argparse.ArgumentParser();p.add_argument('baseline',type=Path);p.add_argument('disc',type=Path);a=p.parse_args();m=json.loads(a.baseline.read_text());raw=sources(a.disc,m['source_program_sha256']);specs=describe(m['regions'],raw)
+-assert len(specs)==80
+-out=refine(m,raw);assert len(out['untyped'])==4 and sum(g['length'] for g in out['untyped'])==54 and not out['suppressed_source_bytes'] and not out['complete'] and not out['battle_boot_ready']
++assert len(specs)==82
++out=refine(m,raw);assert len(out['untyped'])==3 and sum(g['length'] for g in out['untyped'])==46 and not out['suppressed_source_bytes'] and not out['complete'] and not out['battle_boot_ready']
+ for n in ['D_002EDC70','D_002EDCE0','D_002EDD50']:
+  assert any(n in r['labels'] for r in m['regions'])
+ # Each of these corruptions must be refused before any schema is emitted.
+@@ -26,4 +26,4 @@
+ try:refine(bad,raw)
+ except ValueError:pass
+ else:raise AssertionError('live prefix pointer hidden')
+-print('PASS: 80 bounded reviewed schemas; 4/54 unknown ranges retained; bad menu graph/count/NaN/icon lengths refused; real suppressions and live prefix pointers remain blockers; boot stays disabled')
++print('PASS: 82 bounded reviewed schemas; 3/46 pool ranges retained until separate native reference proof; bad menu graph/count/NaN/icon lengths refused; real suppressions and live prefix pointers remain blockers; boot stays disabled')
+--- /dev/null
++++ b/engine/tools/test_reviewed_unused.py
+@@ -0,0 +1,15 @@
++#!/usr/bin/env python3
++# SPDX-License-Identifier: AGPL-3.0-or-later
++from pathlib import Path
++import argparse,json,copy,subprocess
++from reviewed_unused import audit,with_link_objects
++p=argparse.ArgumentParser();p.add_argument('manifest',type=Path);p.add_argument('build',type=Path);p.add_argument('compiler',type=Path);p.add_argument('output',type=Path);a=p.parse_args();out=a.output.resolve();out.mkdir(parents=True,exist_ok=True);m=json.loads(a.manifest.read_text());report=json.loads((a.build/'battle-integration.json').read_text());rows=with_link_objects(report['files'],a.build);excluded,proof=audit(m['regions'],rows);assert sum(x['length'] for x in excluded)==46
++src=out/'live-pool.c';src.write_text('extern char D_002FEB88[];void *new_native_consumer=D_002FEB88;\n');obj=out/'live-pool.o';subprocess.run([str(a.compiler.resolve()),'-mcpu=cell','-c',str(src),'-o',str(obj)],check=True)
++try:audit(m['regions'],rows+[{'source':'injected.c','compiled':True,'object':str(obj)}])
++except ValueError:pass
++else:raise AssertionError('new pool consumer was hidden')
++bad=copy.deepcopy(rows);next(r for r in bad if r['source']=='src/battle/bobj_a.c')['source_sha256']='changed'
++try:audit(m['regions'],bad)
++except ValueError:pass
++else:raise AssertionError('changed vector reader accepted')
++(out/'unused-test.json').write_text(json.dumps({'result':'PASS','excluded_original_only_bytes':46,'new_native_consumer_rejected':True,'changed_vector_reader_rejected':True,'gaps_are_not_guessed_types':True},indent=2)+'\n');print('PASS: original-only pool proof; injected allocated native reference and changed vector source rejected')
+--- a/engine/tools/test_typed_manifest.py
++++ b/engine/tools/test_typed_manifest.py
+@@ -56,8 +56,11 @@
+  size_t ptr=0;while(ops[ptr].kind!=XBTD_POINTER)ptr++;uint32_t save=ops[ptr].expected_mips;ops[ptr].expected_mips^=4;assert(XbTypedData_Load(&files,&catalog,2)==XBTD_POINTER_MISMATCH);unchanged();ops[ptr].expected_mips=save;
+  XbTypedOp op0=ops[1];ops[1]=ops[0];assert(XbTypedData_Load(&files,&catalog,2)==XBTD_BAD_CATALOG);unchanged();ops[1]=op0;
+  XbTypedRegion reg=regions[0];regions[0].source_offset=0x1ff17f;assert(XbTypedData_Load(&files,&catalog,2)==XBTD_SOURCE);unchanged();regions[0]=reg;
++ catalog.complete=ACTUAL_COMPLETE;
++ if(catalog.complete){assert(!XbTypedData_Load(&files,&catalog,0));assert(gPortDataStripped==2 && XbTypedData_RequireBattleData()==XBTD_INCOMPLETE);}
+  puts("PASS: actual typed loader; all real scalar/mixed/pointer ops and whole-buffer hashes; opaque bytes untouched; incomplete boot refused; dry run, bad hash, pointer mismatch, overlap, source bounds and reentry refuse atomically; host buffers only");return 0;}
+ '''
++s=s.replace('ACTUAL_COMPLETE',str(int(r['complete'])))
+ (out/'fixture.c').write_text(s);cmd=['gcc','-std=gnu17','-O1','-g','-Wall','-Wextra','-Werror','-DXB_HOST_TEST','-I'+str(e/'platform/platform')]
+ if a.sanitize:cmd+=['-fsanitize=address,undefined','-fno-omit-frame-pointer']
+ exe=out/'typed-test';subprocess.run(cmd+[str(out/'fixture.c'),str(e/'platform/platform/xb_gamedata.c'),'-o',str(exe)],check=True)
+--- /dev/null
++++ b/engine/tools/test_water_pool.py
+@@ -0,0 +1,19 @@
++#!/usr/bin/env python3
++# SPDX-License-Identifier: AGPL-3.0-or-later
++"""Check the original integer-load/CVT sequence behind the water constant."""
++from pathlib import Path
++import argparse,struct,json,hashlib
++p=argparse.ArgumentParser();p.add_argument('program',type=Path);p.add_argument('output',type=Path);a=p.parse_args();b=a.program.read_bytes();assert hashlib.sha256(b).hexdigest()=='811188ba9b416500d921cd4d9514df0cbf42f3a41a99cf5aac5a3da37171bf99'
++def at(addr):
++ sh=struct.unpack_from('<I',b,32)[0];step,n=struct.unpack_from('<HH',b,46)
++ for i in range(n):
++  _,kind,flags,va,o,size=struct.unpack_from('<6I',b,sh+i*step)
++  if kind==1 and va<=addr and addr+4<=va+size:return struct.unpack_from('<I',b,o+addr-va)[0]
++ raise ValueError('unmapped program address')
++w=at(0x108b54);assert w>>26==15 and w>>16&31==2 and w&65535==0x30
++w=at(0x108b78);assert w>>26==9 and w>>21&31==2 and w>>16&31==2
++imm=w&65535;assert 0x300000+imm-65536==0x2fe8d0
++w=at(0x108b80);assert w>>26==0x31 and w>>21&31==2 and w>>16&31==30 and w&65535==0
++w=at(0x108b84);assert w>>26==0x11 and w>>21&31==20 and w&63==0x20 and w>>11&31==30 and w>>6&31==30
++assert at(0x2fe8d0)==224 and at(0x2fe8d4)==0
++a.output.write_text(json.dumps({'result':'PASS','source':'USA executable, exact SHA256 checked','address':'D_002FE8D0','reader':['0x108B54 LUI v0,0x30','0x108B78 ADDIU v0,v0,-0x1730','0x108B80 LWC1 f30,0(v0)','0x108B84 CVT.S.W f30,f30'],'type':'32-bit signed integer loaded as bits then converted numerically to float','bytes_read':4,'next_four_bytes':'checked zero padding'},indent=2)+'\n');print('PASS: original integer word -> LWC1 -> CVT.S.W; width 4 plus checked zero padding')
+--- a/engine/tools/verify_typed_catalog.py
++++ b/engine/tools/verify_typed_catalog.py
+@@ -22,6 +22,6 @@
+  if kind==1:
+   pointer_ops+=1;changed+=native!=op['native_value_in_reference_link']
+   if op.get('target') and defined[op['target']][2]&15==2:assert not op['addend'],'MIPS interior instruction offset cannot identify native code'
+-assert not complete and at(defined['gPortDataStripped'][0],4)==b'\0\0\0\2'
++assert at(defined['gPortDataStripped'][0],4)==b'\0\0\0\2'
+ a.output.write_text(json.dumps({'result':'PASS','PPC_catalog_shape':'32-bit pointers; 16-byte regions; 28-byte operations; header 32 bytes','regions_verified':nr,'operations_verified':no,'pointer_operations_verified':pointer_ops,'pointer_bindings_changed_since_reference_link':changed,'all_final_addresses_symbolically_relocated':True,'catalog_complete':bool(complete),'boot_marker':2,'hardware_executed':False},indent=2)+'\n')
+ print('PASS: final PPC catalog:',nr,'regions,',no,'ops,',pointer_ops,'checked native bindings;',changed,'addresses changed and relocated; boot remains blocked')
+--- a/src/demo_ui.c
++++ b/src/demo_ui.c
+@@ -99,7 +99,7 @@
+     p->rect(52,52,68,68,ORANGE);
+     text(p,66,66,2,0xFF211000,"DR");
+     text(p,144,48,2,WHITE,"DRAGON RAGE");
+-    text(p,146,94,1,GOLD,"XBOX 360  /  DEMO 0.36-D2");
++    text(p,146,94,1,GOLD,"XBOX 360  /  DEMO 0.37-D3");
+     text(p,930,56,1,u->connected?0xFF3DDC84:GOLD,u->connected?"CONTROLE CONECTADO":"CONECTE O CONTROLE");
+     text(p,930,88,1,MUTED,"Interface + leitor de ISO");
+     p->rect(52,154,300,480,PANEL);
+--- a/src/main.c
++++ b/src/main.c
+@@ -16,6 +16,13 @@
+ #ifdef DR_TYPED_CATALOG
+ #include "xb_typed_data.h"
+ #include "dr_stage_collision.h"
++#ifdef DR_ENGINE_LINKED
++#include "xb_battle_stage.h"
++#include "xb_battle_fighter.h"
++static XbBattleFighter *native_fighters[2];
++static XbBattleStageCollision *native_stage;
++static void release_native_stage(void){for(unsigned i=0;i<2;i++){XbBattleFighter_FreeModelAnimation(native_fighters[i]);native_fighters[i]=NULL;}if(native_stage){int e=XbBattleStage_UninstallCollision(native_stage);if(!e)e=XbBattleStage_FreeCollision(native_stage);if(!e)native_stage=NULL;}}
++#endif
+ #include "xb_disc.h"
+ #endif
+ #include <arpa/inet.h>
+@@ -227,6 +234,33 @@
+ {
+     (void)polygon;(void)triangle;(*(unsigned *)ctx)++;return 1;
+ }
++#ifdef DR_ENGINE_LINKED
++static int read_battle_resource(unsigned id,void **bytes,size_t *size)
++{
++    char path[64];dr_span span;*bytes=NULL;*size=0;snprintf(path,sizeof(path),"pzs3us1/%05u.bin",id-1);
++    int e=XbDisc_FindFile(path,&span);if(e)return e;
++    if(!span.size || span.size>8*1024*1024)return DR_STAGE_BOUNDS;
++    void *p=malloc((size_t)span.size);if(!p)return DR_STAGE_MEMORY;
++    e=XbDisc_ReadSpan(&span,0,p,(size_t)span.size);if(e){free(p);return e;}
++    *bytes=p;*size=(size_t)span.size;return 0;
++}
++static int prepare_fighter_models(void)
++{
++    for(unsigned side=0;side<2;side++){
++        void *model=NULL,*anims=NULL;size_t mn=0,an=0;XbFighterPrepared stats;int e;
++        e=read_battle_resource(0x590+side*10,&model,&mn);
++        if(!e)e=read_battle_resource(0x598+side*10,&anims,&an);
++        if(!e)e=XbBattleFighter_PrepareModelAnimation(model,mn,anims,an,&native_fighters[side],&stats);
++        free(model);free(anims);
++        if(e){xsdk_log_write("fighter model-animation preparation: side=%u refused error=%d",side,e);return e;}
++        e=XbBattleFighter_PlayModel(native_fighters[side],7,2);uint32_t frame=0,length=0;
++        if(!e)e=XbBattleFighter_StepModel(native_fighters[side],&frame,&length);
++        xsdk_log_write("fighter model-animation: side=%u error=%d bones=%u motions=%u empty=%u model_motions=%u frame=%u/%u; NOT spawned in combat",side,e,stats.bones,stats.motions,stats.empty_motions,stats.model_motions,frame,length);
++        if(e)return e;
++    }
++    return 0;
++}
++#endif
+ static int test_stage_collision(void)
+ {
+     dr_span span;uint8_t *pack=NULL;DrStageCollision view;unsigned triangles=0;
+@@ -241,6 +275,16 @@
+         xsdk_log_write("stage-collision: error=%d zones=%u meshes=%u nodes=%u leaves=%u zone0_triangles=%u bounds=%f,%f,%f; NOT installed in battle",
+             error,view.zones,view.meshes,view.nodes,view.polygons,triangles,(double)view.radius,(double)view.top,(double)view.bottom);
+     }else xsdk_log_write("stage-collision: refused error=%d; NOT installed in battle",error);
++#ifdef DR_ENGINE_LINKED
++    if(!error){
++        error=XbBattleStage_PrepareCollision(pack,(size_t)span.size,&native_stage);
++        if(!error)error=XbBattleStage_InstallCollision(native_stage);
++        if(!error){const float min[3]={-1e10f,-1e10f,-1e10f},max[3]={1e10f,1e10f,1e10f};int result;triangles=0;
++            error=XbBattleStage_QueryCollision(native_stage,0,min,max,stage_count_triangle,&triangles,&result);}
++        xsdk_log_write("native stage collision: error=%d zone0_triangles=%u; gBtlStage installed with NOT_READY; combat remains blocked",error,triangles);
++        if(error && native_stage){if(!XbBattleStage_FreeCollision(native_stage))native_stage=NULL;}
++    }
++#endif
+     free(pack);return error;
+ }
+ static void test_typed_data(void)
+@@ -248,14 +292,21 @@
+     if(ui.selection<0 || ui.selection>=ui.count) {
+         snprintf(ui.modal,sizeof(ui.modal),"Nenhuma ISO encontrada para o teste de dados.");return;
+     }
++#ifdef DR_ENGINE_LINKED
++    release_native_stage();
++    if(native_stage){snprintf(ui.modal,sizeof(ui.modal),"Falha ao liberar o cenário anterior. Consulte default.log.");return;}
++#endif
+     int error=XbDisc_Mount(ui.paths[ui.selection]);
+     if(!error)error=XbTypedData_LoadFromDisc(&gXbTypedMainCatalog,XBTD_ALLOW_PARTIAL);
+-    xsdk_log_write("%s: typed main-data partial preview error=%d regions=%u ops=%u complete=%u data_stripped=%u; combat BLOCKED",
++    xsdk_log_write("%s: typed native-data load error=%d regions=%u ops=%u complete=%u data_stripped=%u; combat BLOCKED",
+         error?"FAIL":"PASS",error,(unsigned)gXbTypedMainCatalog.region_count,
+         (unsigned)gXbTypedMainCatalog.op_count,gXbTypedMainCatalog.complete,(unsigned)gPortDataStripped);
+     int collision_error=error?error:test_stage_collision();
++#ifdef DR_ENGINE_LINKED
++    if(!error && !collision_error)collision_error=prepare_fighter_models();
++#endif
+     if(error)snprintf(ui.modal,sizeof(ui.modal),"Dados recusados: erro %d.\nNenhuma tabela alterada pelo carregador.\nConsulte default.log. Luta bloqueada.",error);
+-    else snprintf(ui.modal,sizeof(ui.modal),"Dados tipados: %u operações aplicadas.\nRegiões: %u · manifesto completo: %u\n\nApenas campos confirmados foram escritos.\nColisão do cenário: erro %d (0 = validada).\nO boot da luta permanece bloqueado.",
++    else snprintf(ui.modal,sizeof(ui.modal),"Dados tipados: %u operações aplicadas.\nRegiões: %u · manifesto completo: %u\n\nApenas campos confirmados foram escritos.\nPreparação nativa: erro %d (0 = diagnóstico OK).\nO boot da luta permanece bloqueado.",
+         (unsigned)gXbTypedMainCatalog.op_count,(unsigned)gXbTypedMainCatalog.region_count,gXbTypedMainCatalog.complete,collision_error);
+ }
+ #endif
+@@ -320,10 +371,10 @@
+ #ifdef DR_ENGINE_LINKED
+     extern int Battle_Main(void);
+     extern volatile uint32_t gPortDataStripped;
+-    xsdk_log_write("DragonRage360 0.36-D2: native diagnostic; Battle_Main linked at %p",(void *)(uintptr_t)Battle_Main);
++    xsdk_log_write("DragonRage360 0.37-D3: native diagnostic; Battle_Main linked at %p",(void *)(uintptr_t)Battle_Main);
+     xsdk_log_write("engine: data_stripped=%u; combat boot BLOCKED: typed main-data manifest and battle initialization missing",(unsigned)gPortDataStripped);
+ #else
+-    xsdk_log_write("DragonRage360 0.36-D2: component diagnostic; Battle_Main not linked in this build.");
++    xsdk_log_write("DragonRage360 0.37-D3: component diagnostic; Battle_Main not linked in this build.");
+ #endif
+     xsdk_log_write("%s: BPE decode + animation endian synthetic self-test",dr_resource_selftest()?"PASS":"FAIL");
+     xsdk_log_write("%s: bounded BIN + motion + skeleton synthetic self-test",dr_container_selftest()?"PASS":"FAIL");
+@@ -496,6 +547,9 @@
+     if(capture_mode) dr_capture_demo_close();
+     if(graphics_mode) dr_graphics_demo_close();
+     if(body_mode) dr_body_demo_close();
++#if defined(DR_ENGINE_LINKED) && defined(DR_TYPED_CATALOG)
++    release_native_stage();
++#endif
+     dr_lobby_stop(&lobby);
+     xsdk_text_close();xsdk_present_close();
+     status=xsdk_gpu_close();
+--- a/tests/check_xex.py
++++ b/tests/check_xex.py
+@@ -96,11 +96,11 @@
+                     sec0=sections[secidx];off=sec0[4]+va-sec0[3];return elf[off:off+count]
+         raise AssertionError(name)
+     cat=struct.unpack('>6I',data_at_symbol('gXbTypedMainCatalog',24))
+-    assert cat[0]==1 and cat[1]==0 and cat[3]==33 and cat[5]>2000
+-    assert {'XbTypedData_Load','XbTypedData_LoadFromDisc','XbTypedData_RequireBattleData','dr_stage_collision_open','dr_stage_collision_query'}<=defined
++    assert cat[0]==1 and cat[1] in (0,1) and cat[3]==33 and cat[5]>2000
++    assert {'XbTypedData_Load','XbTypedData_LoadFromDisc','XbTypedData_RequireBattleData','dr_stage_collision_open','dr_stage_collision_query','XbBattleStage_PrepareCollision','XbBattleStage_InstallCollision','XbBattleStage_QueryCollision','XbBattleFighter_PrepareModelAnimation','XbBattleFighter_PlayModel','XbBattleFighter_StepModel'}<=defined
+     assert data_at_symbol('gPortDataStripped',4)==b'\x00\x00\x00\x02'
+-    report.update(typed_main_catalog_linked=True,typed_catalog_complete=False,
++    report.update(typed_main_catalog_linked=True,typed_catalog_complete=bool(cat[1]),
+         typed_regions=cat[3],typed_operations=cat[5],partial_data_preview_available=True,
+-        native_game_data_loaded=False,stage_collision_diagnostic_linked=True,stage_collision_in_battle=False,scope='0.36-D2: linked Battle_Main and partial typed main-data catalog; explicit typed-data startup preview commits only validated known fields, with readiness marker 2 retained. No complete data manifest, native fight initialization, original Game_Main or combat execution. No hardware validation.')
++        native_game_data_loaded=False,stage_collision_diagnostic_linked=True,stage_collision_original_readers_linked=True,stage_collision_install_path_linked=True,fighter_model_animation_preparation_linked=True,full_fighter_spawn=False,scope='0.37-D3: linked Battle_Main and reviewed native data catalog; original-only pools excluded with native reference proof; explicit typed-data startup preview commits only validated known fields, with readiness marker 2 retained. Native data catalog excludes 46 proven original-only pool bytes; full battle resource initialization, original Game_Main and combat execution remain absent. No hardware validation.')
+ report_path.write_text(json.dumps(report,ensure_ascii=False,indent=2)+'\n')
+ print(json.dumps(report,ensure_ascii=False,indent=2))

@@ -1,0 +1,219 @@
+{
+  "result": "PASS",
+  "all_compiled_units_checked": 439,
+  "vector_relocations": [
+    {
+      "source": "src/sys/gfxm_d_c.c",
+      "symbol": "D_002EC2C0",
+      "addend": 0,
+      "relocation": 6
+    },
+    {
+      "source": "src/sys/gfxm_d_c.c",
+      "symbol": "D_002EC2C0",
+      "addend": 0,
+      "relocation": 4
+    },
+    {
+      "source": "src/sys/gfxm_d_c.c",
+      "symbol": "D_002EC2C0",
+      "addend": 0,
+      "relocation": 6
+    },
+    {
+      "source": "src/sys/gfxm_d_c.c",
+      "symbol": "D_002EC2C0",
+      "addend": 0,
+      "relocation": 4
+    },
+    {
+      "source": "src/sys/gfxm_d_c.c",
+      "symbol": "D_002EC2C0",
+      "addend": 0,
+      "relocation": 6
+    },
+    {
+      "source": "src/sys/gfxm_d_c.c",
+      "symbol": "D_002EC2C0",
+      "addend": 0,
+      "relocation": 4
+    },
+    {
+      "source": "src/battle/bobj_a.c",
+      "symbol": "D_002EC2C0",
+      "addend": 0,
+      "relocation": 6
+    },
+    {
+      "source": "src/battle/bobj_a.c",
+      "symbol": "D_002EC2C0",
+      "addend": 0,
+      "relocation": 4
+    },
+    {
+      "source": "src/battle/bobj_a.c",
+      "symbol": "D_002EC2C0",
+      "addend": 0,
+      "relocation": 6
+    },
+    {
+      "source": "src/battle/bobj_a.c",
+      "symbol": "D_002EC2C0",
+      "addend": 0,
+      "relocation": 4
+    },
+    {
+      "source": "src/battle/bobj_a.c",
+      "symbol": "D_002EC2C0",
+      "addend": 0,
+      "relocation": 6
+    },
+    {
+      "source": "src/battle/bobj_a.c",
+      "symbol": "D_002EC2C0",
+      "addend": 0,
+      "relocation": 4
+    },
+    {
+      "source": "src/battle/bobj_a.c",
+      "symbol": "D_002EC2C0",
+      "addend": 0,
+      "relocation": 6
+    },
+    {
+      "source": "src/battle/bobj_a.c",
+      "symbol": "D_002EC2C0",
+      "addend": 0,
+      "relocation": 4
+    },
+    {
+      "source": "src/battle/bobj_a.c",
+      "symbol": "D_002EC2C0",
+      "addend": 0,
+      "relocation": 6
+    },
+    {
+      "source": "src/battle/bobj_a.c",
+      "symbol": "D_002EC2C0",
+      "addend": 0,
+      "relocation": 4
+    },
+    {
+      "source": "src/battle/eft_aa.c",
+      "symbol": "D_002EC2C0",
+      "addend": 0,
+      "relocation": 6
+    },
+    {
+      "source": "src/battle/eft_aa.c",
+      "symbol": "D_002EC2C0",
+      "addend": 0,
+      "relocation": 4
+    },
+    {
+      "source": "src/battle/eft_det_a.c",
+      "symbol": "D_002EC2C0",
+      "addend": 0,
+      "relocation": 6
+    },
+    {
+      "source": "src/battle/eft_det_a.c",
+      "symbol": "D_002EC2C0",
+      "addend": 0,
+      "relocation": 4
+    },
+    {
+      "source": "src/battle/eft_det_a.c",
+      "symbol": "D_002EC2C0",
+      "addend": 0,
+      "relocation": 6
+    },
+    {
+      "source": "src/battle/eft_det_a.c",
+      "symbol": "D_002EC2C0",
+      "addend": 0,
+      "relocation": 4
+    },
+    {
+      "source": "src/battle/eft_det_b.c",
+      "symbol": "D_002EC2C0",
+      "addend": 0,
+      "relocation": 6
+    },
+    {
+      "source": "src/battle/eft_det_b.c",
+      "symbol": "D_002EC2C0",
+      "addend": 0,
+      "relocation": 4
+    },
+    {
+      "source": "src/battle/eft_det_b.c",
+      "symbol": "D_002EC2C0",
+      "addend": 0,
+      "relocation": 6
+    },
+    {
+      "source": "src/battle/eft_det_b.c",
+      "symbol": "D_002EC2C0",
+      "addend": 0,
+      "relocation": 4
+    },
+    {
+      "source": "src/battle/eft_det_b.c",
+      "symbol": "D_002EC2C0",
+      "addend": 0,
+      "relocation": 6
+    },
+    {
+      "source": "src/battle/eft_det_b.c",
+      "symbol": "D_002EC2C0",
+      "addend": 0,
+      "relocation": 4
+    },
+    {
+      "source": "src/battle/stg_a_b.c",
+      "symbol": "D_002EC2C0",
+      "addend": 0,
+      "relocation": 6
+    },
+    {
+      "source": "src/battle/stg_a_b.c",
+      "symbol": "D_002EC2C0",
+      "addend": 0,
+      "relocation": 4
+    }
+  ],
+  "pools": [
+    {
+      "region": 2,
+      "offset": 144,
+      "length": 16,
+      "symbol": "D_002EC2C0",
+      "symbol_offset": 16,
+      "source_address": 3064528,
+      "reason": "no native pool consumer; active vector references restricted to declared 16-byte Vec4/StgColVec/EftDetVec readers",
+      "policy": "leave untouched; forbidden pointer target during catalog generation; not typed data"
+    },
+    {
+      "region": 7,
+      "offset": 8,
+      "length": 22,
+      "symbol": "D_002FE958",
+      "symbol_offset": 0,
+      "source_address": 3139928,
+      "reason": "no allocated native relocation to this original-only pool symbol",
+      "policy": "leave untouched; forbidden pointer target during catalog generation; not typed data"
+    },
+    {
+      "region": 14,
+      "offset": 24,
+      "length": 8,
+      "symbol": "D_002FEB88",
+      "symbol_offset": 0,
+      "source_address": 3140488,
+      "reason": "no allocated native relocation to this original-only pool symbol",
+      "policy": "leave untouched; forbidden pointer target during catalog generation; not typed data"
+    }
+  ],
+  "scope": "pinned native build; not a claim about every PS2 reader or future resource schema"
+}

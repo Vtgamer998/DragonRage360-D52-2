@@ -1,0 +1,752 @@
+--- a/Makefile
++++ b/Makefile
+@@ -130,3 +130,6 @@
+ build/default.elf: | platform-audit
+ 
+ build/xb_model_native.o: CFLAGS += -I$(UPSTREAM)/include -I$(UPSTREAM)/port/include -mcheck-fpr-alignment
++
++# Original roster/common reader layouts used by the bounded D9 probe.
++build/xb_battle_consumers.o: CFLAGS += -I$(UPSTREAM)/include -I$(UPSTREAM)/port/include -mcheck-fpr-alignment
+--- a/src/main.c
++++ b/src/main.c
+@@ -254,6 +254,14 @@
+     if(!common_error)common_error=XbBattleCommon_Prepare(common_pack,common_bytes,&native_common,&common_info);
+     free(common_pack);
+     if(common_error){xsdk_log_write("native common battle tables: refused error=%d; no manager boot",common_error);return common_error;}
++    void *item_pack=NULL;size_t item_bytes=0;
++    common_error=read_battle_resource(4,&item_pack,&item_bytes);
++    if(!common_error)common_error=XbBattleCommon_AttachItems(native_common,item_pack,item_bytes);
++    free(item_pack);if(common_error)return common_error;
++    XbBattleConsumerProbe consumer;
++    common_error=XbBattleCommon_ProbeConsumers(native_common,&consumer);
++    xsdk_log_write("original table consumers: error=%d animations=%u voices=%u characters=%u items=%u; temporary reader view, NOT fighter manager boot",common_error,consumer.animations,consumer.voices,consumer.characters,consumer.items);
++    if(common_error)return common_error;
+     void *ai_data=NULL;size_t ai_bytes=0;
+     common_error=XbBattleCommon_GetAiData(native_common,&ai_data,&ai_bytes);
+     if(common_error)return common_error;
+@@ -324,11 +332,20 @@
+ #ifdef DR_ENGINE_LINKED
+     if(!error){
+         error=XbBattleStage_PrepareCollision(pack,(size_t)span.size,&native_stage);
++        if(!error)error=XbBattleStage_PrepareStarts(native_stage,pack,(size_t)span.size);
+         if(!error)error=XbBattleStage_InstallCollision(native_stage);
++        for(unsigned side=0;!error && side<2;side++){
++            float pos[4],rot[4];int zone=-1;
++            error=XbBattleStage_GetPlacement(native_stage,side,0,pos,rot,&zone);
++            xsdk_log_write("native grounded start: side=%u error=%d zone=%d position=%f,%f,%f yaw=%f; stage NOT_READY",side,error,zone,(double)pos[0],(double)pos[1],(double)pos[2],(double)rot[1]);
++        }
+         if(!error){const float min[3]={-1e10f,-1e10f,-1e10f},max[3]={1e10f,1e10f,1e10f};int result;triangles=0;
+             error=XbBattleStage_QueryCollision(native_stage,0,min,max,stage_count_triangle,&triangles,&result);}
+         xsdk_log_write("native stage collision: error=%d zone0_triangles=%u; gBtlStage installed with NOT_READY; combat remains blocked",error,triangles);
+-        if(error && native_stage){if(!XbBattleStage_FreeCollision(native_stage))native_stage=NULL;}
++        if(error && native_stage){
++            (void)XbBattleStage_UninstallCollision(native_stage);
++            if(!XbBattleStage_FreeCollision(native_stage))native_stage=NULL;
++        }
+     }
+ #endif
+     free(pack);return error;
+@@ -417,10 +434,10 @@
+ #ifdef DR_ENGINE_LINKED
+     extern int Battle_Main(void);
+     extern volatile uint32_t gPortDataStripped;
+-    xsdk_log_write("DragonRage360 0.42-D8: native diagnostic; Battle_Main linked at %p",(void *)(uintptr_t)Battle_Main);
++    xsdk_log_write("DragonRage360 0.43-D9: native diagnostic; Battle_Main linked at %p",(void *)(uintptr_t)Battle_Main);
+     xsdk_log_write("engine: data_stripped=%u; combat boot BLOCKED: character/AI managers, common resources and battle boot are incomplete",(unsigned)gPortDataStripped);
+ #else
+-    xsdk_log_write("DragonRage360 0.42-D8: component diagnostic; Battle_Main not linked in this build.");
++    xsdk_log_write("DragonRage360 0.43-D9: component diagnostic; Battle_Main not linked in this build.");
+ #endif
+     xsdk_log_write("%s: BPE decode + animation endian synthetic self-test",dr_resource_selftest()?"PASS":"FAIL");
+     xsdk_log_write("%s: bounded BIN + motion + skeleton synthetic self-test",dr_container_selftest()?"PASS":"FAIL");
+--- a/src/demo_ui.c
++++ b/src/demo_ui.c
+@@ -99,7 +99,7 @@
+     p->rect(52,52,68,68,ORANGE);
+     text(p,66,66,2,0xFF211000,"DR");
+     text(p,144,48,2,WHITE,"DRAGON RAGE");
+-    text(p,146,94,1,GOLD,"XBOX 360  /  DEMO 0.42-D8");
++    text(p,146,94,1,GOLD,"XBOX 360  /  DEMO 0.43-D9");
+     text(p,930,56,1,u->connected?0xFF3DDC84:GOLD,u->connected?"CONTROLE CONECTADO":"CONECTE O CONTROLE");
+     text(p,930,88,1,MUTED,"Interface + leitor de ISO");
+     p->rect(52,154,300,480,PANEL);
+--- a/engine/platform/platform-sources.txt
++++ b/engine/platform/platform-sources.txt
+@@ -1,6 +1,7 @@
+ xb_a11y_text.c
+ xb_adxt.c
+ xb_battle_common.c
++xb_battle_consumers.c
+ xb_battle_fighter.c
+ xb_battle_stage.c
+ xb_bpe.c
+--- a/engine/platform/platform/xb_battle_common.c
++++ b/engine/platform/platform/xb_battle_common.c
+@@ -14,7 +14,7 @@
+  * AiThProfile size 0x584 is NOT used: real sections are 0x580 bytes and
+  * all scalar rate reads in this pinned source end by +0x57c. */
+ enum {FORMAT=-880,BOUNDS=-881,STATE=-882,MEMORY=-851};
+-struct XbBattleCommon {void *roster[6],*ai;size_t bytes[6],ai_bytes;XbBattleCommonInfo info;};
++struct XbBattleCommon {void *roster[6],*ai;size_t bytes[6],ai_bytes;XbBattleCommonInfo info;void *items;size_t items_bytes;unsigned char_count,item_count;};
+ static uint32_t r32(const uint8_t *p){return (uint32_t)p[0]|(uint32_t)p[1]<<8|(uint32_t)p[2]<<16|(uint32_t)p[3]<<24;}
+ static unsigned r16(const uint8_t *p){return (unsigned)p[0]|(unsigned)p[1]<<8;}
+ static int zero(const uint8_t *p,size_t n){for(size_t i=0;i<n;i++)if(p[i])return 0;return 1;}
+@@ -80,7 +80,7 @@
+  }
+  *written=n;return 0;
+ }
+-void XbBattleCommon_Free(XbBattleCommon *c){if(c){for(unsigned i=0;i<6;i++)free(c->roster[i]);free(c->ai);free(c);}}
++void XbBattleCommon_Free(XbBattleCommon *c){if(c){for(unsigned i=0;i<6;i++)free(c->roster[i]);free(c->ai);free(c->items);free(c);}}
+ int XbBattleCommon_Prepare(const void *pack,size_t n,XbBattleCommon **out,XbBattleCommonInfo *info){
+  static const unsigned entry[]={2,4,5,6,7,8,3};static const unsigned stride[]={4,36,8,24,16,20};
+  if(!out || !info)return FORMAT;
+@@ -112,3 +112,46 @@
+  if(!p || !n)return FORMAT;
+  *p=NULL;*n=0;if(!c || sizeof(void *)!=4)return STATE;*p=c->ai;*n=c->ai_bytes;return 0;
+ }
++
++/* Typed common file 4, layouts in battle/view_b.h. Byte arrays stay bytes. */
++static int item_layout(const uint8_t *p,size_t n,unsigned *nc,unsigned *ni){
++ if(n<64 || n>128*1024 || r32(p)!=2)return FORMAT;
++ size_t a=r32(p+4)&~3u,b=r32(p+8)&~3u,end=r32(p+12)&~3u;
++ if(a<64 || b<a || end<b || end!=n || (b-a)/60!=161 || (end-b)/40<1)return BOUNDS;
++ size_t chars=(b-a)/60,items=(end-b)/40;
++ if(!zero(p+a+chars*60,b-a-chars*60) || !zero(p+b+items*40,end-b-items*40))return FORMAT;
++ for(size_t i=0;i<chars;i++){
++  const uint8_t *q=p+a+i*60;
++  if(r32(q)>=32 || !r16(q+10) || r16(q+10)>4)return FORMAT;
++  for(unsigned j=0;j<4;j++)if(q[44+j]!=255 && q[44+j]>=161)return BOUNDS;
++  for(unsigned j=48;j<56;j+=4)if((r32(q+j)&0x7f800000)==0x7f800000)return FORMAT;
++ }
++ for(size_t i=0;i<items;i++)if(p[b+i*40]>3)return FORMAT;
++ *nc=(unsigned)chars;*ni=(unsigned)items;return 0;
++}
++int XbBattleCommon_ConvertItems(const void *src,size_t n,int be,void *dst,size_t cap){
++ if(!src || !dst || (be!=0 && be!=1))return FORMAT;
++ if(cap<n)return BOUNDS;
++ uintptr_t a=(uintptr_t)src,b=(uintptr_t)dst;
++ if((a<=b && b-a<n) || (b<a && a-b<n))return STATE;
++ unsigned nc,ni;int e=item_layout(src,n,&nc,&ni);if(e)return e;
++ const uint8_t *s=src;uint8_t *p=dst;memcpy(p,s,n);fields(p,0,16,4,be);
++ size_t at=r32(s+4)&~3u;
++ for(unsigned i=0;i<nc;i++,at+=60){fields(p,at,at+8,4,be);fields(p,at+8,at+16,2,be);fields(p,at+16,at+44,4,be);fields(p,at+48,at+56,4,be);}
++ at=r32(s+8)&~3u;
++ for(unsigned i=0;i<ni;i++,at+=40){fields(p,at+12,at+20,2,be);fields(p,at+20,at+40,4,be);}
++ return 0;
++}
++int XbBattleCommon_AttachItems(XbBattleCommon *c,const void *src,size_t n){
++ if(!c || !src || c->items)return STATE;
++ unsigned nc,ni;int e=item_layout(src,n,&nc,&ni);if(e)return e;
++ void *p=malloc(n);if(!p)return MEMORY;
++ e=XbBattleCommon_ConvertItems(src,n,__BYTE_ORDER__==__ORDER_BIG_ENDIAN__,p,n);
++ if(e){free(p);return e;}
++ c->items=p;c->items_bytes=n;c->char_count=nc;c->item_count=ni;return 0;
++}
++int XbBattleCommon_GetItems(XbBattleCommon *c,void **p,size_t *n,unsigned *nc,unsigned *ni){
++ if(!p || !n || !nc || !ni)return FORMAT;
++ *p=NULL;*n=0;*nc=*ni=0;if(!c || !c->items)return STATE;
++ *p=c->items;*n=c->items_bytes;*nc=c->char_count;*ni=c->item_count;return 0;
++}
+--- a/engine/platform/platform/xb_battle_common.h
++++ b/engine/platform/platform/xb_battle_common.h
+@@ -19,4 +19,13 @@
+  * non-overlapping. Kinds 0..5 are the roster tables, 6 is common AI data.
+  * AI pointer slots remain zero; Prepare relocates them only on pointer32. */
+ int XbBattleCommon_Convert(unsigned,const void *,size_t,int,void *,size_t,size_t *);
++/* Transactional native common-4 tables; every character/item scalar is typed.
++ * This does not supply common file 3 or initialize fighter managers. */
++int XbBattleCommon_AttachItems(XbBattleCommon *,const void *,size_t);
++int XbBattleCommon_ConvertItems(const void *,size_t,int,void *,size_t);
++int XbBattleCommon_GetItems(XbBattleCommon *,void **,size_t *,unsigned *,unsigned *);
++typedef struct XbBattleConsumerProbe {unsigned animations,voices,characters,items;int first_cost,first_ai;} XbBattleConsumerProbe;
++/* Temporary isolated installation in original readers, always undone before
++ * returning. Refuses occupied globals; never allocates/resets fighters. */
++int XbBattleCommon_ProbeConsumers(XbBattleCommon *,XbBattleConsumerProbe *);
+ #endif
+--- /dev/null
++++ b/engine/platform/platform/xb_battle_consumers.c
+@@ -0,0 +1,63 @@
++/* SPDX-License-Identifier: AGPL-3.0-or-later */
++#include "port_compat.h"
++#undef malloc
++#include "xb_battle_common.h"
++#include "battle/btl_char_mgr.h"
++#include "battle/view_b.h"
++#include "sys/common.h"
++#include <stdint.h>
++#include <string.h>
++
++#if UINTPTR_MAX==UINT32_MAX
++extern u32 BtlAnim_GetFlags(u32);
++extern void *BtlChar_GetVoiceEntry(s32);
++static uint32_t word(const void *p){uint32_t u;memcpy(&u,p,4);return u;}
++_Static_assert(sizeof(BtlCharMgr)==0x280,"original roster ABI");
++#endif
++int XbBattleCommon_ProbeConsumers(XbBattleCommon *c,XbBattleConsumerProbe *out){
++ if(!out)return -880;
++ memset(out,0,sizeof(*out));
++#if UINTPTR_MAX!=UINT32_MAX
++ (void)c;return -882;
++#else
++ if(!c || gBtlChars || gCommonRes)return -882;
++ BtlCharMgr roster={0};CommonRes common={0};XbBattleConsumerProbe r={0};
++ void *items=NULL;size_t bytes=0;
++ int e=XbBattleCommon_GetItems(c,&items,&bytes,&r.characters,&r.items);if(e)return e;
++ for(unsigned i=0;i<6;i++){
++  const void *p;size_t n;e=XbBattleCommon_GetRosterTable(c,i,&p,&n);if(e)return e;
++  roster.tbl[i]=(u32 *)p;
++ }
++ common.data[2]=items;common.size[2]=(s32)bytes;
++ /* Zero fighter count: this publishes TABLE READERS, not combatants. Only
++  * synchronous bounded calls occur; no frame/audio/reset/render callbacks. */
++ gBtlChars=&roster;gCommonRes=&common;
++ for(unsigned i=0;i<414;i++){
++  if(BtlAnim_GetFlags(i)!=roster.tbl[0][i]){e=-883;goto done;}r.animations++;
++ }
++ if(BtlAnim_GetFlags(414) || BtlAnim_GetFlags(UINT32_MAX)){e=-883;goto done;}
++ for(unsigned i=0;i<57;i++){
++  if(BtlChar_GetVoiceEntry((s32)i)!=(uint8_t *)roster.tbl[2]+8*i){e=-883;goto done;}r.voices++;
++ }
++ for(unsigned i=0;i<r.characters;i++){
++  const uint8_t *ch=(uint8_t *)items+(word((uint8_t *)items+4)&~3u)+i*60;
++  uint16_t cost;memcpy(&cost,ch+12,2);
++  if(ChrTbl_GetCost((s32)i)!=cost){e=-883;goto done;}
++  u16 ids[8]={0};s32 stats[5],ability[4];ItemSet_GetStats(ids,stats,ability,(s32)i);
++  if(stats[4]!=(s32)word(ch)){e=-883;goto done;}
++  if(!i){r.first_cost=cost;r.first_ai=stats[4];}
++ }
++ for(unsigned i=0;i<r.items;i++){
++  const uint8_t *it=(uint8_t *)items+(word((uint8_t *)items+8)&~3u)+i*40;
++  u16 ids[8]={0};s32 stats[5],ability[4];ids[0]=(u16)(i+1);
++  ItemSet_GetStats(ids,stats,ability,0);
++  for(unsigned j=0;j<4;j++){
++   int16_t v;memcpy(&v,it+12+j*2,2);
++   if(stats[j]!=(it[0]==2?0:v) || ability[j]!=(it[0]==2?0:(s32)word(it+24+j*4))){e=-883;goto done;}
++  }
++ }
++ *out=r;
++done:
++ gCommonRes=NULL;gBtlChars=NULL;return e;
++#endif
++}
+--- a/engine/platform/platform/xb_battle_stage.c
++++ b/engine/platform/platform/xb_battle_stage.c
+@@ -2,6 +2,8 @@
+ #include "port_compat.h"
+ #undef malloc
+ #include "xb_battle_stage.h"
++#include "dr_container.h"
++#include <float.h>
+ #include "battle/col_a.h"
+ #include "battle/eft_det_b.h"
+ #include "battle/stg_a.h"
+@@ -26,6 +28,7 @@
+  DrStageCollision source;
+  NativeStage stage;StgBounds bounds;ColMesh empty;
+  uint8_t *arena;void *saved_base;int installed,querying;
++ float starts[4][8];int has_starts;
+ };
+ extern s32 *gColMeshBase;
+ extern void *gStgColMesh;
+@@ -47,6 +50,7 @@
+  const uint8_t *h=v->base+at;uint32_t n=rd(h);words(c->arena+at,h,24);*out=c->arena+at;
+  if((int32_t)n<=0)return 0;
+  size_t nodes;if(n>v->size/32 || range(v,rd(h+12),(size_t)n*32,&nodes))return DR_STAGE_BOUNDS;
++ if(nodes&15)return DR_STAGE_BOUNDS;
+  words(c->arena+nodes,v->base+nodes,(size_t)n*32);
+  uint32_t polys=0;
+  for(uint32_t i=0;i<n;i++){
+@@ -54,12 +58,14 @@
+   if(rd(node+28)==UINT32_MAX && rd(node+24)!=UINT32_MAX){uint32_t poly=rd(node+24);if(poly>=v->size/32)return DR_STAGE_BOUNDS;if(poly+1>polys)polys=poly+1;}
+  }
+  size_t p;if(range(v,rd(h+16),(size_t)polys*32,&p))return DR_STAGE_BOUNDS;
++ if(p&15)return DR_STAGE_BOUNDS;
+  words(c->arena+p,v->base+p,(size_t)polys*32);
+  uint32_t vertices=0;
+  for(uint32_t i=0;i<polys;i++)for(unsigned j=0;j<3;j++){
+   uint32_t index=rd(v->base+p+(size_t)i*32+4+j*4);if(index>=v->size/16)return DR_STAGE_BOUNDS;if(index+1>vertices)vertices=index+1;
+  }
+  size_t a;if(range(v,rd(h+20),(size_t)vertices*16,&a))return DR_STAGE_BOUNDS;
++ if(a&15)return DR_STAGE_BOUNDS;
+  words(c->arena+a,v->base+a,(size_t)vertices*16);return 0;
+ }
+ int XbBattleStage_FreeCollision(XbBattleStageCollision *c){
+@@ -129,3 +135,61 @@
+  gColWalkCount=count;gColWalkMax=limit;gColWalkBuf=buf;gColWalkBox=old_box;gColWalkCb=cb;gColWalkCtx=old_ctx;
+  gStgColMode=mode;gStgColMesh=mesh;c->querying=0;return 0;
+ }
++
++static float rf(const uint8_t *p){uint32_t v=rd(p);float f;memcpy(&f,&v,4);return f;}
++int XbBattleStage_PrepareStarts(XbBattleStageCollision *c,const void *pack,size_t n){
++ if(!c || !pack || c->installed || c->has_starts)return XB_STAGE_STATE;
++ size_t at,bytes;unsigned flags;
++ if(dr_pack_memory_entry(pack,n,1,&at,&bytes,&flags) || flags || bytes<168)return DR_STAGE_FORMAT;
++ const uint8_t *p=(const uint8_t *)pack+at;
++ if(rd(p)!=0x4450414d || rd(p+4))return DR_STAGE_FORMAT; /* MAPD, file-relative offsets */
++ float native[4][8];size_t a[3],end[3];
++ for(unsigned list=0;list<3;list++){
++  unsigned count=list==0?2:1;
++  if(rd(p+40+list*8)!=count)return DR_STAGE_FORMAT;
++  a[list]=rd(p+44+list*8);size_t length=count*32;
++  if(a[list]<168 || (a[list]&3) || a[list]>bytes || length>bytes-a[list])return DR_STAGE_BOUNDS;
++  end[list]=a[list]+length;
++  for(unsigned prev=0;prev<list;prev++)if(a[list]<end[prev] && a[prev]<end[list])return DR_STAGE_FORMAT;
++  for(unsigned j=0;j<count;j++)for(unsigned k=0;k<8;k++){
++   float f=rf(p+a[list]+j*32+k*4);if(!isfinite(f))return DR_STAGE_NUMBER;
++   native[(list?list+1:0)+j][k]=(k%4==1 || k%4==2)?-f:f;
++  }
++ }
++ memcpy(c->starts,native,sizeof(native));c->has_starts=1;return 0;
++}
++/* Same by-pointer ABI/layout as eft_det_a.h StgGroundOut/EftDetTri. */
++typedef struct SpawnGround {float x,y,z,w,nrm[4];int32_t flags;} SpawnGround;
++extern s32 StgGround_TestTri(void *,void *,s32,f32);
++static int spawn_triangle(void *ctx,uint32_t index,const DrStageTriangle *t){
++ (void)index;if((t->flags&0x08000000u) || !(t->plane[1]<0))return 0;
++ float tri[16] __attribute__((aligned(16)));memcpy(tri,t->vertex,48);memcpy(tri+12,t->plane,16);
++ return StgGround_TestTri(ctx,tri,(s32)t->flags,-701.0f)!=0;
++}
++int XbBattleStage_GetPlacement(XbBattleStageCollision *c,unsigned side,unsigned kind,float pos[4],float rot[4],int *zone){
++ if(!pos || !rot || !zone)return DR_STAGE_FORMAT;
++ memset(pos,0,16);memset(rot,0,16);*zone=-1;
++ if(!c || active!=c || !c->installed || !c->has_starts || c->querying || side>1 || kind>2)return XB_STAGE_STATE;
++ const float *p=c->starts[kind?kind+1:side];int selected=-1;
++ for(uint32_t i=0;i<c->source.zones;i++){
++  const StgColZone *z=&c->stage.zones[i];
++  if(p[0]>=z->center.x-z->half.x && p[0]<=z->center.x+z->half.x && p[2]>=z->center.z-z->half.z && p[2]<=z->center.z+z->half.z){selected=(int)i;break;}
++ }
++ if(selected<0)return DR_STAGE_BOUNDS;
++ SpawnGround g={p[0],FLT_MAX,p[2],1,{0,0,0,0},0};
++ float lo[3]={g.x-1,-701,g.z-1},hi[3]={g.x+1,7301,g.z+1};int result;
++ int e=XbBattleStage_QueryCollision(c,(unsigned)selected,lo,hi,spawn_triangle,&g,&result);if(e)return e;
++ if(g.y==FLT_MAX || !isfinite(g.y))return DR_STAGE_BOUNDS;
++ float dx=p[0]-p[4],dz=p[2]-p[6],length=sqrtf(dx*dx+1+dz*dz);
++ if(!isfinite(length) || length==0)return DR_STAGE_NUMBER;
++ float yaw=atan2f(dx/length,dz/length)-3.14159265f;
++ if(yaw>3.14159265f)yaw-=6.2831853f;
++ if(yaw< -3.14159265f)yaw+=6.2831853f;
++ pos[0]=g.x;pos[1]=g.y;pos[2]=g.z;pos[3]=1;rot[1]=yaw;rot[3]=1;*zone=selected;return 0;
++}
++int XbStage_TryStartPlace(int side,void *pos,void *rot,int alt,int *zone){
++ if(!active || (void *)gBtlStage!=&active->stage)return 0;
++ int z=-1,e=XbBattleStage_GetPlacement(active,(unsigned)side,alt==1?1:alt==-1?2:0,pos,rot,&z);
++ if(zone)*zone=e?-1:z;
++ return 1;
++}
+--- a/engine/platform/platform/xb_battle_stage.h
++++ b/engine/platform/platform/xb_battle_stage.h
+@@ -16,4 +16,12 @@
+  * native structures. Uses their unbroken/broken filtering and leaf order. */
+ int XbBattleStage_QueryCollision(XbBattleStageCollision *,uint32_t,
+  const float min[3],const float max[3],DrStageTriangleFn,void *,int *);
++/* Selected, owned MAPD start/alternative/special placements; NOT full stage.
++ * Preparation must precede installation and never changes NOT_READY. */
++int XbBattleStage_PrepareStarts(XbBattleStageCollision *,const void *,size_t);
++/* kind 0=start, 1=alternative, 2=special. Original collision walk and original
++ * StgGround_TestTri supply ground. Missing ground returns error, zero outputs. */
++int XbBattleStage_GetPlacement(XbBattleStageCollision *,unsigned,unsigned,float[4],float[4],int *);
++/* Native dispatch for the adapted original GetStartPlace/GetPlace. */
++int XbStage_TryStartPlace(int,void *,void *,int,int *);
+ #endif
+--- a/engine/tools/build_engine_diagnostic.py
++++ b/engine/tools/build_engine_diagnostic.py
+@@ -45,9 +45,9 @@
+ for name in ['func_002967C0','sceSifCallRpc','XbSfx_Mix','ADXT_Create','_ctype_','gPortDataStripped']:
+     assert name in defined,name
+ subprocess.run(['python3',str(sdk/'tools/elf2xex.py'),'--title-id','0x44523630',
+-                '--title-name','DragonRage360 0.42 D8 Typed Data Diagnostic' if r.get('typed_catalog_linked') else 'DragonRage360 0.34 L1 Diagnostic',str(elf),str(xex)],check=True)
++                '--title-name','DragonRage360 0.43 D9 Spawn and Tables Diagnostic' if r.get('typed_catalog_linked') else 'DragonRage360 0.34 L1 Diagnostic',str(elf),str(xex)],check=True)
+ report={'kind':'native diagnostic with linked combat code; NOT a playable game',
+-        'version':'0.42-D8' if r.get('typed_catalog_linked') else '0.34-L1','Battle_Main_address':hex(defined['Battle_Main'][1]),
++        'version':'0.43-D9' if r.get('typed_catalog_linked') else '0.34-L1','Battle_Main_address':hex(defined['Battle_Main'][1]),
+         'Battle_Main_linked':True,'Game_Main_linked':False,'battle_called':False,
+         'strong_or_weak_undefined':0,'native_game_data_loaded':False,'typed_catalog_linked':bool(r.get('typed_catalog_linked')),'partial_preview_available':bool(r.get('typed_catalog_linked')), 
+         'boot_combat_available':False,'hardware_executed':False,
+--- a/engine/tools/fixed_profile_source.py
++++ b/engine/tools/fixed_profile_source.py
+@@ -8,6 +8,20 @@
+ import re
+ 
+ def transform(source, text):
++    if source=='src/battle/stg_a_b.c':
++        start='s32 BtlStage_GetStartPlace(s32 side, Vec4 *pos, Vec4 *rot, s32 alt) {\n'
++        place='s32 BtlStage_GetPlace(Vec4 *pos, Vec4 *rot) {\n'
++        for signature,args in ((start,'side,pos,rot,alt'),(place,'0,pos,rot,-1')):
++            if text.count(signature)!=1:raise ValueError('stage placement source changed')
++            guard=('    extern int XbStage_TryStartPlace(int,void *,void *,int,int *);\n'
++                   '    int native_zone=-1;\n'
++                   '    if (!pos || !rot) return -1;\n'
++                   '    if (XbStage_TryStartPlace('+args+',&native_zone)) return native_zone;\n'
++                   '    if (!gBtlStage || !BtlStage_IsReady() || !gBtlStage->data) {\n'
++                   '        memset(pos,0,sizeof(*pos)); memset(rot,0,sizeof(*rot)); return -1;\n'
++                   '    }\n')
++            text=text.replace(signature,signature+guard)
++        return text, []
+     if source=='src/battle/bobj_a.c':
+         node='BObjNode *BtlObj_GetNode(BObj *obj, s32 node) {\n'
+         load='BobjAnim *BtlObjAnim_Load(BobjObj *obj, void *buf, s32 anim, s32 *size) {\n'
+--- a/engine/tools/test_platform_sources.py
++++ b/engine/tools/test_platform_sources.py
+@@ -6,7 +6,7 @@
+ from platform_sources import reviewed_sources,PlatformSourceError
+ p=argparse.ArgumentParser();p.add_argument('output',type=Path);p.add_argument('--d6',type=Path);a=p.parse_args();a.output.mkdir(parents=True,exist_ok=True)
+ project=Path(__file__).resolve().parents[2]
+-assert len(reviewed_sources(project))==31
++assert len(reviewed_sources(project))==32
+ cases=[]
+ with tempfile.TemporaryDirectory(prefix='platform-inventory-') as d:
+     dest=Path(d)
+--- /dev/null
++++ b/engine/tools/test_d9.py
+@@ -0,0 +1,63 @@
++#!/usr/bin/env python3
++# SPDX-License-Identifier: AGPL-3.0-or-later
++"""Synthetic format/reader tests; no ISO, PPC execution or gameplay claim."""
++from pathlib import Path
++import argparse,ctypes as C,struct,subprocess,sys,json,os
++p=argparse.ArgumentParser();p.add_argument('upstream',type=Path);p.add_argument('output',type=Path);a=p.parse_args()
++e=Path(__file__).resolve().parents[1];project=e.parent;up=a.upstream.resolve();out=a.output.resolve();out.mkdir(parents=True,exist_ok=True)
++native=e/'platform/platform';inc=['-I'+str(native),'-I'+str(project/'src')]
++sources=[native/'xb_battle_common.c',*[project/'src'/(s+'.c') for s in ('dr_container','dr_disc','dr_anim','dr_bpe','dr_skeleton')]]
++lib=out/'common.so';subprocess.run(['gcc','-std=c17','-Wall','-Wextra','-Werror','-shared','-fPIC',*inc,*map(str,sources),'-o',str(lib)],check=True)
++f=C.CDLL(str(lib)).XbBattleCommon_ConvertItems;f.argtypes=[C.c_void_p,C.c_size_t,C.c_int,C.c_void_p,C.c_size_t];f.restype=C.c_int
++# Full character capacity, every numeric field exercised; distinctive opaque bytes.
++a0=64;a1=9728;n=a1+4*40;b=bytearray(n);struct.pack_into('<4I',b,0,2,a0,a1,n)
++for i in range(161):
++ at=a0+i*60;struct.pack_into('<2I4H7I',b,at,i%32,0x12345678,0x2345,2,i+1,0x3456,*range(1000,1007))
++ b[at+44:at+48]=bytes([255,1,2,3]);struct.pack_into('<2f',b,at+48,1.25,-2.5);b[at+56:at+60]=b'ABCD'
++for i in range(4):
++ at=a1+i*40;b[at:at+12]=bytes([i,4,5,6,7,8,9,10,11,12,13,14]);struct.pack_into('<4h5I',b,at+12,-2,3,-4,5,0x76543210,1,2,4,8)
++(out/'common4.bin').write_bytes(b)
++src=C.create_string_buffer(bytes(b));dst=C.create_string_buffer(n)
++fields=[(i,4) for i in range(0,16,4)]
++for at in range(a0,a0+161*60,60):fields += [(at+j,4) for j in [0,4,*range(16,44,4),48,52]]+[(at+j,2) for j in range(8,16,2)]
++for at in range(a1,n,40):fields += [(at+j,2) for j in range(12,20,2)]+[(at+j,4) for j in range(20,40,4)]
++gold=bytearray(b)
++for at,width in fields:gold[at:at+width]=gold[at:at+width][::-1]
++assert f(src,n,1,dst,n)==0 and dst.raw==gold
++assert f(src,n,0,dst,n)==0 and dst.raw==b
++bad=[]
++for at,data in [(0,struct.pack('<I',3)),(4,struct.pack('<I',0)),(8,struct.pack('<I',n+4)),(12,struct.pack('<I',n+4)),(a0,struct.pack('<I',32)),(a0+10,b'\0\0'),(a0+44,b'\xa1'),(a0+48,struct.pack('<I',0x7fc00000)),(a1,b'\x04'),(a0+161*60,b'\x01')]:
++ q=bytearray(b);q[at:at+len(data)]=data;bad.append(q)
++for q in bad:
++ dst.raw=b'\xa5'*n;assert f(C.create_string_buffer(bytes(q)),n,1,dst,n)<0 and dst.raw==b'\xa5'*n
++assert f(src,n,1,dst,n-1)<0 and f(src,n,1,src,n)<0
++# Canonical collision with one upward-facing solid triangle at y=10.
++c=bytearray(316)
++def w(at,*v):struct.pack_into('<'+'I'*len(v),c,at,*v)
++def fl(at,*v):struct.pack_into('<'+'f'*len(v),c,at,*v)
++w(56,1,24,76,0);w(100,40);fl(128,0,0,0,1,100,1000,100,1)
++w(160,1,0,0,48,56,64);fl(192,-100,10,-100,100,10,100);w(216,0,0xffffffff)
++w(224,0,0,1,2);fl(240,0,-1,0,-10);fl(256,-100,10,-100,1,100,10,-100,1,0,10,100,1);fl(304,1000,-1000,1000)
++m=bytearray(296);struct.pack_into('<2I',m,0,0x4450414d,0)
++for at,count,offset in [(40,2,168),(48,1,232),(56,1,264)]:struct.pack_into('<2I',m,at,count,offset)
++for offset,x,target in [(168,-10,10),(200,10,-10),(232,0,10),(264,5,-10)]:struct.pack_into('<8f',m,offset,x,0,0,1,target,0,0,1)
++pack=struct.pack('<4I',2,16,16+len(c),16+len(c)+len(m))+c+m
++# Pack members must start at a multiple of four (both lengths satisfy this).
++fixture=out/'stage.bin';fixture.write_bytes(pack)
++sys.path.insert(0,str(up/'port/tools'));import portsrc
++sys.path.insert(0,str(e/'tools'));from fixed_profile_source import transform
++original=[]
++for stem in ('col_a','eft_det_b','eft_det_a'):
++ text,_,_=portsrc.enable_attempts((up/'src/battle'/(stem+'.c')).read_text());dest=out/(stem+'.c');dest.write_text(text);original.append(dest)
++text,_,_=portsrc.enable_attempts((up/'src/battle/stg_a_b.c').read_text());patched,_=transform('src/battle/stg_a_b.c',text)
++assert patched.count('if (XbStage_TryStartPlace(')==2 and patched.count('!gBtlStage || !BtlStage_IsReady() || !gBtlStage->data')==2
++(out/'stg_a_b.c').write_text(patched)
++flags=['-std=gnu99','-O1','-g','-fcommon','-fno-strict-aliasing','-ffunction-sections','-fdata-sections','-fsanitize=address,undefined','-fno-omit-frame-pointer',*inc,'-I'+str(up/'include'),'-I'+str(up/'port/include')]
++objects=[];logs=[]
++for i,s in enumerate([e/'tests/d9/test_spawn.c',native/'xb_battle_stage.c',*original,*[project/'src'/(x+'.c') for x in ('dr_stage_collision','dr_container','dr_disc','dr_anim','dr_bpe','dr_skeleton')]]):
++ obj=out/(str(i)+'.o');extra=['-include',str(up/'port/include/port_compat.h')] if s in original else []
++ r=subprocess.run(['gcc',*flags,*extra,'-c',str(s),'-o',str(obj)],capture_output=True,text=True);logs.append(r.stdout+r.stderr);(out/'compile.txt').write_text(''.join(logs));r.check_returncode();objects.append(obj)
++r=subprocess.run(['gcc','-fsanitize=address,undefined',*map(str,objects),'-Wl,--gc-sections','-lm','-o',str(out/'spawn')],capture_output=True,text=True);logs.append(r.stdout+r.stderr);(out/'compile.txt').write_text(''.join(logs));r.check_returncode()
++r=subprocess.run([str(out/'spawn'),str(fixture)],capture_output=True,text=True,env=dict(os.environ,ASAN_OPTIONS='detect_leaks=0:halt_on_error=1',UBSAN_OPTIONS='halt_on_error=1'));(out/'spawn.txt').write_text(r.stdout+r.stderr);print(r.stdout+r.stderr);r.check_returncode()
++report={'result':'PASS','synthetic_fixtures_only':True,'common4_endian_oracle':len(fields),'common4_corruptions_rejected':len(bad),'original_ground_triangle_and_collision_executed':True,'six_spawn_queries':True,'missing_ground_refused':True,'MAPD_corruptions_rejected':3,'native_dispatch_and_uninstall_tested':True,'original_GetStartPlace_dispatch_source_checked':True,'PowerPC_execution':False,'gameplay':False}
++(out/'tests.json').write_text(json.dumps(report,indent=2)+'\n');print(json.dumps(report))
+--- /dev/null
++++ b/engine/tools/test_d9_consumers32.py
+@@ -0,0 +1,39 @@
++#!/usr/bin/env python3
++# SPDX-License-Identifier: AGPL-3.0-or-later
++"""Original readers, freestanding Linux i386. No Xbox/PPC/gameplay test."""
++from pathlib import Path
++import argparse,sys,struct,subprocess,json,shutil
++p=argparse.ArgumentParser();p.add_argument('upstream',type=Path);p.add_argument('common4',type=Path);p.add_argument('output',type=Path);p.add_argument('--runner',type=Path);a=p.parse_args()
++e=Path(__file__).resolve().parents[1];project=e.parent;up=a.upstream.resolve();out=a.output.resolve();out.mkdir(parents=True,exist_ok=True);native=e/'platform/platform'
++headers=out/'include';headers.mkdir(exist_ok=True)
++stdint=(e/'tests/host32/stdint.h').read_text().replace('#endif','#define UINTPTR_MAX __UINTPTR_MAX__\n#define UINT32_MAX __UINT32_MAX__\n#define UINT64_MAX __UINT64_MAX__\n#endif')
++(headers/'stdint.h').write_text(stdint);shutil.copyfile(e/'tests/host32/string.h',headers/'string.h')
++(headers/'stdlib.h').write_text('#include <stddef.h>\nvoid *malloc(size_t);void *calloc(size_t,size_t);void free(void *);\n')
++entries=[b'']*213;entries[2]=b''.join(struct.pack('<I',0x10203040^i) for i in range(414))
++ai=bytearray(0x148+0x788+8*8);struct.pack_into('<9I',ai,0,0x788,*([8]*8));entries[3]=bytes(ai)
++for entry,count,stride in [(4,1,36),(5,57,8),(6,62,24),(7,161,16),(8,1,20)]:entries[entry]=bytes(count*stride)
++offset=215*4;offsets=[offset]
++for item in entries:offset+=len(item);offsets.append(offset)
++common2=struct.pack('<I',213)+struct.pack('<214I',*offsets)+b''.join(entries)
++common4=a.common4.read_bytes()
++(out/'fixtures.h').write_text('\n'.join('static unsigned char '+name+'[]={'+','.join(map(str,b))+'};' for name,b in [('common2',common2),('common4',common4)]))
++sys.path.insert(0,str(up/'port/tools'));import portsrc
++original=[]
++for stem in ('btl_char_status_anim','btl_char_get','view_b_b'):
++ text,_,_=portsrc.enable_attempts((up/'src/battle'/(stem+'.c')).read_text());f=out/(stem+'.c');f.write_text(text);original.append(f)
++flags=['-m32','-std=gnu99','-O1','-fno-builtin','-ffreestanding','-fno-pic','-fno-pie','-fno-stack-protector','-ffunction-sections','-fdata-sections','-I'+str(headers),'-I'+str(out),'-I'+str(native),'-I'+str(project/'src'),'-I'+str(up/'include'),'-I'+str(up/'port/include')]
++sources=[e/'tests/d9/test_consumers32.c',native/'xb_battle_common.c',native/'xb_battle_consumers.c',*original,*[project/'src'/(x+'.c') for x in ('dr_container','dr_disc','dr_bpe')]]
++objects=[];log=''
++for i,s in enumerate(sources):
++ obj=out/(str(i)+'.o');extra=['-include',str(up/'port/include/port_compat.h')] if s in original else []
++ r=subprocess.run(['gcc',*flags,*extra,'-c',str(s),'-o',str(obj)],capture_output=True,text=True);log+=r.stdout+r.stderr;(out/'compile.txt').write_text(log);r.check_returncode();objects.append(obj)
++exe=out/'consumers32';r=subprocess.run(['gcc','-m32','-nostdlib','-static','-no-pie',*map(str,objects),'-Wl,--gc-sections','-o',str(exe)],capture_output=True,text=True);log+=r.stdout+r.stderr;(out/'compile.txt').write_text(log);r.check_returncode()
++try:
++ r=subprocess.run(([str(a.runner.resolve())] if a.runner else [])+[str(exe)])
++except OSError as error:
++ if error.errno!=8:raise
++ report={'result':'COMPILED_NOT_EXECUTED','reason':'host lacks i386 execution and no runner was provided','pointer_ABI_assertions_compiled':True,'PowerPC_execution':False,'runtime_consumers_verified':False}
++ (out/'tests.json').write_text(json.dumps(report,indent=2)+'\n');print(json.dumps(report));sys.exit(0)
++assert r.returncode==0,('fixture check failed at C line/exit',r.returncode)
++report={'result':'PASS','execution':('QEMU-i386 Linux user mode, freestanding test allocator' if a.runner else 'Linux i386, freestanding test allocator'),'original_BtlAnim_GetFlags':414,'original_voice_entries':57,'original_character_and_item_readers':[161,4],'temporary_installation_and_cleanup_twice':True,'occupied_global_refused':True,'source_overwritten_after_preparation':True,'synthetic_fixtures_only':True,'full_manager_init':False,'PowerPC_execution':False}
++(out/'tests.json').write_text(json.dumps(report,indent=2)+'\n');print(json.dumps(report))
+--- /dev/null
++++ b/engine/tests/d9/test_spawn.c
+@@ -0,0 +1,58 @@
++/* SPDX-License-Identifier: AGPL-3.0-or-later */
++#include "xb_battle_stage.h"
++#include "battle/col_a.h"
++#include "battle/eft_det_b.h"
++#include <assert.h>
++#include <stdio.h>
++#include <stdlib.h>
++#include <string.h>
++#include <math.h>
++StgColStage *gBtlStage;void *gStgColMesh;s32 gStgColMode;
++s32 *gColMeshBase;s32 gColWalkCount,gColWalkMax;u16 *gColWalkBuf;
++ColBox *gColWalkBox;ColMeshCb gColWalkCb;void *gColWalkCtx;
++void Vec4_Copy(ColVec *d,ColVec *s){memmove(d,s,sizeof(*d));}
++int main(int argc,char **argv){
++ assert(argc==2);FILE *f=fopen(argv[1],"rb");assert(f && !fseek(f,0,SEEK_END));long n=ftell(f);assert(n>0);rewind(f);
++ unsigned char *p=malloc((size_t)n);assert(p && fread(p,1,(size_t)n,f)==(size_t)n);fclose(f);
++ XbBattleStageCollision *c=NULL;assert(!XbBattleStage_PrepareCollision(p,(size_t)n,&c));
++ assert(!XbBattleStage_PrepareStarts(c,p,(size_t)n));
++ assert(XbBattleStage_PrepareStarts(c,p,(size_t)n)==XB_STAGE_STATE);
++ /* Corrupt MAPD offsets, overlap and NaN must fail transactionally. */
++ unsigned char *bad=malloc((size_t)n);assert(bad);
++ for(unsigned kind=0;kind<3;kind++){
++  memcpy(bad,p,(size_t)n);unsigned map=(unsigned)bad[8]|(unsigned)bad[9]<<8|(unsigned)bad[10]<<16|(unsigned)bad[11]<<24;
++  if(kind==0)memset(bad+map+44,0xff,4);
++  if(kind==1)memcpy(bad+map+52,bad+map+44,4);
++  if(kind==2){unsigned char nan[]={0,0,192,127};memcpy(bad+map+168,nan,4);}
++  XbBattleStageCollision *other=NULL;assert(!XbBattleStage_PrepareCollision(bad,(size_t)n,&other));
++  assert(XbBattleStage_PrepareStarts(other,bad,(size_t)n)<0);assert(!XbBattleStage_FreeCollision(other));
++ }
++ /* Valid floats with no solid ground must never manufacture a spawn. */
++ memcpy(bad,p,(size_t)n);bad[16+224+3]=8;
++ XbBattleStageCollision *no_floor=NULL;assert(!XbBattleStage_PrepareCollision(bad,(size_t)n,&no_floor));
++ assert(!XbBattleStage_PrepareStarts(no_floor,bad,(size_t)n));free(bad);
++ assert(!XbBattleStage_InstallCollision(no_floor));
++ float misspos[4]={9,9,9,9},missrot[4]={9,9,9,9};int missing=9;
++ assert(XbBattleStage_GetPlacement(no_floor,0,0,misspos,missrot,&missing)==DR_STAGE_BOUNDS && missing==-1);
++ for(unsigned i=0;i<4;i++)assert(misspos[i]==0 && missrot[i]==0);
++ assert(!XbBattleStage_UninstallCollision(no_floor));assert(!XbBattleStage_FreeCollision(no_floor));
++ memset(p,0,(size_t)n);free(p);assert(!XbBattleStage_InstallCollision(c));
++ for(unsigned kind=0;kind<3;kind++)for(unsigned side=0;side<2;side++){
++  float pos[4],rot[4];int zone;
++  assert(!XbBattleStage_GetPlacement(c,side,kind,pos,rot,&zone));
++  assert(zone==0 && pos[1]==10 && pos[2]==0 && pos[3]==1 && rot[3]==1);
++  assert(pos[0]==(kind==0?(side?10:-10):kind==1?0:5));
++  assert(isfinite(rot[1]));
++ }
++ float pos[4]={9,9,9,9},rot[4]={9,9,9,9};int zone=9;
++ assert(XbBattleStage_GetPlacement(c,2,0,pos,rot,&zone)==XB_STAGE_STATE);
++ for(unsigned i=0;i<4;i++)assert(pos[i]==0 && rot[i]==0);assert(zone==-1);
++ int native_zone=9;
++ assert(XbStage_TryStartPlace(1,pos,rot,0,&native_zone)==1 && native_zone==0 && pos[0]==10);
++ assert(XbStage_TryStartPlace(-1,pos,rot,0,&native_zone)==1 && native_zone==-1);
++ assert(!XbBattleStage_UninstallCollision(c));
++ assert(!XbStage_TryStartPlace(0,pos,rot,0,&native_zone));
++ assert(!XbBattleStage_FreeCollision(c));
++ puts("PASS: owned starts, alternative/special, original triangle ground, six placements, invalid side, cleanup");
++ return 0;
++}
+--- /dev/null
++++ b/engine/tests/d9/test_consumers32.c
+@@ -0,0 +1,34 @@
++/* SPDX-License-Identifier: AGPL-3.0-or-later */
++#include "port_compat.h"
++#undef malloc
++#include "xb_battle_common.h"
++#include "battle/btl_char_mgr.h"
++#include "sys/common.h"
++#include <stddef.h>
++#include <stdint.h>
++#include "fixtures.h"
++BtlCharMgr *gBtlChars;CommonRes *gCommonRes;
++static unsigned char arena[1024*1024] __attribute__((aligned(32)));static size_t used;
++void *malloc(size_t n){n=(n+31)&~31u;if(n>sizeof(arena)-used)return 0;void *p=arena+used;used+=n;return p;}
++void free(void *p){(void)p;}
++void *memcpy(void *d,const void *s,size_t n){unsigned char *a=d;const unsigned char *b=s;while(n--)*a++=*b++;return d;}
++void *memset(void *p,int v,size_t n){unsigned char *a=p;while(n--)*a++=(unsigned char)v;return p;}
++void *calloc(size_t n,size_t k){if(k && n>(size_t)-1/k)return 0;void *p=malloc(n*k);if(p)memset(p,0,n*k);return p;}
++int memcmp(const void *a,const void *b,size_t n){const unsigned char *x=a,*y=b;while(n--){if(*x!=*y)return *x-*y;x++;y++;}return 0;}
++#define CHECK(x) do {if(!(x))return __LINE__;}while(0)
++int run(void){
++ XbBattleCommon *c=0;XbBattleCommonInfo info;XbBattleConsumerProbe r;
++ CHECK(!XbBattleCommon_Prepare(common2,sizeof(common2),&c,&info));
++ CHECK(!XbBattleCommon_AttachItems(c,common4,sizeof(common4)));
++ memset(common2,0,sizeof(common2));memset(common4,0,sizeof(common4));
++ for(unsigned i=0;i<2;i++){
++  CHECK(!XbBattleCommon_ProbeConsumers(c,&r));
++  CHECK(r.animations==414 && r.voices==57 && r.characters==161 && r.items==4);
++  CHECK(!gCommonRes && !gBtlChars);
++ }
++ CommonRes occupied={0};gCommonRes=&occupied;
++ CHECK(XbBattleCommon_ProbeConsumers(c,&r)==-882 && gCommonRes==&occupied && !gBtlChars);
++ CHECK(!r.animations && !r.voices && !r.characters && !r.items);
++ gCommonRes=0;XbBattleCommon_Free(c);return 0;
++}
++__asm__(".global _start\n_start:\n call run\n mov %eax,%ebx\n mov $1,%eax\n int $0x80\n");
+--- a/README.md
++++ b/README.md
+@@ -1,3 +1,13 @@
++# Revisão de fontes 0.43-D9 — entrega parcial
++
++**Não há XEX novo nem luta jogável nesta revisão.** O default.xex é o diagnóstico
++0.42-D8 original. As alterações em fontes tratam comum 4, leitores temporários
++e posicionamento inicial com chão. Leia RELATORIO-0.43-D9-FONTES.md para testes
++e pendências. Não execute BtlChar_AllocAll/Battle_Main como se o boot estivesse pronto.
++
++---
++Documentação histórica da versão recebida:
++
+ # DragonRage360 0.42-D8 — tabelas e facial CPU
+ 
+ **Ainda não há luta jogável nem inicialização de BtlChar/BtlAi.**
+--- a/LEIA-ME.txt
++++ b/LEIA-ME.txt
+@@ -1,3 +1,13 @@
++# Revisão de fontes 0.43-D9 — entrega parcial
++
++**Não há XEX novo nem luta jogável nesta revisão.** O default.xex é o diagnóstico
++0.42-D8 original. As alterações em fontes tratam comum 4, leitores temporários
++e posicionamento inicial com chão. Leia RELATORIO-0.43-D9-FONTES.md para testes
++e pendências. Não execute BtlChar_AllocAll/Battle_Main como se o boot estivesse pronto.
++
++---
++Documentação histórica da versão recebida:
++
+ ATUALIZAÇÃO 0.42-D8: seis janelas comuns/IA e oito janelas por modelo preparadas; estado facial CPU exercitado. BtlChar/BtlAi, boot completo, cenário/simulação/controle/apresentação continuam pendentes. Luta bloqueada; XEX recompilado, não executado no Xbox. Leia RELATORIO-0.42-D8.md.
+ 
+ DOCUMENTAÇÃO HISTÓRICA ABAIXO:
+--- a/TESTAR-PRIMEIRO.md
++++ b/TESTAR-PRIMEIRO.md
+@@ -1,3 +1,13 @@
++# Revisão de fontes 0.43-D9 — entrega parcial
++
++**Não há XEX novo nem luta jogável nesta revisão.** O default.xex é o diagnóstico
++0.42-D8 original. As alterações em fontes tratam comum 4, leitores temporários
++e posicionamento inicial com chão. Leia RELATORIO-0.43-D9-FONTES.md para testes
++e pendências. Não execute BtlChar_AllocAll/Battle_Main como se o boot estivesse pronto.
++
++---
++Documentação histórica da versão recebida:
++
+ # Diagnóstico 0.42-D8
+ 
+ Extraia em pasta própria. default.xex é o diagnóstico D8 com Battle_Main vinculado e bloqueado. startup_test.txt contém typed-data, que precisa da ISO configurada e prepara recursos selecionados. Ele não inicia a luta.
+--- /dev/null
++++ b/RELATORIO-0.43-D9-FONTES.md
+@@ -0,0 +1,97 @@
++# 0.43-D9 — fontes parciais: posições iniciais e comum 4
++
++**O pedido completo NÃO foi concluído. Não há luta jogável nem XEX novo nesta revisão.**
++O `default.xex` incluído é exatamente o diagnóstico 0.42-D8 recebido, com
++SHA-256 `f6e056b983ff0459250763518c328dfc66efcdd8e423e5962bf9ea2bd991fb75`.
++As alterações abaixo estão nos fontes e precisam de uma nova compilação PowerPC.
++Não se deve testar este XEX esperando que execute as alterações D9.
++
++## Mudanças implementadas
++
++- Comum 4: conversão por campo do cabeçalho, 161 personagens e dos registros de
++  itens. Inteiros de 16/32 bits e floats são convertidos; links, bytes de tipo,
++  slots e campos opacos permanecem bytes. Os spans e preenchimentos são
++  validados antes de escrever. A cópia tem posse própria e é liberada junto do
++  comum 2. Tipos de item 0, 1, 2 e 3 são aceitos.
++- Consumidores originais: `XbBattleCommon_ProbeConsumers` instala temporariamente
++  as seis tabelas em uma visão de `gBtlChars` e o comum 4 em `gCommonRes`.
++  Executa `BtlAnim_GetFlags`, `BtlChar_GetVoiceEntry`, `ChrTbl_GetCost` e
++  `ItemSet_GetStats`. Recusa globals ocupados e desfaz a instalação antes de
++  retornar. A visão tem zero lutadores; **não é inicialização de BtlChar**.
++- Cenário: preparação com posse própria dos dois pontos iniciais, alternativa
++  e posição especial do MAPD. Valida offsets, contagens, sobreposição e floats
++  finitos; aplica a inversão Y/Z do binder original. O chão vem do percurso
++  original `StgCol_QueryZone` e do teste original `StgGround_TestTri`.
++  Polígonos sem colisão e faces que não apontam para cima são filtrados.
++- A adaptação do código original encaminha `BtlStage_GetStartPlace/GetPlace`
++  para esse caminho quando o cenário pertence ao port. Fora dele, recusa
++  cenário ausente/não pronto/sem parâmetros, com saídas zeradas e zona -1.
++  A nova rotina também recusa ausência de chão. Não remove `NOT_READY`.
++- Acrescentada verificação de alinhamento de 16 bytes nas janelas nativas de
++  nós, polígonos e vértices, antes de usar os leitores tipados.
++- O launcher fonte passa a carregar comum 4, chamar o probe dos consumidores
++  e registrar os pontos iniciais. A limpeza após erro agora desinstala o
++  cenário antes de tentar liberar sua memória.
++
++## Verificação efetuada nesta revisão
++
++Todos os dados desta nova verificação são **fixtures sintéticos**, gerados
++pelos scripts a partir dos formatos documentados. Nenhum recurso real da ISO
++foi retestado na D9. Resultados anteriores da D8 continuam históricos.
++
++1. Linux 64 bits: oráculo independente verifica 2.455 campos numéricos do
++   comum 4 em big-endian e a identidade em little-endian. Dez corrupções,
++   capacidade insuficiente e sobreposição origem/destino são recusadas sem
++   alterar o destino.
++2. Linux 64 bits, ASan/UBSan: seis consultas de posicionamento atravessam os
++   leitores originais de colisão/triângulo. A origem é sobrescrita e liberada
++   antes das consultas. Testados lado inválido, três corrupções MAPD,
++   ausência de chão, despacho nativo e desinstalação. LeakSanitizer desativado;
++   não se afirma ausência de vazamentos no gameplay.
++3. Linux i386 sob QEMU-i386: leitores originais consultam 414 flags de
++   animação, 57 entradas de voz, 161 personagens e quatro itens sintéticos de
++   tipos diferentes. Duas instalações/limpezas, recusa de global ocupado e
++   posse das tabelas após sobrescrever a origem passam. O allocator deste
++   teste é um arena de teste; não é o heap do Xbox nem teste de BtlChar reset.
++4. Inventário dos 32 módulos da plataforma, recusas de módulos extras e
++   cabeçalho sombreado: PASS. Testes de interface existentes: PASS.
++
++Não houve compilação/link final PowerPC, execução em Xbox/Xenia, teste de
++pixels, áudio de combate nem execução de `Battle_Update/Battle_Main` nesta
++revisão. A preparação do despacho original foi conferida no código gerado;
++o frame original completo não foi executado. O binário D8 permanece intacto.
++
++## Situação da lista solicitada
++
++| Pedido | Situação real após estas alterações |
++|---|---|
++| BtlChar / BtlAi | Reset e inicialização completos ainda ausentes. Não chamar `BtlChar_AllocAll` após o diagnóstico. |
++| Instalação das tabelas | Probe temporário em leitores originais implementado; instalação permanente do combate ainda ausente. Comum 4 implementado; comum 3 e recursos restantes pendentes. |
++| Cenário | Posições iniciais e chão implementados no caminho nativo. Configuração da partida, save de execução, recursos internos, render e física do cenário não concluídos. |
++| BtlObj_Init/Term | Continua a sessão própria D7/D8. O ciclo original completo não foi integrado. |
++| Simulação e controle | Nenhum frame original da partida foi executado. Marcador do XEX continua 2. |
++| Facial e GPU | Nenhuma nova comprovação de voz, blink/lábios apresentados, mandíbula, auras, efeitos, skinning ou pixels. |
++
++A presença de uma posição válida não prepara os demais leitores de cenário,
++nem fornece objetos/partida/save ao reset. O probe temporário não deve ser
++transformado em autorização para iniciar Battle_Main.
++
++## Reprodução
++
++Com os fontes upstream fornecidos (ou o checkout fixado descrito em BUILD.md):
++
++```sh
++python3 engine/tools/test_d9.py /caminho/upstream /tmp/d9-synthetic
++python3 engine/tools/test_d9_consumers32.py /caminho/upstream \
++  /tmp/d9-synthetic/common4.bin /tmp/d9-consumers32 \
++  --runner /caminho/qemu-i386-static
++python3 engine/tools/test_platform_sources.py /tmp/d9-inventory
++make host-test
++```
++
++O segundo teste requer suporte i386 no host ou o runner. Quando ele não está
++presente, registra COMPILED_NOT_EXECUTED, sem declarar sucesso em execução.
++Os scripts geram seus próprios fixtures e não dependem de recursos extraídos.
++Para produzir XEX novo ainda é necessário o toolchain xsdk e executar o build
++PowerPC com catálogo tipado e as verificações da D8. Nenhum `make all` isolado
++comprova que o combate foi integrado.

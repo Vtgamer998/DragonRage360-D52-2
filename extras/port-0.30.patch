@@ -1,0 +1,745 @@
+--- a/LEIA-ME.txt
++++ b/LEIA-ME.txt
+@@ -1,3 +1,15 @@
++# Atualização 0.30 — chamadas GS e auditoria do boot
++
++Quatro chamadas gráficas reais adaptadas e ligadas ao novo XEX de diagnóstico.
++383/383 unidades PowerPC, zero conflitos ABI. Battle_Main: 137 → 133 nomes
++pendentes. Incluindo Game_Main, o total é 228: o boot não era coberto antes.
++1.841 comparações de pacotes e testes de leitura RGB/sincronização passaram
++em host com ASan/UBSan e GPU simulada.
++**A luta ainda não roda. Battle_Main e Game_Main seguem fora do XEX.**
++Sem teste em Xbox/emulador ou validação de pixels. Consulte RELATORIO-0.30.md.
++
++--- Histórico ---
++
+ # Atualização 0.29 — recursos completos e heap do motor
+ 
+ ISO completa baixada, com executáveis e três AFS extraídos e validados.
+--- a/PENDENCIAS.md
++++ b/PENDENCIAS.md
+@@ -1,3 +1,15 @@
++# Atualização 0.30 — chamadas GS e auditoria do boot
++
++Quatro chamadas gráficas reais adaptadas e ligadas ao novo XEX de diagnóstico.
++383/383 unidades PowerPC, zero conflitos ABI. Battle_Main: 137 → 133 nomes
++pendentes. Incluindo Game_Main, o total é 228: o boot não era coberto antes.
++1.841 comparações de pacotes e testes de leitura RGB/sincronização passaram
++em host com ASan/UBSan e GPU simulada.
++**A luta ainda não roda. Battle_Main e Game_Main seguem fora do XEX.**
++Sem teste em Xbox/emulador ou validação de pixels. Consulte RELATORIO-0.30.md.
++
++--- Histórico ---
++
+ # Atualização 0.29 — recursos completos e heap do motor
+ 
+ ISO completa baixada, com executáveis e três AFS extraídos e validados.
+--- /dev/null
++++ b/RELATORIO-0.30.md
+@@ -0,0 +1,118 @@
++# 0.30 — chamadas gráficas do motor e auditoria da inicialização
++
++O trabalho desta etapa adapta quatro chamadas reais usadas pelo motor:
++Port_GsMarker, sceGsSyncPath, sceGsSetDefStoreImage e sceGsExecStoreImage.
++Não há luta executável nem validação em Xbox ou emulador.
++
++## Resultado do vínculo PowerPC
++
++| Raízes do diagnóstico | Unidades compiladas | ABI float | Nomes pendentes |
++| --- | ---: | --- | ---: |
++| Battle_Main | 383/383 | Sem conflitos | 133 (antes 137) |
++| Battle_Main + Game_Main | Mesmos objetos reutilizados | Sem conflitos | 228 |
++
++As quatro chamadas acima deixaram a lista de símbolos indefinidos. A auditoria
++achou 30 nomes com referência em código e 103 somente em dados no primeiro
++vínculo. Ao incluir Game_Main, são 125 com referência em código e os mesmos
++103 somente em dados. Isso inclui seções posteriormente descartadas pelo GC;
++não autoriza remover nenhuma tabela. A inicialização acrescenta 95 dependências,
++inclusive criação de áudio ADXT, DMA, leitura de arquivos, MPEG e frontend.
++A contagem de 137 descrevia apenas o primeiro recorte, não o jogo inteiro.
++
++A aritmética do motor foi rebaixada em 294 objetos; a inspeção de instruções
++não encontrou aritmética float nativa nesses objetos. Isso não prova
++rollback determinístico nem comportamento correto do combate em execução.
++O vínculo do combate continua falhando e não produz XEX. A repetição com
++Game_Main reutilizou os mesmos objetos compilados; não houve segunda compilação.
++
++Foi gerado um novo default.xex **de diagnóstico 0.30**. A validação estática
++confirmou as quatro entradas no executável, formato/ABI/hashes e ausência de
++símbolos fortes indefinidos no diagnóstico. Battle_Main e Game_Main não estão
++nele. Isso não significa que os símbolos pendentes do motor foram ignorados:
++o launcher não os chama. Evidências completas em engine/reports/0.30.
++
++## Implementação
++
++Port_GsMarker enfileira o ID do efeito no registro virtual 0x7F pelo produtor
++de pacotes canônicos. Isso preserva a posição do efeito na lista de desenho.
++O teste compara os bytes com o gs_marker.c original compilado separadamente,
++além das comparações dos produtores DMA que já existiam: 1.841 casos.
++O diagnóstico usa a entrada real em vez de escrever esse registro diretamente.
++
++sceGsSyncPath(0,0) submete a captura e espera o fence real de dr_xenos_sync.
++Outros modos/tempos são recusados explicitamente; não há retorno vazio de
++sucesso. Erros do backend e de espera são propagados. O limite da espera
++interna do backend continua sendo 1.000 ms.
++
++O descritor de StoreImage ocupa os 0x70 bytes usados pelo jogo. Seu estado é
++independente por descritor e acessado com memcpy, aceitando arrays desalinhados.
++O perfil implementado é CT24, largura de framebuffer 512, altura 448 e SBW=8,
++como em ScrXfade_Capture/StoreHalf do jogo USA. O endereço do bloco seleciona
++o framebuffer e a linha inicial; x/y/w/h delimitam o recorte.
++
++A execução obtém RGBA do target exato do GS, espera a GPU e copia RGB para
++o destino. Não substitui um target ausente pelo frame atual. Validação,
++alocação e leitura completa ocorrem antes da escrita no destino: argumentos
++inválidos, framebuffer ausente ou timeout deixam seus pixels intactos.
++O chamador continua responsável por reservar w*h*3 bytes no destino.
++Não existe cache entre as duas metades; desempenho ainda precisa ser medido.
++
++## Verificações nesta etapa
++
++O teste de captura compila gs_core.c, gs_draw.c, gs_sony.c, o produtor DMA,
++o backend e o diagnóstico reais. Somente os transportes GPU são simulados.
++Foram verificados dois descritores simultâneos desalinhados, as metades
++superior/inferior, o segundo framebuffer, recortes RGB com canários de memória,
++formato/tamanho inválidos, target ausente e timeout do fence. Também passaram
++as regressões existentes de captura, VU, textura, stencil e consumidores.
++ASan/UBSan foram usados com detect_leaks=0; não há medição de vazamentos.
++
++O teste separado de ambiente Sony verifica serialização dos DBuff e transporte
++GIF. Nesse teste, as rotinas de leitura não chamadas são eliminadas por GC;
++sua execução é coberta pelo teste completo de captura, não por funções falsas.
++
++audit_engine_refs.py inspeciona relocações dos objetos ELF32 big-endian usados
++no vínculo. Separa referências em código das que aparecem apenas em seções de
++dados, omitindo debug. Inclui seções posteriormente descartadas pelo linker;
++não demonstra uso ou desuso em execução e não remove callbacks de tabelas.
++Foi conferido com um objeto PowerPC contendo referências reais em texto,
++dados e debug antes da auditoria do motor.
++
++link_battle.py aceita --root repetível para auditar também Game_Main.
++Battle_Main permanece uma raiz obrigatória do diagnóstico de vínculo.
++Isso não chama nenhuma dessas funções nem substitui a inicialização PS2.
++
++## Limites que continuam impedindo a luta
++
++As tabelas de dados da compilação continuam sem todos os valores originais.
++O carregador tipado ainda precisa do manifesto completo e das relocações.
++Game_Main ainda inicializa serviços PS2 e precisa de adaptação nativa.
++O transporte dos pacotes produzidos pelo combate, IA, colisões, animações e
++apresentação ainda não formam um ciclo executável no Xbox.
++
++Os chamadores originais de StoreImage não verificam todos os retornos;
++o tratamento de erro no fluxo do jogo ainda precisa ser integrado. Disponibilizar
++as entradas SDK não conclui esse fluxo. O diagnóstico verifica os retornos.
++
++Áudio ADXT, RPC/IOP, outros serviços Port_* e callbacks de tabelas continuam
++dependências reais. Não foram criadas funções vazias para satisfazer o linker.
++DATE/FBA/stencil, iluminação, sombras e efeitos não receberam validação de
++pixels em hardware. Saves, modos e online jogável continuam pendentes.
++
++## Reproduzir
++
++Use o upstream 3ca419c7966b11438e2dc3c9a7e1914f102ed545 e o xsdk
++57b02f1e60667e37d22c3aa613d23d2486514ff8, com seu toolchain powerpc-xsdk-elf.
++
++```sh
++python3 engine/tools/test_dma_producer.py UPSTREAM OUT --sanitize
++python3 engine/tools/test_capture.py XSDK OUT --sanitize
++python3 engine/tools/test_gs_sony_native.py OUT --sanitize
++python3 engine/tools/link_battle.py UPSTREAM CC XSDK OUT --float-mode native-ps2 --platform
++python3 engine/tools/audit_engine_refs.py OUT AUDIT_OUT
++python3 engine/tools/link_battle.py UPSTREAM CC XSDK BOOT_OUT --float-mode native-ps2 --platform --root Game_Main
++```
++
++O plugin de aritmética exige headers de desenvolvimento GCC e GMP/MPFR/MPC.
++Não remova os atributos de ABI nem desative a verificação do linker.
++ISO e recursos extraídos continuam externos ao pacote distribuído.
+--- /dev/null
++++ b/TESTE-XBOX-0.30.md
+@@ -0,0 +1,18 @@
++# Diagnóstico 0.30 — roteiro de validação
++
++O default.xex deste projeto é um diagnóstico, não executa Battle_Main.
++Não há confirmação de execução desta versão em Xbox ou emulador.
++
++No console, abra o diagnóstico gráfico de captura original GS e guarde
++`default.log` após sair. O log deve identificar a versão 0.30 e mostrar
++`native Port_Gs ... DBuff clear probe rc=0`. Esse probe agora também espera
++o fence da GPU e lê um pixel RGB do target solicitado. O marcador de efeito
++atravessa o produtor de pacotes real; o desenho continua sintético.
++
++Um rc diferente de zero indica erro; não é autorização para ignorar a falha.
++A confirmação de rc=0 ainda não comprova pixels corretos. Registre a imagem
++exibida, a revisão do console, o dashboard e o resultado de abrir, desenhar,
++sair e repetir. DATE/FBA/stencil exigem comparação de imagens de referência.
++
++Os testes de host em engine/reports/0.30 substituem as chamadas GPU por mocks.
++Eles verificam contratos e memória, não execução de shaders nem uma luta.
+--- a/engine/README.md
++++ b/engine/README.md
+@@ -1,3 +1,15 @@
++# Atualização 0.30 — chamadas GS e auditoria do boot
++
++Quatro chamadas gráficas reais adaptadas e ligadas ao novo XEX de diagnóstico.
++383/383 unidades PowerPC, zero conflitos ABI. Battle_Main: 137 → 133 nomes
++pendentes. Incluindo Game_Main, o total é 228: o boot não era coberto antes.
++1.841 comparações de pacotes e testes de leitura RGB/sincronização passaram
++em host com ASan/UBSan e GPU simulada.
++**A luta ainda não roda. Battle_Main e Game_Main seguem fora do XEX.**
++Sem teste em Xbox/emulador ou validação de pixels. Consulte RELATORIO-0.30.md.
++
++--- Histórico ---
++
+ # Atualização 0.29 — recursos completos e heap do motor
+ 
+ ISO completa baixada, com executáveis e três AFS extraídos e validados.
+--- a/engine/capture/port/src/gs/gs_draw.c
++++ b/engine/capture/port/src/gs/gs_draw.c
+@@ -1749,6 +1749,14 @@
+ 
+ /* The picture of the frame buffer at `fbp` as the GS has it, 512 x 448 RGBA (the game reads the shown frame back
+    for its cross-fade: Gs_StoreImage in gs_core.c). The buffer asked for, or else the frame's own. */
++/* Native readback must not silently substitute the currently displayed frame. */
++int GsDraw_XenosReadFrameExact(uint32_t fbp, uint8_t *rgba) {
++    int t = GsDraw_TargetGet(fbp, 0);
++    if (!rgba || sBackend == NULL || sBackend->targetRead == NULL ||
++        t < 0 || !gsTargets[t].cleared) return 0;
++    return sBackend->targetRead(t, rgba);
++}
++
+ int GsGpu_ReadFrame(uint32_t fbp, uint8_t *rgba) {
+     int t = GsDraw_TargetGet(fbp, 0);
+     if (t < 0 || !gsTargets[t].cleared) {
+--- a/engine/capture/port/src/gs/gs_draw.h
++++ b/engine/capture/port/src/gs/gs_draw.h
+@@ -178,3 +178,7 @@
+ int GsDraw_XenosClose(void);
+ #endif
+ #endif
++
++#ifdef DR_XBOX360
++int GsDraw_XenosReadFrameExact(uint32_t fbp,uint8_t *rgba);
++#endif
+--- a/engine/capture/port/src/gs/gs_sony.c
++++ b/engine/capture/port/src/gs/gs_sony.c
+@@ -11,6 +11,10 @@
+ #include "../port_addr.h"
+ #ifdef DR_XBOX360
+ #include "dr_gs_native.h"
++#include "dr_gs_sdk.h"
++#include "dr_gs_backend.h"
++#include "gs_draw.h"
++#include <stdlib.h>
+ #endif
+ 
+ extern void Port_GsGifChannel(uint32_t addr, uint32_t qwc, int chain);
+@@ -105,3 +109,46 @@
+     gGsMainFbp = (int)(((id & 1) ? db->draw1.frame.v : db->draw0.frame.v) & 0x1FF);
+     return sceGsPutDrawEnv((id & 1) ? db->giftag1 : db->giftag0);
+ }
++
++#ifdef DR_XBOX360
++/* A descriptor belongs to its caller; use memcpy for the game's byte arrays. */
++typedef struct {
++    uint32_t magic,version;
++    int32_t bp,bw,psm,x,y,w,h;
++} NativeStore;
++static int valid_store(const NativeStore *s) {
++    return s->magic==0x58534753 && s->version==1 && s->bp>=0 && s->bp<0x1c00 &&
++        !(s->bp&7) && s->bw==8 && s->psm==1 && s->x>=0 && s->y>=0 &&
++        s->w>0 && s->h>0 && s->w<=512 && s->h<=448 &&
++        s->x<=512-s->w && (s->bp%0xe00)/8+s->y<=448-s->h;
++}
++int32_t sceGsSyncPath(int32_t mode,uint16_t timeout) {
++    if(mode || timeout) return DR_GS_SDK_ARGUMENT;
++    int e=GsDraw_XenosSubmit();return e?e:dr_gs_backend_sync();
++}
++int32_t sceGsSetDefStoreImage(void *p,int16_t bp,int16_t bw,int16_t psm,
++                            int16_t x,int16_t y,int16_t w,int16_t h) {
++    if(!p) return DR_GS_SDK_ARGUMENT;
++    NativeStore s={0x58534753,1,bp,bw,psm,x,y,w,h};
++    memset(p,0,0x70);
++    if(!valid_store(&s)) return DR_GS_SDK_ARGUMENT;
++    memcpy(p,&s,sizeof(s));return 0;
++}
++int32_t sceGsExecStoreImage(void *p,void *dst) {
++    if(!p || !dst) return DR_GS_SDK_ARGUMENT;
++    NativeStore s;memcpy(&s,p,sizeof(s));
++    if(!valid_store(&s)) return DR_GS_SDK_ARGUMENT;
++    uint8_t *rgba=malloc(512*448*4);
++    if(!rgba) return DR_GS_SDK_MEMORY;
++    int e=sceGsSyncPath(0,0);
++    if(!e && !GsDraw_XenosReadFrameExact((uint32_t)(s.bp/0xe00)*0x70,rgba)) e=DR_GS_SDK_READ;
++    if(!e) {
++        uint8_t *out=dst;
++        for(int y=0;y<s.h;y++) {
++            const uint8_t *row=rgba+(((s.bp%0xe00)/8+s.y+y)*512+s.x)*4;
++            for(int x=0;x<s.w;x++) {memcpy(out,row+x*4,3);out+=3;}
++        }
++    }
++    free(rgba);return e;
++}
++#endif
+--- a/engine/graphics/dr_dma_producer.c
++++ b/engine/graphics/dr_dma_producer.c
+@@ -362,3 +362,7 @@
+     le32(tag,0x20000000);le32(tag+4,target);le32(tag+8,0);le32(tag+12,0);
+     for(unsigned i=0;i<4;i++)ret[4+i]=(unsigned char)(resume>>((big?3-i:i)*8));
+ }
++
++/* Effect IDs travel in the ordered GIF stream, as in upstream gs_marker.c. */
++void Port_GsMarker(int effect)
++{ (void)dr_dma_write_ad(0x7f,(uint32_t)effect); }
+--- a/engine/graphics/dr_dma_producer.h
++++ b/engine/graphics/dr_dma_producer.h
+@@ -49,6 +49,7 @@
+ int dr_dma_reject_packet(void); /* sticky invalid-packet error */
+ int dr_dma_pending_regions(void); /* regions awaiting conversion */
+ /* Original signatures retained only for the producers adapted here. */
++void Port_GsMarker(int effect);
+ void Dma_Flush(void);
+ void Dma_ResetBuffers(void); /* discards queued bytes, preserves a sticky error */
+ int32_t Dma_GetBufSize(void);
+--- a/engine/graphics/dr_gs_backend.c
++++ b/engine/graphics/dr_gs_backend.c
+@@ -135,6 +135,12 @@
+     attached=0;
+     state.opened=0;return 0;
+ }
++int dr_gs_backend_sync(void)
++{
++    if(state.error) return state.error;
++    if(!state.opened) return DR_XENOS_INVALID;
++    int e=dr_xenos_sync();if(e) fail(e,UINT32_MAX);return e;
++}
+ static int target_read(int id,uint8_t *rgba)
+ {
+     if(!rgba || id<0 || !dr_targets_ready((unsigned)id)) return 0;
+--- a/engine/graphics/dr_gs_backend.h
++++ b/engine/graphics/dr_gs_backend.h
+@@ -7,6 +7,7 @@
+ extern GsBackend sXenosBackend;
+ int dr_gs_backend_error(uint32_t *failed_draw);
+ int dr_gs_backend_close(void);
++int dr_gs_backend_sync(void);
+ /* Borrow the application's GPU/present lifecycle; frameEnd draws without presenting. */
+ int dr_gs_backend_attach(uint32_t width,uint32_t height);
+ void dr_gs_backend_reject(void);
+--- /dev/null
++++ b/engine/graphics/dr_gs_sdk.h
+@@ -0,0 +1,12 @@
++/* SPDX-License-Identifier: AGPL-3.0-or-later */
++#ifndef DR_GS_SDK_H
++#define DR_GS_SDK_H
++#include <stdint.h>
++enum { DR_GS_SDK_ARGUMENT=-530, DR_GS_SDK_READ=-531, DR_GS_SDK_MEMORY=-532 };
++/* Only the game's blocking SyncPath(0,0), CT24, 512x448 profile is supported.
++ * Store descriptors occupy the original 0x70 bytes. Destination capacity is
++ * the caller's responsibility: w*h*3 bytes. Errors never write its pixels. */
++int32_t sceGsSyncPath(int32_t mode,uint16_t timeout);
++int32_t sceGsSetDefStoreImage(void *,int16_t,int16_t,int16_t,int16_t,int16_t,int16_t,int16_t);
++int32_t sceGsExecStoreImage(void *,void *);
++#endif
+--- a/engine/tests/test_capture.c
++++ b/engine/tests/test_capture.c
+@@ -4,6 +4,9 @@
+ #include "test_gs_backend.c"
+ #include "gs_internal.h"
+ #include "dr_capture_demo.h"
++#include "dr_gs_sdk.h"
++extern int sceGsSetDefDBuff(void *,int,int,int,int,int,int);
++extern int sceGsSwapDBuff(void *,int);
+ static void le64(uint8_t *p,uint64_t v) {for(unsigned i=0;i<8;i++)p[i]=(uint8_t)(v>>(8*i));}
+ static void upload(unsigned psm,unsigned bp,unsigned bw,unsigned width,unsigned height,const uint8_t *pixels,unsigned count)
+ {
+@@ -12,6 +15,43 @@
+     uint8_t bytes[81]={0};unsigned qwc=(count+15)/16;
+     assert(qwc<=4);le64(bytes+1,qwc|(2ull<<58));le64(bytes+9,0);
+     memcpy(bytes+17,pixels,count);Gs_Gif(bytes+1,1+qwc);
++}
++static void check_rgb(const uint8_t *out,unsigned row,unsigned x,unsigned w,unsigned h,uint32_t address) {
++    for(unsigned y=0;y<h;y++) for(unsigned k=0;k<w;k++) {
++        assert(*out++==(uint8_t)(x+k+(address>>12)));
++        assert(*out++==(uint8_t)(row+y));assert(*out++==(uint8_t)((row+y)>>8));
++    }
++}
++static void sdk_store_test(void) {
++    unsigned char a[0x71],b[0x71],out[56];
++    assert(sceGsSyncPath(1,0)==DR_GS_SDK_ARGUMENT);
++    assert(sceGsSyncPath(0,1)==DR_GS_SDK_ARGUMENT);
++    assert(!sceGsSyncPath(0,0));download_pattern=1;
++    assert(!sceGsSetDefStoreImage(a+1,0,8,1,3,5,4,2));
++    assert(!sceGsSetDefStoreImage(b+1,0x700,8,1,3,5,4,2));
++    memset(out,0xab,sizeof(out));assert(!sceGsExecStoreImage(a+1,out+16));
++    check_rgb(out+16,5,3,4,2,dr_targets_texture(0,0)->address);
++    for(unsigned i=0;i<16;i++)assert(out[i]==0xab && out[40+i]==0xab);
++    assert(!sceGsExecStoreImage(b+1,out+16));
++    check_rgb(out+16,229,3,4,2,dr_targets_texture(0,0)->address);
++    assert(!sceGsSetDefStoreImage(a+1,0xe00,8,1,0,0,4,2));
++    memset(out,0xab,sizeof(out));assert(sceGsExecStoreImage(a+1,out+16)==DR_GS_SDK_READ);
++    for(unsigned i=0;i<sizeof(out);i++)assert(out[i]==0xab);
++    uint64_t db[0x260/8];
++    assert(!sceGsSetDefDBuff(db,0,512,448,1,0x30,1));
++    assert(!sceGsSwapDBuff(db,1) && !sceGsSyncPath(0,0));
++    assert(!sceGsExecStoreImage(a+1,out+16));
++    int target=GsDraw_TargetGet(0x70,0);assert(target>=0);
++    check_rgb(out+16,0,0,4,2,dr_targets_texture((unsigned)target,0)->address);
++    assert(sceGsSetDefStoreImage(a+1,0,8,1,0,0,513,2)==DR_GS_SDK_ARGUMENT);
++    memset(out,0xab,sizeof(out));assert(sceGsExecStoreImage(a+1,out+16)==DR_GS_SDK_ARGUMENT);
++    for(unsigned i=0;i<sizeof(out);i++)assert(out[i]==0xab);
++    assert(sceGsSetDefStoreImage(a+1,0,8,0,0,0,4,2)==DR_GS_SDK_ARGUMENT);
++    assert(sceGsSetDefStoreImage(a+1,0x700,8,1,0,224,4,1)==DR_GS_SDK_ARGUMENT);
++    assert(sceGsSetDefStoreImage(NULL,0,8,1,0,0,4,2)==DR_GS_SDK_ARGUMENT);
++    download_pattern=0;gGsMainFbp=0;
++    Gs_RegWrite(0x4c,8ull<<16);Gs_RegWrite(0x4e,1ull<<32|64);
++    Gs_RegWrite(0x18,0);Gs_RegWrite(0x40,511ull<<16|447ull<<48);
+ }
+ int main(void)
+ {
+@@ -31,6 +71,7 @@
+         assert(outline_draws==outline_before+1 && clut_draws==clut_before+2);
+         assert(outline_aux_address==clut_aux_address && outline_aux_address!=dr_targets_texture(0,1)->address);
+         assert(!gsDrawCount && !gsVertCount && !presents && !gpu_opens && !present_opens);
++        sdk_store_test();
+         Gs_RegWrite(0x4e,1ull<<32|64);Gs_RegWrite(0x47,1ull<<16|1ull<<17);
+         const uint8_t rgba[16]={0xff,0x8a,0x1f,0x80,0x6f,0xd3,0xff,0x40,1,2,3,4,5,6,7,8};
+         upload(0,512,1,2,2,rgba,16);
+@@ -121,7 +162,14 @@
+         assert(dr_capture_demo_close()==0);
+         assert(!gsDraws && !gsVerts && !gsTexCount && !gsTargetCount);
+     }
++    assert(dr_capture_demo_open(1280,720)==0 && !dr_capture_demo_draw());
++    unsigned char descriptor[0x70],output[3]={1,2,3};
++    assert(!sceGsSetDefStoreImage(descriptor,0,8,1,0,0,1,1));
++    wait_result=STATUS_IO_TIMEOUT;
++    assert(sceGsExecStoreImage(descriptor,output)!=0 && output[0]==1 && output[1]==2 && output[2]==3);
++    wait_result=STATUS_SUCCESS;assert(!dr_capture_demo_close());
++    assert(sceGsSyncPath(0,0)!=0);
+     for(unsigned i=0;i<4096;i++) assert(!images[i].live);
+     assert(!gpu_opens && !gpu_closes && !present_opens && !present_closes && !presents);
+-    puts("PASS: shared native Port_Gs VIF/MPG/UNPACK/MSCAL/XGKICK, GIF and DBuff clear probe; full gs_core/gs_draw/GsBackend compiled; unaligned LE GIF, CT32/CT16/T8/T4 uploads, original capture draw/replay, unmerged self-target consumers and raw-alpha source binding, canonical RGBA, borrowed lifecycle, nine open/close cycles, original outline/CLUT consumers, frozen IDs and wrong-owner preflight, three native VU programs, indexed preflight, shadow-run stencil clear, filter/clamp capture states, DATE/FBA marker capture; unknown VU rejected; GPU APIs MOCKED, no hardware pixels");
++    puts("PASS: shared native Port_Gs VIF/MPG/UNPACK/MSCAL/XGKICK, GIF and DBuff clear probe; full gs_core/gs_draw/GsBackend compiled; unaligned LE GIF, CT32/CT16/T8/T4 uploads, original capture draw/replay, unmerged self-target consumers and raw-alpha source binding, canonical RGBA, borrowed lifecycle, nine open/close cycles, original outline/CLUT consumers, frozen IDs and wrong-owner preflight, three native VU programs, indexed preflight, shadow-run stencil clear, filter/clamp capture states, DATE/FBA marker capture; unknown VU rejected; GS sync and independent RGB readback descriptors, exact targets and crop rows, untouched output on failure, fence timeout; GPU APIs MOCKED, no hardware pixels");
+ }
+--- a/engine/tests/test_dma_producer.c
++++ b/engine/tests/test_dma_producer.c
+@@ -24,6 +24,7 @@
+ extern void Ref_Dma_AddColClamp(unsigned long long);
+ extern void Ref_Dma_AddAlpha(unsigned long long);
+ extern void Ref_Dma_AddFillRect(int32_t,int32_t,int32_t,int32_t,uint32_t);
++extern void Ref_Port_GsMarker(int);
+ static DrGsStream stream;
+ static unsigned submits,gif_qwc;
+ static uint32_t submitted_address;
+@@ -66,6 +67,7 @@
+     Ref_gDmaBuf[0]=(uint32_t)(uintptr_t)reference;Ref_gDmaBufEnd[0]=Ref_gDmaBuf[0]+0x100000;
+     Ref_gDmaBufSize=0x100000;open_producer();
+     PAIR(AddTexFlush);
++    for(unsigned i=0;i<512;i++) {int effect=(int)random_word();reset();Port_GsMarker(effect);Ref_Port_GsMarker(effect);compare();}
+     for(unsigned i=0;i<128;i++) {
+         uint32_t r=random_word(),t=random_word();unsigned long long wide=(unsigned long long)r<<32|t;
+         PAIR(AddFrame,r%512,t%64,(int32_t)(r^t));
+@@ -117,6 +119,6 @@
+     assert(queued.size==32 && !memcmp((const unsigned char *)queued.bytes+16,expected,16));
+     assert(dr_dma_append_canonical(canonical,3)==DR_DMA_INVALID);
+     assert(!dr_dma_producer_close());assert(!munmap(reference,0x100000));
+-    assert(comparisons==1329);
++    assert(comparisons==1841);
+     printf("PASS: %u byte comparisons with original upstream DMA producers; canonical serialization, actual stream submission, FINISH/END, double buffers, bounds/capacity/sticky errors; no battle or GPU execution\n",comparisons);
+ }
+--- a/engine/tests/test_gs_backend.c
++++ b/engine/tests/test_gs_backend.c
+@@ -27,8 +27,13 @@
+ {assert(!tile_recording && target_ready && address==0x9000000 && width==1280 && height==720 && !clear);target_ready=0;}
+ void xsdk_present_end(void) {presents++;}
+ void xsdk_present_close(void) {present_closes++;}
++static int download_pattern;
+ void xsdk_texture_download_rows(const XsdkTexture *t,uint32_t level,uint32_t first,uint32_t count,void *data,uint32_t row_bytes)
+-{assert(t && !level && first<448 && count==1 && row_bytes==4096);memset(data,0x5a,row_bytes);}
++{assert(t && !level && first<448 && count==1 && row_bytes==4096);if(!download_pattern) memset(data,0x5a,row_bytes);
++ else for(unsigned x=0;x<row_bytes/4;x++) {
++     uint8_t *p=(uint8_t *)data+4*x;
++     p[0]=(uint8_t)(x+(t->address>>12));p[1]=(uint8_t)first;p[2]=(uint8_t)(first>>8);p[3]=0x80;
++ }}
+ static void *pixels(unsigned bytes) {void *p=malloc(bytes);assert(p);memset(p,128,bytes);return p;}
+ #ifndef DR_BACKEND_TEST_MAIN
+ #define DR_BACKEND_TEST_MAIN main
+--- /dev/null
++++ b/engine/tools/audit_engine_refs.py
+@@ -0,0 +1,57 @@
++#!/usr/bin/env python3
++# SPDX-License-Identifier: AGPL-3.0-or-later
++"""Classify unresolved symbol relocations in real allocated ELF32-BE sections.
++
++Usage: audit_engine_refs.py BUILD_DIR OUT
++This does not remove table references. Data-only callbacks may be essential.
++Objects include sections later discarded by the linker; this is a source
++diagnostic, not proof that a reference executes or is unreachable at runtime.
++"""
++import argparse,json,struct
++from pathlib import Path
++
++def relocations(path):
++    data=path.read_bytes()
++    if data[:6]!=b'\x7fELF\x01\x02':raise ValueError('expected ELF32 big endian: '+str(path))
++    e=struct.unpack_from('>16sHHIIIIIHHHHHH',data)
++    off,stride,count,names=e[6],e[11],e[12],e[13]
++    sections=[struct.unpack_from('>10I',data,off+i*stride) for i in range(count)]
++    def blob(s):return data[s[4]:s[4]+s[5]]
++    def string(b,o):return b[o:b.index(0,o)].decode('utf-8',errors='replace')
++    secnames=blob(sections[names])
++    for section in sections:
++        if section[1] not in (4,9):continue
++        target=sections[section[7]]
++        if not target[2]&2:continue # SHF_ALLOC; omit debug relocations.
++        table=sections[section[6]];strings=blob(sections[table[6]])
++        symbols=blob(table);records=blob(section)
++        size=section[9] or (12 if section[1]==4 else 8)
++        for start in range(0,len(records),size):
++            offset,info=struct.unpack_from('>II',records,start)
++            sym=struct.unpack_from('>IIIBBH',symbols,(info>>8)*(table[9] or 16))
++            if sym[5]!=0:continue # Only external undefined references.
++            yield string(strings,sym[0]),{'object':str(path),'section':string(secnames,target[0]),
++                'offset':offset,'relocation':info&255,'code':bool(target[2]&4)}
++
++def main():
++    p=argparse.ArgumentParser(description=__doc__)
++    p.add_argument('build',type=Path);p.add_argument('output',type=Path);a=p.parse_args()
++    report=json.loads((a.build/'battle-integration.json').read_text())
++    args=json.loads((a.build/'link-arguments.json').read_text())
++    paths=list(dict.fromkeys(Path(s) for s in args if s.endswith('.o')))
++    refs={s:[] for s in report['unresolved']}
++    for path in paths:
++        for name,row in relocations(path):
++            if name in refs:refs[name].append(row)
++    groups={s:('with_code_reference' if any(r['code'] for r in rows) else
++        'data_only' if rows else 'not_found_in_objects') for s,rows in refs.items()}
++    result={'unresolved_count':len(refs),'object_count':len(paths),
++        'counts':{s:list(groups.values()).count(s) for s in
++            ['with_code_reference','data_only','not_found_in_objects']},
++        'references':{s:{'classification':groups[s],'sites':rows} for s,rows in refs.items()},
++        'scope':'allocated ELF32-BE sections, including sections later GC-discarded; no runtime reachability claim',
++        'tables_removed':False,'battle_executed':False}
++    a.output.mkdir(parents=True,exist_ok=True)
++    (a.output/'references.json').write_text(json.dumps(result,indent=2)+'\n')
++    print(json.dumps({k:v for k,v in result.items() if k!='references'},indent=2))
++if __name__=='__main__':main()
+--- a/engine/tools/link_battle.py
++++ b/engine/tools/link_battle.py
+@@ -17,12 +17,15 @@
+     p.add_argument('upstream',type=Path);p.add_argument('compiler',type=Path)
+     p.add_argument('xsdk',type=Path);p.add_argument('output',type=Path)
+     p.add_argument('--jobs',type=int,default=4)
++    p.add_argument('--root',action='append',default=[],help='additional diagnostic roots, e.g. Game_Main; never starts the game')
+     p.add_argument('--float-mode',choices=['legacy-soft','native-ps2'],default='legacy-soft')
+     p.add_argument('--host-cxx',default='g++')
+     p.add_argument('--plugin-include',action='append',default=[])
+     p.add_argument('--platform',action='store_true')
+     p.add_argument('--host-audit',action='store_true',help='compile C only on host; never link or claim PPC validation')
+     a=p.parse_args();repo=a.upstream.resolve();cc=a.compiler.resolve();sdk=a.xsdk.resolve();out=a.output.resolve()
++    roots=list(dict.fromkeys(['Battle_Main',*a.root]))
++    if any(not re.fullmatch(r'[A-Za-z_][A-Za-z_0-9]*',r) for r in roots):p.error('invalid root symbol')
+     project=Path(__file__).resolve().parents[2];out.mkdir(parents=True,exist_ok=True)
+     import float_build
+     plugin=float_build.build_plugin(cc,project,out,a.host_cxx,a.plugin_include) if a.float_mode=='native-ps2' else None
+@@ -132,7 +135,7 @@
+             fields=line.split()
+             if len(fields)==3 and fields[1].isupper():definitions.setdefault(fields[2],[]).append(path.name)
+     (out/'definitions.json').write_text(json.dumps(definitions,indent=2)+'\n')
+-    report={'upstream':PIN,'compiled':len(compiled),'total':len(rows),'files':rows,
++    report={'diagnostic_roots':roots,'upstream':PIN,'compiled':len(compiled),'total':len(rows),'files':rows,
+             'float_mode':a.float_mode,'platform_04_sources':a.platform,
+             'arithmetic_audit':arithmetic_audit,
+             'Battle_Main_C_object_compiled':'Battle_Main' in definitions,
+@@ -154,7 +157,7 @@
+     if any(not f.exists() for f in native):raise SystemExit('build the native launcher first')
+     title=out/'battle-link.elf';title.unlink(missing_ok=True)
+     cmd=[str(cc),'-static','-nostdlib','-T',str(sdk/'src/xsdk.ld'),
+-         '-Wl,--gc-sections,--undefined=Battle_Main,-Map,'+str(out/'battle-link.map'),
++         '-Wl,--gc-sections,'+','.join('--undefined='+r for r in roots)+',-Map,'+str(out/'battle-link.map'),
+          '-o',str(title),*map(str,native),*map(str,compiled),'-Wl,--start-group',
+          str(sdk/'build/libxsdk.a'),'-lc','-lm','-lgcc','-Wl,--end-group']
+     (out/'link-arguments.json').write_text(json.dumps(cmd,indent=2)+'\n')
+@@ -168,7 +171,7 @@
+                    'safe_to_execute':False,'native_title_modified':False,
+                    'all_sources_compiled':len(compiled)==len(rows),
+                    'unresolved_count':len(unresolved),'unresolved':unresolved,
+-                   'scope':'reachable sections with Battle_Main forced as a link root, upstream table shapes without values; existing launcher objects also present; not native boot or gameplay'})
++                   'scope':'reachable sections with explicit diagnostic_roots forced as link roots, upstream table shapes without values; existing launcher objects also present; not native boot or gameplay'})
+     (out/'battle-integration.json').write_text(json.dumps(report,indent=2)+'\n')
+     print(json.dumps({k:v for k,v in report.items() if k not in ['files','unresolved']},indent=2),flush=True)
+     for row in rows:
+--- a/engine/tools/test_capture.py
++++ b/engine/tools/test_capture.py
+@@ -17,4 +17,5 @@
+ subprocess.run(cmd,check=True)
+ r=subprocess.run([str(out/'test-capture')],capture_output=True,text=True)
+ (out/'capture.txt').write_text(r.stdout+r.stderr);print(r.stdout+r.stderr,end='');r.check_returncode()
+-(out/'capture.json').write_text(json.dumps({'result':'PASS','capture':'bounded DMA/VIF DIRECT + whole gs_draw.c and gs_core.c, reachable GS sections linked','GPU_execution':False,'battle_loop':False,'sanitizers':'ASan/UBSan' if '--sanitize' in sys.argv else 'off','all_original_combat_packet_producers_adapted':False,'adapted_producer_subset':'register/rect helpers; diagnostic uses Frame/Zbuf/Scissor/XYOffset/AD and Dma_Flush/ResetBuffers','native_engine_probe':'Port_GsVif1Chain -> MPG/UNPACK/MSCAL/XGKICK -> actual GIF ALPHA state; Port_GsGifChannel; SetDefDBuff/SwapDBuff clear; GPU mocked','scope':'bounded canonical-LE DMA/VIF DIRECT -> GIF/register/VRAM -> real capture -> backend -> mock XSDK calls; lifecycle, endian boundaries, eight original filter/clamp selectors, DATE/FBA/snapshot descriptors, native VU shader selection/uniform uploads, shadow stencil reset, original captured outline/CLUT passes, unmerged self-target consumer resolves and raw-alpha binding, frozen effect IDs, rejected missing/wrong-owner snapshots and invalid CLUT/source before draw'},indent=2)+'\n')
++(out/'capture.json').write_text(json.dumps({'result':'PASS','capture':'bounded DMA/VIF DIRECT + whole gs_draw.c and gs_core.c, reachable GS sections linked','GPU_execution':False,'battle_loop':False,'sanitizers':'ASan/UBSan' if '--sanitize' in sys.argv else 'off','all_original_combat_packet_producers_adapted':False,'adapted_producer_subset':'register/rect helpers; diagnostic uses Frame/Zbuf/Scissor/XYOffset/AD and Dma_Flush/ResetBuffers','native_GS_readback_test':'independent unaligned descriptors, two framebuffer halves and second target, exact target rejection, RGB crop rows and canaries, invalid descriptor/format/bounds, fence timeout; untouched output on failure; GPU mocked',
++    'native_engine_probe':'Port_GsVif1Chain -> MPG/UNPACK/MSCAL/XGKICK -> actual GIF ALPHA state; Port_GsGifChannel; SetDefDBuff/SwapDBuff clear; GPU mocked','scope':'bounded canonical-LE DMA/VIF DIRECT -> GIF/register/VRAM -> real capture -> backend -> mock XSDK calls; lifecycle, endian boundaries, eight original filter/clamp selectors, DATE/FBA/snapshot descriptors, native VU shader selection/uniform uploads, shadow stencil reset, original captured outline/CLUT passes, unmerged self-target consumer resolves and raw-alpha binding, frozen effect IDs, rejected missing/wrong-owner snapshots and invalid CLUT/source before draw'},indent=2)+'\n')
+--- a/engine/tools/test_dma_producer.py
++++ b/engine/tools/test_dma_producer.py
+@@ -9,6 +9,7 @@
+ a=p.parse_args();repo=a.upstream.resolve();out=a.output.resolve();out.mkdir(parents=True,exist_ok=True)
+ engine=Path(__file__).resolve().parents[1];source=repo/'src/sys/dma.c'
+ assert hashlib.sha256(source.read_bytes()).hexdigest()=='b7d254aa36fd34762d217b65cf2aa4437ef62ac40d4eba13ca80451f4b8094f3','reference must be pinned upstream dma.c'
++assert hashlib.sha256((repo/'port/src/gs_marker.c').read_bytes()).hexdigest()=='b4a760dc8cf9a93c03c8755a31b935e8b2fa0ab0d91a629282a12ec5dfb6a702','reference must be pinned upstream gs_marker.c'
+ text=source.read_text();names=sorted(set(re.findall(r'\b(?:Dma_\w+|gDma\w+)\b',text)))
+ cc=['gcc','-std=gnu17','-O1','-g','-ffunction-sections','-fdata-sections','-fno-pie']
+ if a.sanitize:cc+=['-fsanitize=address,undefined','-fno-omit-frame-pointer']
+@@ -17,13 +18,15 @@
+ reference+=['-D'+n+'=Ref_'+n for n in names]
+ r=subprocess.run(reference+['-c',str(source),'-o',str(out/'reference.o')],capture_output=True,text=True)
+ (out/'reference-compile.txt').write_text(r.stdout+r.stderr);r.check_returncode()
++marker=cc+['-DDma_AddData=Ref_Dma_AddData','-DPort_GsMarker=Ref_Port_GsMarker','-c',str(repo/'port/src/gs_marker.c'),'-o',str(out/'marker-reference.o')]
++subprocess.run(marker,check=True)
+ sources=[engine/'tests/test_dma_producer.c',engine/'graphics/dr_dma_producer.c',engine/'graphics/dr_gs_stream.c',engine/'vu/dr_vu1.c']
+ cmd=cc+['-Wall','-Wextra','-Werror','-ffp-contract=off','-I'+str(engine/'graphics'),'-I'+str(engine/'vu')]
+-cmd+=list(map(str,sources))+[str(out/'reference.o'),'-no-pie','-Wl,--gc-sections','-lm','-o',str(out/'test-producer')]
++cmd+=list(map(str,sources))+[str(out/'reference.o'),str(out/'marker-reference.o'),'-no-pie','-Wl,--gc-sections','-lm','-o',str(out/'test-producer')]
+ subprocess.run(cmd,check=True)
+ r=subprocess.run([str(out/'test-producer')],capture_output=True,text=True)
+ (out/'producer.txt').write_text(r.stdout+r.stderr);print(r.stdout+r.stderr,end='');r.check_returncode()
+ (out/'producer.json').write_text(json.dumps({'result':'PASS','upstream_source_sha256':hashlib.sha256(source.read_bytes()).hexdigest(),
+-    'reference':'actual separately compiled upstream src/sys/dma.c producer functions, renamed; no PS2 MMIO executed',
+-    'byte_comparisons':1329,'sanitizers':'ASan/UBSan' if a.sanitize else 'off','GPU_execution':False,
++    'reference':'actual separately compiled upstream src/sys/dma.c and port/src/gs_marker.c producer functions, renamed; no PS2 MMIO executed',
++    'byte_comparisons':1841,'sanitizers':'ASan/UBSan' if a.sanitize else 'off','GPU_execution':False,
+     'battle_executed':False,'all_engine_packet_producers_adapted':False},indent=2)+'\n')
+--- a/engine/tools/test_gs_sony_native.py
++++ b/engine/tools/test_gs_sony_native.py
+@@ -5,7 +5,7 @@
+ import argparse,subprocess
+ p=argparse.ArgumentParser(description=__doc__);p.add_argument('output',type=Path);p.add_argument('--sanitize',action='store_true')
+ a=p.parse_args();out=a.output.resolve();out.mkdir(parents=True,exist_ok=True);e=Path(__file__).resolve().parents[1]
+-cmd=['gcc','-std=gnu17','-DDR_XBOX360','-O1','-g','-Wall','-Wextra','-Werror','-ffp-contract=off','-I'+str(e/'graphics'),'-I'+str(e/'vu')]
++cmd=['gcc','-std=gnu17','-DDR_XBOX360','-ffunction-sections','-fdata-sections','-Wl,--gc-sections','-I'+str(e/'capture/port/src/gs'),'-O1','-g','-Wall','-Wextra','-Werror','-ffp-contract=off','-I'+str(e/'graphics'),'-I'+str(e/'vu')]
+ if a.sanitize:cmd+=['-fsanitize=address,undefined','-fno-omit-frame-pointer']
+ # Exercise the exact native SDK entry point without a GPU/backend in this transport test.
+ shim=out/'shim.c';shim.write_text('#include "dr_gs_native.h"\nvoid Port_GsGifChannel(uint32_t a,uint32_t n,int c){dr_gs_native_gif(a,n,c);}\n')
+--- a/engine/upstream/gs_draw.h
++++ b/engine/upstream/gs_draw.h
+@@ -178,3 +178,7 @@
+ int GsDraw_XenosClose(void);
+ #endif
+ #endif
++
++#ifdef DR_XBOX360
++int GsDraw_XenosReadFrameExact(uint32_t fbp,uint8_t *rgba);
++#endif
+--- a/src/dr_capture_demo.c
++++ b/src/dr_capture_demo.c
+@@ -6,6 +6,7 @@
+ #include "dr_gs_backend.h"
+ #include "dr_gs_native.h"
+ #include "dr_dma_producer.h"
++#include "dr_gs_sdk.h"
+ #include "gs_internal.h"
+ #include "xsdk/log.h"
+ #include <string.h>
+@@ -63,7 +64,12 @@
+         e=sceGsSetDefDBuff(db,0,512,448,3,0x31,1);
+         if(!e)e=sceGsSwapDBuff(db,0);
+         if(!e && ((gGs.frame[0]&511)!=0 || gGs.xyoffset[0]!=(0x720000007000ull)))e=DR_STREAM_COMMAND;
+-        if(!e)e=GsDraw_XenosSubmit();
++        if(!e)e=sceGsSyncPath(0,0);
++        if(!e) {
++            uint8_t store[0x70],pixel[3];
++            e=sceGsSetDefStoreImage(store,0,8,1,0,0,1,1);
++            if(!e)e=sceGsExecStoreImage(store,pixel);
++        }
+     }
+     xsdk_log_write("native Port_Gs VIF/MPG/UNPACK/MSCAL/XGKICK, GIF and DBuff clear probe rc=%d",e);
+     return e;
+@@ -100,7 +106,7 @@
+     reg(6,2048ull|1ull<<14|0x1bull<<20|512ull<<37);
+     xyz(0,0,0);xyz(512,448,0);
+     // Outline must continue sampling the FROZEN IDs, after live aux changed.
+-    reg(0x7f,1);
++    if(!stream_error) {Port_GsMarker(1);Dma_Flush();stream_error=dr_dma_producer_error();}
+     // The fog-depth variant of the same original consumer.
+     reg(0x4c,64ull|8ull<<16);xyz(0,0,0);xyz(512,448,0);
+     reg(0x4c,8ull<<16|0x00ffffffull<<32);xyz(0,0,0);xyz(512,448,0);
+--- a/src/dr_dma_producer.c
++++ b/src/dr_dma_producer.c
+@@ -362,3 +362,7 @@
+     le32(tag,0x20000000);le32(tag+4,target);le32(tag+8,0);le32(tag+12,0);
+     for(unsigned i=0;i<4;i++)ret[4+i]=(unsigned char)(resume>>((big?3-i:i)*8));
+ }
++
++/* Effect IDs travel in the ordered GIF stream, as in upstream gs_marker.c. */
++void Port_GsMarker(int effect)
++{ (void)dr_dma_write_ad(0x7f,(uint32_t)effect); }
+--- a/src/dr_dma_producer.h
++++ b/src/dr_dma_producer.h
+@@ -49,6 +49,7 @@
+ int dr_dma_reject_packet(void); /* sticky invalid-packet error */
+ int dr_dma_pending_regions(void); /* regions awaiting conversion */
+ /* Original signatures retained only for the producers adapted here. */
++void Port_GsMarker(int effect);
+ void Dma_Flush(void);
+ void Dma_ResetBuffers(void); /* discards queued bytes, preserves a sticky error */
+ int32_t Dma_GetBufSize(void);
+--- a/src/main.c
++++ b/src/main.c
+@@ -260,7 +260,7 @@
+     XbPlatform_Install();
+     DrLobby lobby;dr_lobby_init(&lobby);int logged_lobby_state=LOBBY_OFF;
+     demo_init(&ui);settings_load();
+-    xsdk_log_write("DragonRage360 demo 0.27: native VIF/VU / platform diagnostics; Battle_Main not linked.");
++    xsdk_log_write("DragonRage360 demo 0.30: native VIF/VU / platform diagnostics; Battle_Main not linked.");
+     xsdk_log_write("%s: BPE decode + animation endian synthetic self-test",dr_resource_selftest()?"PASS":"FAIL");
+     xsdk_log_write("%s: bounded BIN + motion + skeleton synthetic self-test",dr_container_selftest()?"PASS":"FAIL");
+     xsdk_log_write("%s: GS texture address synthetic self-test",dr_gs_texture_selftest()?"PASS":"FAIL");
+@@ -374,7 +374,7 @@
+         if(capture_mode) {
+             int error=dr_capture_demo_draw();
+             if(error) {xsdk_log_write("FAIL: actual capture draw rc=%d",error);if(!dr_capture_demo_close())capture_mode=false;}
+-            xsdk_text_draw(50,44,2,0xffe0e0ff,"CAPTURA ORIGINAL GS · 0.27 EXPERIMENTAL");
++            xsdk_text_draw(50,44,2,0xffe0e0ff,"CAPTURA ORIGINAL GS · 0.30 EXPERIMENTAL");
+             xsdk_text_draw(52,100,1,0xffe0e0ff,"Captura GS / VU / sombras / contorno / tabelas por ID e Z");
+             xsdk_text_draw(52,650,1,0xffe0e0ff,"Dados sintéticos · sem combate · B voltar");
+         } else if(body_mode) {
+@@ -383,7 +383,7 @@
+                 xsdk_log_write("FAIL: real body diagnostic draw rc=%d",error);
+                 if(!dr_body_demo_close())body_mode=false;
+             }
+-            xsdk_text_draw(50,44,2,0xffe0e0ff,"MODELO DA ISO · POSE DE REFERÊNCIA · 0.27");
++            xsdk_text_draw(50,44,2,0xffe0e0ff,"MODELO DA ISO · POSE DE REFERÊNCIA · 0.30");
+             xsdk_text_draw(52,100,1,0xffe0e0ff,"Corpo e materiais reais / programa 0 da VU1");
+             xsdk_text_draw(950,175,1,0xffe0e0ff,"Texturas do pacote");
+             xsdk_text_draw(52,650,1,0xffe0e0ff,"Pose fixa / sem combate · X expressão · B voltar");
+@@ -393,7 +393,7 @@
+                 xsdk_log_write("FAIL: native graphics diagnostic draw, error=%d",error);
+                 dr_graphics_demo_close();graphics_mode=false;
+             }
+-            xsdk_text_draw(50,44,2,0xff101020,"DIAGNÓSTICO GS · DATE/FBA · 0.27");
++            xsdk_text_draw(50,44,2,0xff101020,"DIAGNÓSTICO GS · DATE/FBA · 0.30");
+             xsdk_text_draw(52,100,1,0xff101020,"PSMT8 / paleta / MODULATE / alpha / aditivo");
+             xsdk_text_draw(52,650,1,0xff101020,"Dados sintéticos · Y captura original · B voltar");
+         } else demo_draw(&ui,&paint,tick);
+--- a/tests/check_xex.py
++++ b/tests/check_xex.py
+@@ -31,7 +31,7 @@
+ assert required<=defined, 'body pipeline/native modules absent from link'
+ capture_required={'Dma_Flush','Dma_ResetBuffers','Dma_AddFrame','Dma_AddScissor','Dma_AddXyOffset','Dma_AddZbuf','dr_dma_write_ad','dr_dma_producer_open_mapped','dr_dma_map_chain','Dma_AddNext','dr_gs_stream_init','dr_gs_stream_chain','dr_gs_stream_vif','dr_vu1_vif_control','sXenosBackend','GsGpu_Init','GsGpu_Draw','GsGpu_DrawVu0','GsGpu_DrawVu4','GsGpu_DrawVu6','dr_gs_replay','dr_vu0_vert_container','dr_vu4_vert_container','dr_vu6_vert_container','dr_outline_frag_container','dr_dclut_frag_container','Gs_Gif','Gs_XenosCaptureEnable','GsDraw_XenosSubmit','dr_capture_demo_open','dr_capture_demo_draw'}
+ assert capture_required<=defined, 'actual capture/backend integration absent from link'
+-native_required={'sceGsSetDefDBuff','sceGsPutDrawEnv','sceGsSwapDBuff','Port_GsVif1Chain','Port_GsGifChannel','dr_gs_native_open','dr_gs_native_bind','dr_gs_native_vif1','dr_gs_native_gif','dr_gs_native_error','dr_gs_stream_gif_chain'}
++native_required={'Port_GsMarker','sceGsSyncPath','sceGsSetDefStoreImage','sceGsExecStoreImage','dr_gs_backend_sync','GsDraw_XenosReadFrameExact','sceGsSetDefDBuff','sceGsPutDrawEnv','sceGsSwapDBuff','Port_GsVif1Chain','Port_GsGifChannel','dr_gs_native_open','dr_gs_native_bind','dr_gs_native_vif1','dr_gs_native_gif','dr_gs_native_error','dr_gs_stream_gif_chain'}
+ assert native_required<=defined, 'shared native VIF/GIF engine entry points absent'
+ platform_required={'XbPlatform_Install','XbPlatform_ProbeFiles','XbDisc_Mount','ADXF_ReadNw','ADXF_OpenAfs',
+                    'XbRes_Install','XbRes_Report','XbRes_LoadMap','XbRes_RegisterChecked',
+@@ -69,10 +69,10 @@
+                   'unencrypted basic-compression homebrew XEX'],
+         'linked_body_symbols':sorted(required),'unresolved_weak_symbols':sorted(weak),
+         'runtime_test':'Not run on Xbox 360 or emulator',
+-        'native_engine_entry_points_linked':sorted(native_required),'shared_VU_session':True,'gpu_pixels_verified':False,'game_complete':False,'battle_loop_linked':'Battle_Main' in defined,
++        'native_engine_entry_points_linked':sorted(native_required),'native_GS_sync_and_RGB_readback_linked':True,'game_boot_linked':'Game_Main' in defined,'shared_VU_session':True,'gpu_pixels_verified':False,'game_complete':False,'battle_loop_linked':'Battle_Main' in defined,
+         'platform_sources_compiled':True,'platform_resource_hook_linked':True,
+         'linked_platform_symbols':sorted(platform_required),'Bpe_Decode_linked':'Bpe_Decode' in defined,
+         'experimental_backend_linked':True,'original_GS_capture_linked':True,'linked_capture_symbols':sorted(capture_required),'registration_patch_provided':True,
+-        'native_VU_shader_path_linked':True,'shadow_stencil_run_path_linked':True,'buffer_consumers_linked':['outline from frozen IDs','depth/ID CLUT with raw alpha MRT','sampled target raw alpha and primitive feedback resolves'],'bounded_DMA_VIF_consumer_linked':True,'combat_DMA_producers_adapted':False,'adapted_DMA_producer_subset_linked':['Frame','Zbuf','Scissor','XYOffset','AD register','Flush','ResetBuffers'],'native_packet_producers_compiled':['Dma_Alloc','Dma_AddData','Dma_AddRef','Dma_BeginDirect','Dma_EndDirect','Dma_AddNext'],'mapped_chain_diagnostic_linked':True,'scope':'0.27 replaces native legacy DMA/VIF/GIF traversal with bounded canonical mappings and one shared VU session; Port_Gs entry points and synthetic MPG/UNPACK/MSCAL/XGKICK probe linked. No combat boot/presentation integration. 0.25 DMA patch and platform 0.4 integrated: ADXF post-read, converter registry/map/adapters and first-file ISO probes; combat remains outside XEX. Prior 0.24 features: adapted canonical-LE register producers and adapted Dma_Flush/ResetBuffers linked to bounded DMA/VIF/GS capture in synthetic diagnostic; rectangle and other helpers byte-tested against original source; Battle_Main, full combat producers and IA/collisions/animation integration absent; no hardware pixel validation'}
++        'native_VU_shader_path_linked':True,'shadow_stencil_run_path_linked':True,'buffer_consumers_linked':['outline from frozen IDs','depth/ID CLUT with raw alpha MRT','sampled target raw alpha and primitive feedback resolves'],'bounded_DMA_VIF_consumer_linked':True,'combat_DMA_producers_adapted':False,'adapted_DMA_producer_subset_linked':['Frame','Zbuf','Scissor','XYOffset','AD register','Flush','ResetBuffers'],'native_packet_producers_compiled':['Dma_Alloc','Dma_AddData','Dma_AddRef','Dma_BeginDirect','Dma_EndDirect','Dma_AddNext'],'mapped_chain_diagnostic_linked':True,'scope':'0.30 adds ordered effect marker, blocking real GPU sync and exact CT24 RGB frame readback for supported game profile; no hardware execution. 0.27 replaces native legacy DMA/VIF/GIF traversal with bounded canonical mappings and one shared VU session; Port_Gs entry points and synthetic MPG/UNPACK/MSCAL/XGKICK probe linked. No combat boot/presentation integration. 0.25 DMA patch and platform 0.4 integrated: ADXF post-read, converter registry/map/adapters and first-file ISO probes; combat remains outside XEX. Prior 0.24 features: adapted canonical-LE register producers and adapted Dma_Flush/ResetBuffers linked to bounded DMA/VIF/GS capture in synthetic diagnostic; rectangle and other helpers byte-tested against original source; Battle_Main, full combat producers and IA/collisions/animation integration absent; no hardware pixel validation'}
+ (root/'VALIDACAO.json').write_text(json.dumps(report,ensure_ascii=False,indent=2)+'\n')
+ print(json.dumps(report,ensure_ascii=False,indent=2))

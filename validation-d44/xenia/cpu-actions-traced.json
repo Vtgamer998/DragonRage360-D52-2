@@ -1,0 +1,53 @@
+{
+  "result": "PASS",
+  "GPU_replay_and_presentation": false,
+  "completed_steps": 66,
+  "FIGHT_frames": 64,
+  "four_input_sequences_submitted": true,
+  "responses": [
+    {
+      "tick": 5,
+      "action": 11,
+      "ki": 40000,
+      "health": 40000
+    },
+    {
+      "tick": 11,
+      "action": 68,
+      "ki": 40000,
+      "health": 40000
+    },
+    {
+      "tick": 18,
+      "action": 68,
+      "ki": 40650,
+      "health": 40000
+    },
+    {
+      "tick": 33,
+      "action": 11,
+      "ki": 40650,
+      "health": 40000
+    },
+    {
+      "tick": 39,
+      "action": 56,
+      "ki": 40650,
+      "health": 40000
+    },
+    {
+      "tick": 51,
+      "action": 11,
+      "ki": 40650,
+      "health": 40000
+    }
+  ],
+  "DMA_error": false,
+  "clean_close": true,
+  "ready_prelude_accelerated": true,
+  "battle_simulation_accelerated": false,
+  "complete_match_to_KO": false,
+  "physical_console_FPS_verified": false,
+  "audible_audio_verified": false,
+  "scope": "Xenia CPU producers/decode only; no GPU replay"
+}

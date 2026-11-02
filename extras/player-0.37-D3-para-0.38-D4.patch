@@ -1,0 +1,648 @@
+--- a/LEIA-ME.txt
++++ b/LEIA-ME.txt
+@@ -1,3 +1,7 @@
++ATUALIZAÇÃO 0.38-D4: reprodução/retarget, poses, matrizes, BobjWork e volumes ligados ao caminho original; texturas e referências faciais preparadas. A lista AINDA NÃO está concluída: faltam tabelas/binders completos, renderer/facial e estado/registro nos gerenciadores. Novo XEX de diagnóstico; luta bloqueada e versão não testada no Xbox/Xenia. Consulte RELATORIO-0.38-D4.md.
++
++DOCUMENTAÇÃO HISTÓRICA ABAIXO:
++
+ ATUALIZAÇÃO 0.37-D3: catálogo nativo complete=true com exclusões comprovadas de pools originais sem consumidor. Colisão instalada com NOT_READY; dois modelos/animações preparados. Lutadores completos, cenário completo e boot da luta AINDA PENDENTES. Novo XEX de diagnóstico, sem teste no Xbox. Consulte RELATORIO-0.37-D3.md.
+ 
+ DOCUMENTAÇÃO HISTÓRICA ABAIXO:
+--- a/PENDENCIAS.md
++++ b/PENDENCIAS.md
+@@ -1,3 +1,7 @@
++ATUALIZAÇÃO 0.38-D4: reprodução/retarget, poses, matrizes, BobjWork e volumes ligados ao caminho original; texturas e referências faciais preparadas. A lista AINDA NÃO está concluída: faltam tabelas/binders completos, renderer/facial e estado/registro nos gerenciadores. Novo XEX de diagnóstico; luta bloqueada e versão não testada no Xbox/Xenia. Consulte RELATORIO-0.38-D4.md.
++
++DOCUMENTAÇÃO HISTÓRICA ABAIXO:
++
+ ATUALIZAÇÃO 0.37-D3: catálogo nativo complete=true com exclusões comprovadas de pools originais sem consumidor. Colisão instalada com NOT_READY; dois modelos/animações preparados. Lutadores completos, cenário completo e boot da luta AINDA PENDENTES. Novo XEX de diagnóstico, sem teste no Xbox. Consulte RELATORIO-0.37-D3.md.
+ 
+ DOCUMENTAÇÃO HISTÓRICA ABAIXO:
+--- a/README.md
++++ b/README.md
+@@ -1,3 +1,17 @@
++# DragonRage360 0.38-D4 — poses e volumes nativos
++
++**Ainda é diagnóstico, sem luta jogável e sem execução desta versão no Xbox/Xenia. A lista pedida não está completa.**
++
++- Player original ligado a BobjWork, nós próprios e motions; retarget entre os dois modelos testado.
++- Poses e matrizes animadas pelas rotinas originais; 22 partes de corpo por modelo e volumes de ataque ativos.
++- 24 texturas RGBA por modelo e referências de malha/geometria facial preparadas. Não há submissão GPU ou animação facial completa.
++- Faltam tabelas/binders completos, renderer/facial e estado/registro nos gerenciadores de personagens. O registro de proprietários dos nós não é o gerenciador do combate.
++
++Leia [RELATORIO-0.38-D4.md](RELATORIO-0.38-D4.md) e os testes em `checkpoint-dados-D4/`. O `default.xex` novo mantém a guarda da luta. `startup_test.txt=typed-data` executa o warm-up e registra resultados em `default.log`. Fontes atuais na raiz; não reaplique o patch incremental. Binário anterior em `diagnostico-anterior-D3/`.
++
++---
++Documentação histórica (escopo e binário da raiz substituídos acima):
++
+ # DragonRage360 0.37-D3 — catálogo nativo e estados parciais
+ 
+ **Novo XEX de diagnóstico; ainda não inicia uma luta e não foi executado no Xbox/Xenia.**
+--- /dev/null
++++ b/RELATORIO-0.38-D4.md
+@@ -0,0 +1,95 @@
++# DragonRage360 0.38-D4 — player, poses e volumes nativos
++
++**A lista solicitada ainda não está toda concluída.** Esta revisão implementa reprodução/retarget, `BobjWork`, poses, matrizes e volumes de dois modelos; prepara texturas e referências de geometria. Não cria os personagens completos nos gerenciadores nem desenha uma luta. O novo XEX continua sendo diagnóstico e não foi executado no Xbox nem no Xenia.
++
++## Resultado por item solicitado
++
++| Item | Resultado desta revisão |
++|---|---|
++| Reprodução | `BtlObjAnim_Play`/`PlayModel` e `BtlObjAnim_Load` originais ligados aos dados próprios. O carregador de motions reconhece o proprietário e copia a animação nativa para a camada real de `BobjWork`. A tabela de presença aponta para cópias reais dos recursos comprimidos, nunca para buffers decodificados disfarçados de BPE. |
++| Retarget | `BtlObjAnim_PlayFrom` e `BtlObjAnim_Retarget` originais executados, usando os esqueletos e alturas dos modelos. O teste libera o personagem de origem e continua amostrando a cópia no destino. A variante baseada na tabela comum ainda não foi inicializada. |
++| Tabelas/parâmetros | Preservado o prefixo de quatro bytes do recurso de parâmetros e convertidos altura/raio usados pelo retarget/corpo. O cabeçalho e os tamanhos do modelo foram preparados. **Não é conversão de toda a entrada de 256 bytes, das tabelas de ações ou das tabelas comuns.** |
++| Corpo | 22 partes por modelo, com offsets e cantos locais validados e ligados aos nós. `BtlObjBody_Init`/`Update` originais calculam os volumes. |
++| Ataque | Eventos e shapes alimentam `BtlObjAnim_UpdateEvents` e `BtlObjHit_BuildVolumes` originais. O clip 55 gerou volumes ativos em 108 dos 200 passos de teste, em cada modelo. Não há aplicação de dano entre personagens nesta revisão. |
++| Poses/matrizes | `BtlObjAnim_SamplePose`, `BtlObjXf_Update` e `BtlObjPose_CalcMatrices` originais executados. Há matrizes de nós que mudam com os frames; não é somente pose de referência. O cálculo é pelo caminho CPU/VU0 portátil, não skinning GPU validado. |
++| Referências do renderer | A API fornece VIF canônico limitado, pivôs e matriz mundial atual de cada parte. Recusa matrizes ainda não calculadas ou invalidadas por troca/avanço de animação. Não submete comandos ao GS/GPU. |
++| Texturas | 24 imagens por modelo decodificadas para RGBA, com paletas/swizzle tratados pelo leitor existente. Cache próprio com limite de memória; falha não publica cache parcial. Não há upload/materiais/mipmaps completos do caminho original. |
++| Facial | 5 geometrias presentes no modelo esquerdo e 6 no direito, validadas e disponíveis por referência própria. **Blink, seleção facial, jaw/lip-sync e sua animação/renderização ainda não foram integrados.** |
++| BobjWork | Bloco real de `0x1A0C0`, com duas camadas `0xC000`, flash, contatos e espaço dos volumes. Tamanhos e offsets relevantes verificados em PPC32. |
++| Estado/gerenciadores | Há objetos próprios, nós, player e corpo. O registro criado serve à busca de proprietários/nós e ao carregamento de motions; **não é o registro em `gBtlObjTbl`, nas listas originais nem nos gerenciadores de personagens/IA**. Isso continua pendente. |
++
++## Implementação e correções
++
++`xb_battle_fighter.c/.h` agora mantém os recursos de modelo/motions, buffers decodificados, nós, parâmetros selecionados, corpo, work e cache de imagens em memória própria. Os testes liberam os arquivos de origem antes de usar esses dados. A liberação remove o proprietário da busca de nós e libera todos os buffers.
++
++A preparação tem limites para tamanhos de arquivo, contagens e orçamento de texturas. A hierarquia, os IDs de nós, os campos usados dos volumes e seus cantos são validados. Os nós usam o stride nativo de `0xE0`, incluindo espaço da posição anterior; não um array apertado de views de `0xD0`. A distinção é necessária para leitores que usam a view completa do nó.
++
++Duas adaptações explícitas no fonte preparado de `bobj_a.c` consultam o proprietário antes de:
++
++- buscar um nó pelo offset PS2 de 32 bits;
++- descomprimir uma motion cuja versão nativa já foi preparada.
++
++Objetos que não pertencem a esse caminho mantêm os acessos originais. Os anchors do patch precisam coincidir com a revisão fixada do upstream. O relatório de compilação identifica essa adaptação.
++
++Os testes de volumes também expuseram problemas de representação do port que foram corrigidos na preparação do fonte:
++
++- `BtlObjBody_UpdateParts` usava um temporário local sem definir o componente homogêneo antes de tratá-lo como posição; agora W é explicitamente 1;
++- os argumentos locais passados aos helpers de colisão que exigem vetor alinhado a 16 bytes agora satisfazem esse alinhamento;
++- cantos de caixas com três floats não são passados como se fossem vetores alinhados de quatro floats: são copiados para um temporário adequado, sem mudar os valores XYZ.
++
++Isso corrige indefinições e incompatibilidades de tipos/alinhamento no port; não demonstra equivalência de pixels ou física com o PS2 em hardware. O prefixo dos parâmetros também não foi trocado como um float: o leitor de presets usa bytes nesse campo.
++
++## Evidência com recursos reais
++
++| Medida | Modelo esquerdo | Modelo direito |
++|---|---:|---:|
++| Registros de esqueleto | 69 | 69 |
++| Motions não vazias preparadas | 361 | 357 |
++| Slots comprimidos vazios | 53 | 57 |
++| Motions do próprio modelo presentes/vazias | 1 / 7 | 1 / 7 |
++| Partes de corpo ligadas | 22 | 22 |
++| Soma de diferenças da matriz do nó 3, frames 0 → 30, motion 0 | 0,137962 | 0,099297 |
++| Passos com volume ativo, clip 55 em loop por 200 passos | 108 | 108 |
++| Texturas RGBA no cache | 24 | 24 |
++| Geometrias faciais presentes | 5 | 6 |
++
++Os deltas de matriz são uma verificação de que o fluxo produz animação; não são uma medida de erro em relação ao console. O teste de ataque verifica geração de shapes, não acerto/dano, IA ou estabilidade de uma partida.
++
++Foram feitos dois tipos de teste, com escopos diferentes:
++
++- **Host x86-64, ASan + UBSan:** construção, vida útil, bounds, camadas, poses que usam a view C correspondente e cache de texturas/geometrias. As rotinas posteriores que assumem layouts originais de ponteiro de 32 bits não são validadas nessa execução.
++- **Host i386, UBSan/bounds, via QEMU-i386:** views com ponteiros de 32 bits, retarget entre os dois proprietários, matrizes e volumes pelas rotinas originais. ASan não pôde ser usado nesse caminho porque seu shadow range conflitou com os mapeamentos do QEMU; não foi reportado como teste ASan aprovado.
++
++QEMU-i386 executou um programa de teste Linux/i386. **Não executou o XEX, PowerPC, Xbox ou Xenia.** Os testes 32-bit usam o player e leitores originais preparados, os modelos reais e a biblioteca VU0 portátil. O fallback BPE legado do fixture aborta se for acionado: não simula decodificação bem-sucedida. Em produção, o fallback real continua existente para os objetos fora da preparação própria.
++
++## Novo default.xex
++
++O startup `typed-data` mantém as etapas da D3 e acrescenta, para cada modelo: reprodução de motion, amostragem, matrizes, volumes, cache de texturas e consulta de referências de malha/facial. Ao final, executa um warm-up de retarget entre os dois proprietários. Os resultados vão para `default.log`.
++
++A interface continua no diagnóstico. Não há personagens animados desenhados por esse novo caminho, controles de uma luta nem criação dos gerenciadores. A colisão do cenário continua instalada com NOT_READY. `Battle_Main` continua bloqueado antes de acessar o estado.
++
++- Base: 398/398 unidades PowerPC. Vínculo com catálogo: 399/399; zero símbolos indefinidos e zero conflitos de ABI.
++- Catálogo nativo: `complete=true`, 33 regiões e 2.738 operações. As exclusões auditadas de pools originais da D3 continuam distintas de dados tipados.
++- Todas as operações e 1.779 slots de ponteiro foram conferidos no ELF final; 1.473 ligações mudaram e foram realocadas simbolicamente.
++- Verificação estática de XEX2, ABI e guarda de `Battle_Main`: PASS. Marcador de prontidão permanece 2.
++- Testes do carregador, isolamento de bibliotecas e recusa de novas referências aos pools excluídos: PASS.
++- Nenhuma execução desta versão no Xbox/Xenia ou validação de GPU, desempenho de partida, áudio de luta ou rollback.
++
++SHA-256 do novo `default.xex`:
++`51e0b9f9a14ab35ad2f5e4894ce56f654fd8bdc4b58ae0404b944a0cb0fdb801`
++
++Upstream e SDK continuam fixados nos pins das revisões anteriores: `3ca419c7966b11438e2dc3c9a7e1914f102ed545` e `57b02f1e60667e37d22c3aa613d23d2486514ff8`. GCC 15.3.0 e ABI xsdk. O fonte do adaptador distribuído foi comparado ao hash do input da compilação final.
++
++## Bloqueios restantes para concluir a lista
++
++Faltam converter e ligar as tabelas completas de personagem/ações, as tabelas comuns e os outros consumidores dos recursos. As entradas de modelo 0x12/0x13 e outras contêm estruturas mistas; preparar altura/raio não autoriza tratar o restante como palavras de 32 bits. Os novos bridges não substituem todos os binders originais.
++
++Ainda faltam a ligação das referências com o renderer e seus materiais/estados, o fluxo facial completo, o estado do personagem e seu registro nas listas/tabelas e gerenciadores originais. `BtlObj_Setup/CreateChara` também inicializa recursos, chains, face, alpha/material e outras referências ainda não preparadas aqui. Publicar o objeto nas listas agora permitiria que esses leitores consumissem tabelas incompletas. A guarda não foi retirada e não foram criados retornos de sucesso para esconder essa falta.
++
++Depois disso ainda haverá o cenário completo, gerenciadores e boot da partida fixa. Esta revisão não fornece luta jogável.
++
++## Arquivos e reprodução
++
++Fontes atuais na raiz; evidências em `checkpoint-dados-D4/`; binário anterior em `diagnostico-anterior-D3/`. Patch incremental para uma cópia exata da 0.37-D3 em `extras/`, já aplicado aos fontes da raiz. ISO, programas MIPS e recursos extraídos não fazem parte do pacote.
++
++O alvo `make typed-data-diagnostic` continua reproduzindo o XEX com os caminhos do SDK/toolchain/upstream e a ISO do próprio usuário. O teste ampliado `test_native_fighter.py` recebe modelo, motions e diretório de saída; veja `--help`. O modo `--i386-root` espera headers/libs multilib GCC 13 e glibc da instalação de teste, e `--qemu` aceita o caminho de QEMU-i386. `--other-model`/`--other-motions` ativa o teste de retarget entre proprietários. A configuração de teste usada foi Ubuntu 24.04, GCC 13 e QEMU 8.2.2.
+--- a/engine/platform/platform/xb_battle_fighter.c
++++ b/engine/platform/platform/xb_battle_fighter.c
+@@ -4,22 +4,44 @@
+ #include "xb_battle_fighter.h"
+ #include "dr_body_model.h"
+ #include "dr_container.h"
++#include "dr_texfile.h"
++#include "dr_face_vif.h"
+ #include "battle/bobj_a.h"
+ #include <stdlib.h>
+ #include <string.h>
++#include <math.h>
++#include <stddef.h>
++typedef struct XbNativeNode {BobjPart part;Vec4 previous;} XbNativeNode;
++_Static_assert(sizeof(XbNativeNode)==0xe0,"native object node pool stride");
++typedef struct XbCachedImage {unsigned family,index;DrTexFileImage image;void *rgba;} XbCachedImage;
+ struct XbBattleFighter {
+  BobjObj obj;BobjBone *bones;DrBodyPart *parts;
+- void *decoded[BOBJ_ANIM_MAX];XbFighterPrepared stats;
++ uint8_t *model_pack,*motions_pack;size_t model_size,mesh_offset;
++ XbCachedImage *images;unsigned image_count;int pose_valid,matrices_valid;
++ void *decoded[BOBJ_ANIM_MAX];size_t decoded_size[BOBJ_ANIM_MAX];
++ XbNativeNode node[162] __attribute__((aligned(16)));unsigned char present[162];
++ BobjBodyData *body_data;unsigned body_count;
++ BobjModelHdr model_header;BobjParam param;XbFighterPrepared stats;
+ };
+ #if UINTPTR_MAX==UINT32_MAX
++_Static_assert(sizeof(BobjWork)==0x1a0c0 && sizeof(BobjBodyPart)==0x1d0,"fighter work/body ABI");
+ _Static_assert(sizeof(BobjObj)==0x1670,"BobjObj ABI");
+ _Static_assert(sizeof(BobjBone)==64,"BobjBone ABI");
+ _Static_assert(sizeof(BobjAnimLayer)==0x98,"BobjAnimLayer ABI");
+ #endif
+ extern void BtlObjAnim_PlayModel(BobjObj *,s32,s32);
+ extern void BtlObjAnim_Step(BobjObj *);
+-static int motion(const void *pack,size_t size,unsigned index,int compressed,void **out,int *empty){
+- size_t off,n,written=0;*out=NULL;*empty=0;
++static XbBattleFighter *owners[16];
++static XbBattleFighter *find_owner(void *p){for(unsigned i=0;i<16;i++)if(owners[i] && &owners[i]->obj==p)return owners[i];return NULL;}
++int XbFighter_ResolveNode(void *obj,int id,void **out){XbBattleFighter *f=find_owner(obj);if(!f)return 0;*out=(id>=0 && id<162 && f->present[id])?&f->node[id].part:NULL;return 1;}
++int XbFighter_LoadDecoded(void *obj,void *buf,int id,int *size,void **out){
++ XbBattleFighter *f=find_owner(obj);if(!f)return 0;*out=NULL;*size=0;
++ if(id>=BOBJ_ANIM_MAX && id<BOBJ_ANIM_MAX+8){*out=f->obj.mdl.modelAnims[id-BOBJ_ANIM_MAX];*size=*out?1:0;return 1;}
++ if(id<0 || id>=BOBJ_ANIM_MAX || !buf || !f->decoded[id])return 1;
++ memcpy(buf,f->decoded[id],f->decoded_size[id]);*size=(int)f->decoded_size[id];*out=buf;return 1;
++}
++static int motion(const void *pack,size_t size,unsigned index,int compressed,void **out,int *empty,size_t *bytes){
++ size_t off,n,written=0;*out=NULL;*empty=0;if(bytes)*bytes=0;
+  int e=dr_pack_memory_entry(pack,size,index,&off,&n,NULL);
+  if(e==DR_NOT_FOUND){*empty=1;return 0;}if(e)return e;
+  void *p=malloc(0xc000);if(!p)return -851;
+@@ -32,49 +54,177 @@
+  if(e==DR_LOAD_EMPTY){free(p);*empty=1;return 0;}
+  if(e){free(p);return e;}
+  if(written<0x94){free(p);return DR_LOAD_ANIMATION;}
+- void *small=realloc(p,written);*out=small?small:p;return 0;
++ void *small=realloc(p,written);*out=small?small:p;if(bytes)*bytes=written;return 0;
+ }
+ void XbBattleFighter_FreeModelAnimation(XbBattleFighter *f){
+  if(!f)return;
++ for(unsigned i=0;i<16;i++)if(owners[i]==f)owners[i]=NULL;
++ for(unsigned i=0;i<f->image_count;i++)free(f->images[i].rgba);
++ free(f->images);free(f->model_pack);free(f->motions_pack);
++ free(f->obj.work);free(f->body_data);
+  for(unsigned i=0;i<BOBJ_ANIM_MAX;i++)free(f->decoded[i]);
+  for(unsigned i=0;i<8;i++)free(f->obj.mdl.modelAnims[i]);
+  free(f->bones);free(f->parts);free(f);
+ }
+ int XbBattleFighter_PrepareModelAnimation(const void *model,size_t model_size,const void *motions,size_t motions_size,XbBattleFighter **out,XbFighterPrepared *stats){
+  if(!out || !stats)return DR_MODEL_INVALID;
+- *out=NULL;memset(stats,0,sizeof(*stats));size_t off,n,bad;int e=dr_pack_memory_entry(model,model_size,2,&off,&n,NULL);if(e)return e;
++ *out=NULL;memset(stats,0,sizeof(*stats));
++ if(!model || !motions || model_size<24 || motions_size<24 || model_size>16*1024*1024 || motions_size>16*1024*1024 || dr_resource_le32(motions)<BOBJ_ANIM_MAX || dr_resource_le32(model)<36)return DR_MODEL_INVALID;
++ size_t off,n,bad;int e=dr_pack_memory_entry(model,model_size,2,&off,&n,NULL);if(e)return e;
+  XbBattleFighter *f=calloc(1,sizeof(*f));if(!f)return -851;
+  f->parts=calloc(256,sizeof(*f->parts));if(!f->parts){e=-851;goto fail;}
+  DrBodyModel body;e=dr_body_model_read((const uint8_t *)model+off,n,f->parts,256,&body,&bad);if(e)goto fail;
++ f->obj.work=calloc(1,sizeof(*f->obj.work));if(!f->obj.work){e=-851;goto fail;}
+  f->bones=calloc(body.parts,sizeof(*f->bones));if(!f->bones){e=-851;goto fail;}
+  for(unsigned i=0;i<body.parts;i++){
+   DrBodyPart *p=&f->parts[i];BobjBone *b=&f->bones[i];
+-  if(p->node>=162){e=DR_MODEL_INVALID;goto fail;}
++  if(p->node>=162 || f->present[p->node]){e=DR_MODEL_INVALID;goto fail;}
+   b->next=sizeof(*b);b->pop=p->pop;b->last=p->last;b->id=p->node;b->unk08=p->enabled;b->unk0C=(s32)dr_resource_le32((const uint8_t *)model+off+p->record_offset+12);
++  f->present[p->node]=1;f->node[p->node].part.id=p->node;f->node[p->node].part.rot.w=1.0f;f->node[p->node].part.fromRot.w=1.0f;
++  memcpy(&f->node[p->node].part.pos,p->rest,16);memcpy(&f->node[p->node].part.fromPos,p->rest,16);
+   memcpy(&b->origin,p->pivot_a,16);memcpy(&b->unk20,p->pivot_b,16);memcpy(&b->rest,p->rest,16);
+  }
++ f->model_pack=malloc(model_size);if(!f->model_pack){e=-851;goto fail;}memcpy(f->model_pack,model,model_size);f->model_size=model_size;f->mesh_offset=off;
+  f->stats.bones=body.parts;f->obj.mdl.nodes=f->bones;
++ f->motions_pack=malloc(motions_size);if(!f->motions_pack){e=-851;goto fail;}memcpy(f->motions_pack,motions,motions_size);
+  for(unsigned i=0;i<BOBJ_ANIM_MAX;i++){
+-  int empty;e=motion(motions,motions_size,i,1,&f->decoded[i],&empty);if(e)goto fail;
+-  if(empty)f->stats.empty_motions++;else f->stats.motions++;
++  int empty;e=motion(motions,motions_size,i,1,&f->decoded[i],&empty,&f->decoded_size[i]);if(e)goto fail;
++  if(empty)f->stats.empty_motions++;else {size_t at,bytes;e=dr_pack_memory_entry(f->motions_pack,motions_size,i,&at,&bytes,NULL);if(e)goto fail;
++   f->obj.mdl.anims[i]=f->motions_pack+at; /* actual compressed source, never a decoded buffer */
++   f->stats.motions++;}
+  }
+  /* Original BtlObj_BindTables: file0 entries i+0x1D, ONE-based. */
+  for(unsigned i=0;i<8;i++){
+-  int empty;void *p;e=motion(model,model_size,0x1c+i,0,&p,&empty);if(e)goto fail;
++  int empty;void *p;e=motion(model,model_size,0x1c+i,0,&p,&empty,NULL);if(e)goto fail;
+   f->obj.mdl.modelAnims[i]=p;if(empty)f->stats.empty_model_motions++;else f->stats.model_motions++;
+  }
++ f->model_header.flags=dr_resource_le32((const uint8_t *)model+off+12);
++ for(unsigned i=0;i<4;i++){uint32_t bits=dr_resource_le32((const uint8_t *)model+off+24+i*4);memcpy(&f->model_header.size[i],&bits,4);}
++ size_t po,pn;e=dr_pack_memory_entry(model,model_size,17,&po,&pn,NULL);if(e || pn<12){e=DR_MODEL_INVALID;goto fail;}
++ /* Entry 0x12 starts with four byte-sized preset fields; only +4/+8
++  * are floats used by retarget/body. Keep the byte prefix in file order. */
++ memcpy(&f->param,(const uint8_t *)model+po,4);
++ for(unsigned i=1;i<3;i++){uint32_t bits=dr_resource_le32((const uint8_t *)model+po+i*4);memcpy((uint8_t *)&f->param+i*4,&bits,4);}
++ if(!isfinite(f->param.height) || f->param.height<=0 || !isfinite(f->param.radius)){e=DR_MODEL_INVALID;goto fail;}
++ size_t bo,bn;e=dr_pack_memory_entry(model,model_size,1,&bo,&bn,NULL);if(e || bn<16){e=DR_MODEL_INVALID;goto fail;}
++ unsigned count=0;for(;;){size_t at=16+(size_t)count*0x1d0;if(at>bn || bn-at<0x1d0 || count>=162){e=DR_MODEL_INVALID;goto fail;}uint32_t flags=dr_resource_le32((const uint8_t *)model+bo+at);count++;if(flags&1)break;}
++ f->body_data=calloc(1,offsetof(BobjBodyData,part)+(size_t)count*sizeof(BobjBodyPart));if(!f->body_data){e=-851;goto fail;}f->body_count=count;
++ f->body_data->unk00=(s32)dr_resource_le32((const uint8_t *)model+bo);
++ uint32_t bits=dr_resource_le32((const uint8_t *)model+bo+4);memcpy(&f->body_data->unk04,&bits,4);
++ if(!isfinite(f->body_data->unk04)){e=DR_MODEL_INVALID;goto fail;}
++ for(unsigned i=0;i<count;i++){
++  const uint8_t *src=(const uint8_t *)model+bo+16+(size_t)i*0x1d0;BobjBodyPart *dst=&f->body_data->part[i];
++  dst->flags=dr_resource_le32(src);dst->node=(s32)dr_resource_le32(src+4);
++  if(dst->node<0 || dst->node>=162 || !f->present[dst->node]){e=DR_MODEL_INVALID;goto fail;}
++  for(unsigned j=0;j<4;j++){uint32_t v=dr_resource_le32(src+16+j*4);memcpy((uint8_t *)&dst->offset+j*4,&v,4);}
++  for(unsigned j=0;j<32;j++){uint32_t v=dr_resource_le32(src+0xd0+j*4);memcpy((uint8_t *)dst->box.local+j*4,&v,4);}
++  const float *local=(const float *)dst->box.local;for(unsigned j=0;j<32;j++)if(!isfinite(local[j])){e=DR_MODEL_INVALID;goto fail;}
++  const float *pt=(const float *)&dst->offset;for(unsigned j=0;j<4;j++)if(!isfinite(pt[j])){e=DR_MODEL_INVALID;goto fail;}
++ }
++ f->obj.mdl.body=f->body_data;
++ f->obj.mdl.model=&f->model_header;f->obj.mdl.param=&f->param;
+  f->obj.type=0;f->obj.xf.scale=1.0f;f->obj.hit.scale=1.0f;
+  f->obj.look.node2.w=1.0f;f->obj.look.node2E.w=1.0f;f->obj.look.node2F.w=1.0f;
+  f->obj.anim.step=1.0f; /* diagnostic: one motion frame per Step call */
++ unsigned slot=0;while(slot<16 && owners[slot])slot++;if(slot==16){e=-852;goto fail;}owners[slot]=f;
+  *stats=f->stats;*out=f;return 0;
+ fail:XbBattleFighter_FreeModelAnimation(f);return e;
+ }
+ int XbBattleFighter_PlayModel(XbBattleFighter *f,unsigned index,unsigned mode){
+  if(!f || index>=8 || mode>2)return DR_MODEL_INVALID;
+  if(!f->obj.mdl.modelAnims[index])return DR_LOAD_EMPTY;
+- BtlObjAnim_PlayModel(&f->obj,(s32)index,(s32)mode);return 0;
++ BtlObjAnim_PlayModel(&f->obj,(s32)index,(s32)mode);f->pose_valid=f->matrices_valid=0;return 0;
+ }
+ int XbBattleFighter_StepModel(XbBattleFighter *f,uint32_t *frame,uint32_t *length){
+  if(!f || !frame || !length || !f->obj.anim.layer[0].data)return DR_MODEL_INVALID;
+- BtlObjAnim_Step(&f->obj);*frame=(uint32_t)f->obj.anim.frame;*length=(uint32_t)f->obj.anim.layer[0].length;return 0;
+-}
++ f->pose_valid=f->matrices_valid=0;BtlObjAnim_Step(&f->obj);*frame=(uint32_t)f->obj.anim.frame;*length=(uint32_t)f->obj.anim.layer[0].length;return 0;
++}
++
++extern void BtlObjAnim_Play(BobjObj *,s32,s32,s32);
++extern void BtlObjAnim_SamplePose(BobjObj *);
++extern void BtlObjPose_CalcMatrices(BobjObj *);
++extern void BtlObjAnim_PlayFrom(BobjObj *,BobjObj *,s32,s32);
++int XbBattleFighter_PlayMotion(XbBattleFighter *f,unsigned id,unsigned mode){
++ if(!f || id>=BOBJ_ANIM_MAX || mode>2)return DR_MODEL_INVALID;
++ if(!f->decoded[id])return DR_LOAD_EMPTY;
++ BtlObjAnim_Play(&f->obj,0,(s32)id,1);f->obj.anim.mode=mode;f->pose_valid=f->matrices_valid=0;return 0;
++}
++int XbBattleFighter_PlayRetargeted(XbBattleFighter *f,XbBattleFighter *other,unsigned id){
++ if(!f || !other || id>=BOBJ_ANIM_MAX)return DR_MODEL_INVALID;
++ if(!other->decoded[id])return DR_LOAD_EMPTY;
++ BtlObjAnim_PlayFrom(&f->obj,&other->obj,(s32)id,0);f->obj.anim.mode=2;f->pose_valid=f->matrices_valid=0;return 0;
++}
++int XbBattleFighter_SamplePose(XbBattleFighter *f){
++ if(!f || !f->obj.anim.layer[0].data)return DR_MODEL_INVALID;
++ BtlObjAnim_SamplePose(&f->obj);f->pose_valid=1;f->matrices_valid=0;return 0;
++}
++int XbBattleFighter_GetNodePose(XbBattleFighter *f,unsigned id,float pos[4],float rot[4]){
++ if(!f || !f->pose_valid || id>=162 || !f->present[id] || !pos || !rot)return DR_MODEL_INVALID;
++ memcpy(pos,&f->node[id].part.pos,16);memcpy(rot,&f->node[id].part.rot,16);return 0;
++}
++extern void Vu0_InitAxisRegs(void);
++extern void BtlObjXf_Update(BobjObj *);
++int XbBattleFighter_CalcMatrices(XbBattleFighter *f){
++ if(!f || !f->pose_valid || !f->obj.anim.layer[0].data)return DR_MODEL_INVALID;
++ Vu0_InitAxisRegs();BtlObjXf_Update(&f->obj);BtlObjPose_CalcMatrices(&f->obj);f->matrices_valid=1;return 0;
++}
++int XbBattleFighter_GetNodeMatrix(XbBattleFighter *f,unsigned id,float matrix[16]){
++ if(!f || !f->matrices_valid || id>=162 || !f->present[id] || !matrix)return DR_MODEL_INVALID;
++ memcpy(matrix,&f->node[id].part.mtx,64);return 0;
++}
++
++extern void BtlObjBody_Init(BobjObj *);
++extern s32 BtlObjBody_Update(BobjObj *,s32);
++extern void BtlObjAnim_UpdateEvents(BobjObj *);
++extern void BtlObjHit_BuildVolumes(BobjObj *);
++int XbBattleFighter_UpdateVolumes(XbBattleFighter *f,unsigned *parts,unsigned *sphere,unsigned *boxes){
++ if(!f || !f->matrices_valid || !f->obj.anim.layer[0].data || !parts || !sphere || !boxes)return DR_MODEL_INVALID;
++ if(!f->obj.body.parts)BtlObjBody_Init(&f->obj);
++ BtlObjBody_Update(&f->obj,0);BtlObjAnim_UpdateEvents(&f->obj);BtlObjHit_BuildVolumes(&f->obj);
++ *parts=f->body_count;*sphere=(unsigned)f->obj.work->atkSphereCount;*boxes=(unsigned)f->obj.work->atkObbCount;return 0;
++}
++
++int XbBattleFighter_FindAttackMotion(XbBattleFighter *f,unsigned *motion){
++ if(!f || !motion)return DR_MODEL_INVALID;
++ for(unsigned i=0;i<BOBJ_ANIM_MAX;i++)if(f->decoded[i]){
++  BobjAnim *a=f->decoded[i];for(unsigned j=0;j<a->eventCount;j++)if((a->event[j].attrLo&1) && a->event[j].arg){*motion=i;return 0;}
++ }
++ return DR_LOAD_EMPTY;
++}
++
++int XbBattleFighter_GetMesh(XbBattleFighter *f,unsigned index,XbFighterMesh *out){
++ if(!f || !f->matrices_valid || !out || index>=f->stats.bones)return DR_MODEL_INVALID;
++ DrBodyPart *p=&f->parts[index];memset(out,0,sizeof(*out));out->node=p->node;
++ out->vif=f->model_pack+f->mesh_offset+p->chain_offset;out->vif_bytes=p->chain_bytes;
++ memcpy(out->world,&f->node[p->node].part.mtx,64);memcpy(out->pivot_a,p->pivot_a,16);memcpy(out->pivot_b,p->pivot_b,16);return 0;
++}
++int XbBattleFighter_GetFaceGeometry(XbBattleFighter *f,unsigned shape,const void **bytes,size_t *size){
++ if(!f || !bytes || !size || shape>=8)return DR_MODEL_INVALID;
++ *bytes=NULL;*size=0;size_t off,n,bad;int e=dr_pack_memory_entry(f->model_pack,f->model_size,3+shape,&off,&n,NULL);if(e)return e;
++ e=dr_face_vif_parse(f->model_pack+off,n,NULL,NULL,NULL,&bad);if(e)return e;
++ *bytes=f->model_pack+off;*size=n;return 0;
++}
++int XbBattleFighter_PrepareTextures(XbBattleFighter *f,unsigned *count){
++ if(!f || !count)return DR_MODEL_INVALID;
++ *count=0;if(f->images){*count=f->image_count;return 0;}
++ static const unsigned entries[]={0,11,12,13,14,15,16};unsigned total=0;
++ for(unsigned g=0;g<7;g++){size_t off,n;int e=dr_pack_memory_entry(f->model_pack,f->model_size,entries[g],&off,&n,NULL);if(e==DR_NOT_FOUND)continue;if(e || n<20)return DR_MODEL_INVALID;uint32_t c=dr_resource_le32(f->model_pack+off);if(c>256 || total>512-c)return DR_MODEL_INVALID;total+=c;}
++ XbCachedImage *images=calloc(total?total:1,sizeof(*images));void *scratch=malloc(4*1024*1024);if(!images || !scratch){free(images);free(scratch);return -851;}
++ unsigned used=0;size_t budget=0;int e=0;
++ for(unsigned g=0;g<7 && !e;g++){
++  size_t off,n;e=dr_pack_memory_entry(f->model_pack,f->model_size,entries[g],&off,&n,NULL);if(e==DR_NOT_FOUND){e=0;continue;}if(e)break;
++  uint32_t c=dr_resource_le32(f->model_pack+off);
++  for(unsigned i=0;i<c;i++){
++   DrTexFileImage image;e=dr_texfile_decode(f->model_pack+off,n,i,scratch,4*1024*1024,&image);if(e)break;
++   if(image.rgba_bytes>32*1024*1024-budget){e=DR_MODEL_CAPACITY;break;}
++   void *pixels=malloc(image.rgba_bytes);if(!pixels){e=-851;break;}memcpy(pixels,scratch,image.rgba_bytes);
++   images[used++]=(XbCachedImage){entries[g],i,image,pixels};budget+=image.rgba_bytes;
++  }
++ }
++ free(scratch);if(e){for(unsigned i=0;i<used;i++)free(images[i].rgba);free(images);return e;}
++ f->images=images;f->image_count=used;*count=used;return 0;
++}
++int XbBattleFighter_GetTexture(XbBattleFighter *f,unsigned index,XbFighterTexture *out){
++ if(!f || !out || index>=f->image_count)return DR_MODEL_INVALID;
++ XbCachedImage *v=&f->images[index];*out=(XbFighterTexture){v->family,v->index,v->image.width,v->image.height,v->image.rgba_bytes,v->rgba};return 0;
++}
+--- a/engine/platform/platform/xb_battle_fighter.h
++++ b/engine/platform/platform/xb_battle_fighter.h
+@@ -4,14 +4,31 @@
+ #include <stddef.h>
+ #include <stdint.h>
+ typedef struct XbBattleFighter XbBattleFighter;
++typedef struct XbFighterMesh {unsigned node;const void *vif;size_t vif_bytes;float world[16],pivot_a[4],pivot_b[4];} XbFighterMesh;
++typedef struct XbFighterTexture {unsigned family,index,width,height;size_t bytes;const void *rgba;} XbFighterTexture;
+ typedef struct XbFighterPrepared {uint32_t bones,motions,empty_motions,model_motions,empty_model_motions;} XbFighterPrepared;
+-/* Owned native skeleton and decoded motions for a real BobjObj animation
+- * player. Other model tables, body hit volumes, parameters, textures and the
+- * fighter work/AI are NOT prepared: this cannot authorize a combat spawn. */
++/* Owned native skeleton, selected model parameters, BobjWork and body data;
++ * decoded clips feed the original player through bounded ownership bridges.
++ * Pose/matrix/volume updates are explicit. This is still not a registered
++ * character: roster tables, renderer submission and character managers are
++ * not initialized, and this API cannot authorize Battle_Main. */
+ int XbBattleFighter_PrepareModelAnimation(const void *model,size_t model_size,
+  const void *motions,size_t motions_size,XbBattleFighter **out,XbFighterPrepared *);
+ void XbBattleFighter_FreeModelAnimation(XbBattleFighter *);
+ /* Actual original PlayModel/Step functions, operating on the owned BobjObj. */
+ int XbBattleFighter_PlayModel(XbBattleFighter *,unsigned index,unsigned mode);
+ int XbBattleFighter_StepModel(XbBattleFighter *,uint32_t *frame,uint32_t *length);
++int XbBattleFighter_PlayMotion(XbBattleFighter *,unsigned motion,unsigned mode);
++int XbBattleFighter_PlayRetargeted(XbBattleFighter *,XbBattleFighter *other,unsigned motion);
++int XbBattleFighter_SamplePose(XbBattleFighter *);
++int XbBattleFighter_GetNodePose(XbBattleFighter *,unsigned node,float pos[4],float rot[4]);
++int XbBattleFighter_CalcMatrices(XbBattleFighter *);
++int XbBattleFighter_GetNodeMatrix(XbBattleFighter *,unsigned node,float matrix[16]);
++int XbBattleFighter_UpdateVolumes(XbBattleFighter *,unsigned *body_parts,unsigned *attack_spheres,unsigned *attack_boxes);
++int XbBattleFighter_FindAttackMotion(XbBattleFighter *,unsigned *motion); /* resource inspection, not move selection AI */
++/* GetMesh refuses stale/uncomputed matrices. Borrowed renderer inputs; canonical VIF remains LE. These do not submit draws. */
++int XbBattleFighter_GetMesh(XbBattleFighter *,unsigned part,XbFighterMesh *);
++int XbBattleFighter_GetFaceGeometry(XbBattleFighter *,unsigned shape,const void **bytes,size_t *size);
++int XbBattleFighter_PrepareTextures(XbBattleFighter *,unsigned *count);
++int XbBattleFighter_GetTexture(XbBattleFighter *,unsigned index,XbFighterTexture *);
+ #endif
+--- a/engine/tests/test_native_fighter.c
++++ b/engine/tests/test_native_fighter.c
+@@ -4,11 +4,55 @@
+ #include <stdio.h>
+ #include <assert.h>
+ #include <stdlib.h>
++#include <math.h>
++/* Storage for the original's unused table-retarget branch. Tests use
++ * per-skeleton retargeting; these values are never read. */
++void *Bpe_Decode(void *src,void *dst,int *size){(void)src;(void)dst;(void)size;abort();} /* forbidden legacy fallback in owned-motion tests */
++float D_002F2420[213];
++float D_002EC2C0[4]={0,0,0,1};
+ static void *load(const char *name,size_t *n){FILE *f=fopen(name,"rb");assert(f && !fseek(f,0,SEEK_END));long s=ftell(f);assert(s>0 && !fseek(f,0,SEEK_SET));*n=(size_t)s;void *p=malloc(*n);assert(p && fread(p,1,*n,f)==*n);fclose(f);return p;}
+-int main(int argc,char **argv){assert(argc==3);size_t mn,an;void *m=load(argv[1],&mn),*a=load(argv[2],&an);XbBattleFighter *f=NULL;XbFighterPrepared s;
+- int e=XbBattleFighter_PrepareModelAnimation(m,mn,a,an,&f,&s);if(e)fprintf(stderr,"prepare error=%d\n",e);assert(!e && f);free(m);free(a);
++int main(int argc,char **argv){assert(argc==3 || argc==5);size_t mn,an;void *m=load(argv[1],&mn),*a=load(argv[2],&an);XbBattleFighter *f=NULL;XbFighterPrepared s;
++ XbBattleFighter *bad=(XbBattleFighter *)(uintptr_t)1;XbFighterPrepared bads;
++ assert(XbBattleFighter_PrepareModelAnimation(m,32,a,an,&bad,&bads)<0 && !bad);
++ assert(XbBattleFighter_PrepareModelAnimation(m,mn,a,16,&bad,&bads)<0 && !bad);
++ int e=XbBattleFighter_PrepareModelAnimation(m,mn,a,an,&f,&s);if(e)fprintf(stderr,"prepare error=%d\n",e);assert(!e && f);XbFighterMesh early;assert(XbBattleFighter_GetMesh(f,0,&early)<0);free(m);free(a);
+  assert(s.bones==69 && s.motions+s.empty_motions==414 && s.model_motions==1 && s.empty_model_motions==7);
+  assert(XbBattleFighter_PlayModel(f,0,2)==DR_LOAD_EMPTY);assert(!XbBattleFighter_PlayModel(f,7,2));uint32_t frame,length;
+  for(unsigned i=0;i<200;i++){assert(!XbBattleFighter_StepModel(f,&frame,&length));assert(frame==(i+1)%length);}
++ unsigned picked=0;int play;
++ do{play=XbBattleFighter_PlayMotion(f,picked,2);if(play==DR_LOAD_EMPTY)picked++;else break;}while(picked<414);
++ assert(!play && picked<414);float p0[4],p1[4],rot[4];assert(!XbBattleFighter_SamplePose(f));assert(!XbBattleFighter_GetNodePose(f,0,p0,rot));
++ #if UINTPTR_MAX==UINT32_MAX
++ float before[16],after[16];assert(!XbBattleFighter_CalcMatrices(f));assert(!XbBattleFighter_GetNodeMatrix(f,3,before));
++ #endif
++ for(unsigned i=0;i<30;i++){assert(!XbBattleFighter_StepModel(f,&frame,&length));assert(!XbBattleFighter_SamplePose(f));}
++ assert(!XbBattleFighter_GetNodePose(f,0,p1,rot));
++ #if UINTPTR_MAX==UINT32_MAX
++ assert(!XbBattleFighter_CalcMatrices(f));assert(!XbBattleFighter_GetNodeMatrix(f,3,after));float delta=0;for(unsigned i=0;i<16;i++)delta+=fabsf(before[i]-after[i]);assert(delta>0.000001f);printf("animated_matrix_delta=%f\n",delta);
++ #endif
++ #if UINTPTR_MAX==UINT32_MAX
++ assert(!XbBattleFighter_PlayRetargeted(f,f,picked));assert(!XbBattleFighter_SamplePose(f));
++ #endif
++ #if UINTPTR_MAX==UINT32_MAX
++ float matrix[16];assert(!XbBattleFighter_CalcMatrices(f));assert(!XbBattleFighter_GetNodeMatrix(f,3,matrix));for(unsigned i=0;i<16;i++)assert(isfinite(matrix[i]));
++ unsigned bp,sp,bb;assert(!XbBattleFighter_UpdateVolumes(f,&bp,&sp,&bb));assert(bp==22 && sp<=19 && bb<=19);printf("body_parts=%u attack_spheres=%u attack_boxes=%u\n",bp,sp,bb);
++ unsigned attack;assert(!XbBattleFighter_FindAttackMotion(f,&attack));assert(!XbBattleFighter_PlayMotion(f,attack,2));unsigned hits=0;
++ for(unsigned i=0;i<200;i++){assert(!XbBattleFighter_StepModel(f,&frame,&length));assert(!XbBattleFighter_SamplePose(f));assert(!XbBattleFighter_CalcMatrices(f));assert(!XbBattleFighter_UpdateVolumes(f,&bp,&sp,&bb));if(sp+bb)hits++;}
++ assert(hits);printf("attack_motion=%u active_volume_frames=%u\n",attack,hits);
++ #endif
++ printf("pose motion=%u root0=%f root30=%f quaternion_w=%f\n",picked,p0[1],p1[1],rot[3]);
+  printf("PASS: bones=%u decoded=%u empty=%u model=%u/%u; original PlayModel/Step 200 frames length=%u; source freed; no combat spawn\n",s.bones,s.motions,s.empty_motions,s.model_motions,s.empty_model_motions,length);
++ #if UINTPTR_MAX==UINT32_MAX
++ if(argc==5){size_t on,oa;void *om=load(argv[3],&on),*op=load(argv[4],&oa);XbBattleFighter *other;XbFighterPrepared os;assert(!XbBattleFighter_PrepareModelAnimation(om,on,op,oa,&other,&os));free(om);free(op);assert(!XbBattleFighter_PlayRetargeted(f,other,55));XbBattleFighter_FreeModelAnimation(other);assert(!XbBattleFighter_SamplePose(f));assert(!XbBattleFighter_CalcMatrices(f));printf("cross-owner retarget survived source fighter free\n");}
++ #endif
++ unsigned textures=0;int te=XbBattleFighter_PrepareTextures(f,&textures);printf("texture preparation rc=%d count=%u\n",te,textures);assert(!te && textures);
++ for(unsigned i=0;i<textures;i++){XbFighterTexture t;assert(!XbBattleFighter_GetTexture(f,i,&t));assert(t.rgba && t.bytes==(size_t)t.width*t.height*4);}
++ unsigned faces=0;for(unsigned i=0;i<8;i++){const void *vif;size_t bytes;int rc=XbBattleFighter_GetFaceGeometry(f,i,&vif,&bytes);if(!rc){assert(vif && bytes);faces++;}else assert(rc==DR_NOT_FOUND);}assert(faces);
++ XbFighterMesh mesh;
++ #if UINTPTR_MAX==UINT32_MAX
++ assert(!XbBattleFighter_GetMesh(f,0,&mesh));
++ #else
++ assert(XbBattleFighter_GetMesh(f,0,&mesh)<0);mesh.node=0;
++ #endif
++ printf("renderer inputs textures=%u facial_geometries=%u node0=%u; no GPU submission\n",textures,faces,mesh.node);
+  XbBattleFighter_FreeModelAnimation(f);return 0;}
+--- a/engine/tools/build_engine_diagnostic.py
++++ b/engine/tools/build_engine_diagnostic.py
+@@ -45,9 +45,9 @@
+ for name in ['func_002967C0','sceSifCallRpc','XbSfx_Mix','ADXT_Create','_ctype_','gPortDataStripped']:
+     assert name in defined,name
+ subprocess.run(['python3',str(sdk/'tools/elf2xex.py'),'--title-id','0x44523630',
+-                '--title-name','DragonRage360 0.37 D3 Typed Data Diagnostic' if r.get('typed_catalog_linked') else 'DragonRage360 0.34 L1 Diagnostic',str(elf),str(xex)],check=True)
++                '--title-name','DragonRage360 0.38 D4 Typed Data Diagnostic' if r.get('typed_catalog_linked') else 'DragonRage360 0.34 L1 Diagnostic',str(elf),str(xex)],check=True)
+ report={'kind':'native diagnostic with linked combat code; NOT a playable game',
+-        'version':'0.37-D3' if r.get('typed_catalog_linked') else '0.34-L1','Battle_Main_address':hex(defined['Battle_Main'][1]),
++        'version':'0.38-D4' if r.get('typed_catalog_linked') else '0.34-L1','Battle_Main_address':hex(defined['Battle_Main'][1]),
+         'Battle_Main_linked':True,'Game_Main_linked':False,'battle_called':False,
+         'strong_or_weak_undefined':0,'native_game_data_loaded':False,'typed_catalog_linked':bool(r.get('typed_catalog_linked')),'partial_preview_available':bool(r.get('typed_catalog_linked')), 
+         'boot_combat_available':False,'hardware_executed':False,
+--- a/engine/tools/fixed_profile_source.py
++++ b/engine/tools/fixed_profile_source.py
+@@ -1,13 +1,35 @@
+ # SPDX-License-Identifier: AGPL-3.0-or-later
+-"""Remove explicit PC diagnostic/window/session notification call sites only.
+-
+-No linker/table rewriting. Rules must match the pinned sources exactly; args
+-are field reads, constants and strings, so no gameplay side effects are lost.
+-Audio, HUD drawing, fighter updates, resources and callbacks remain untouched.
++"""Pinned fixed-profile adaptations.
++Explicit PC UI/session notifications are omitted. Owned fighter objects use
++bounded native node/decoded-motion bridges; other objects keep original paths.
++Body local points get a defined homogeneous W; attack point arguments satisfy
++16-byte vector contracts. Every source anchor must match exactly.
+ """
+ import re
+ 
+ def transform(source, text):
++    if source=='src/battle/bobj_a.c':
++        node='BObjNode *BtlObj_GetNode(BObj *obj, s32 node) {\n'
++        load='BobjAnim *BtlObjAnim_Load(BobjObj *obj, void *buf, s32 anim, s32 *size) {\n'
++        if text.count(node)!=1 or text.count(load)!=1:raise ValueError('native fighter hook source changed')
++        text=text.replace(node,node+'    extern int XbFighter_ResolveNode(void *, int, void **);\n    void *native_node;\n    if (XbFighter_ResolveNode(obj,node,&native_node)) return (BObjNode *)native_node;\n')
++        text=text.replace(load,load+'    extern int XbFighter_LoadDecoded(void *,void *,int,int *,void **);\n    void *native_motion;\n    if (XbFighter_LoadDecoded(obj,buf,anim,size,&native_motion)) return (BobjAnim *)native_motion;\n')
++        point='        Vec3_Sub(&local, &part->offset, &part->bone->origin);'
++        if text.count(point)!=1:raise ValueError('body local-point source changed')
++        text=text.replace(point,'        local.w = 1.0f; /* homogeneous local point, not uninitialized stack data */\n'+point)
++        marker='void BtlObjHit_BuildVolumes(BobjObj *obj) {'
++        start=text.index(marker);end=text.index('/* Local rotation matrix',start)
++        block=text[start:end]
++        if block.count('    Vec4 center;')!=1:raise ValueError('attack center source changed')
++        block=block.replace('    Vec4 center;','    Vec4 center __attribute__((aligned(16)));')
++        block=block.replace('    Vec4 offset;','    Vec4 offset;\n    Vec4 boundsPoint __attribute__((aligned(16)));')
++        for side in ('min','max'):
++            call='                ColBox_AddPointKeepW(&work->atkBox, box.'+side+');'
++            if block.count(call)!=2:raise ValueError('attack bound point source changed')
++            setup='                boundsPoint.x=box.'+side+'[0]; boundsPoint.y=box.'+side+'[1]; boundsPoint.z=box.'+side+'[2]; boundsPoint.w=1.0f;\n'
++            block=block.replace(call,setup+'                ColBox_AddPointKeepW(&work->atkBox, &boundsPoint);')
++        text=text[:start]+block+text[end:]
++        return text, []
+     expected = {
+         'src/sys/gfx.c': ('PortQuit_Draw', 1),
+         'src/battle/battle_load.c': ('DrNet_BattleFinished', 1),
+--- a/engine/tools/link_battle.py
++++ b/engine/tools/link_battle.py
+@@ -121,7 +121,7 @@
+         unchanged=input_file.read_bytes()==input_bytes
+         if run.returncode or not unchanged:target.unlink(missing_ok=True)
+         return {'source':rel,'original_source':str(input_file),'source_sha256':hashlib.sha256(input_bytes).hexdigest(),
+-                'fixed_PC_hooks_omitted':fixed_omissions,
++                'fixed_PC_hooks_omitted':fixed_omissions,'native_fighter_bridges_and_vector_fixes':bool(a.fixed_battle and rel=='src/battle/bobj_a.c'),
+                 'compiled':run.returncode==0 and unchanged,'source_unchanged_during_compile':unchanged,
+                 'software_arithmetic_lowered':lowered,'object':str(target),'log':str(log),
+                 'C_attempts_enabled':enabled,'functions_without_C':missing}
+--- a/engine/tools/test_native_fighter.py
++++ b/engine/tools/test_native_fighter.py
+@@ -2,15 +2,28 @@
+ # SPDX-License-Identifier: AGPL-3.0-or-later
+ from pathlib import Path
+ import argparse,subprocess,sys,os,json
+-p=argparse.ArgumentParser();p.add_argument('upstream',type=Path);p.add_argument('model',type=Path);p.add_argument('motions',type=Path);p.add_argument('output',type=Path);a=p.parse_args();up=a.upstream.resolve();out=a.output.resolve();out.mkdir(parents=True,exist_ok=True);e=Path(__file__).resolve().parents[1];project=e.parent
++p=argparse.ArgumentParser();p.add_argument('upstream',type=Path);p.add_argument('model',type=Path);p.add_argument('motions',type=Path);p.add_argument('output',type=Path);p.add_argument('--i386-root',type=Path);p.add_argument('--qemu',type=Path);p.add_argument('--other-model',type=Path);p.add_argument('--other-motions',type=Path);a=p.parse_args();up=a.upstream.resolve();out=a.output.resolve();out.mkdir(parents=True,exist_ok=True);e=Path(__file__).resolve().parents[1];project=e.parent
+ sys.path.insert(0,str(up/'port/tools'));import portsrc
+-s,_,_=portsrc.enable_attempts((up/'src/battle/bobj_a.c').read_text());original=out/'bobj_a.c';original.write_text(s)
+-sources=[e/'tests/test_native_fighter.c',e/'platform/platform/xb_battle_fighter.c',original,*[project/'src'/(s+'.c') for s in ('dr_body_model','dr_face_vif','dr_container','dr_anim','dr_bpe','dr_skeleton','dr_disc')]]
++s,_,_=portsrc.enable_attempts((up/'src/battle/bobj_a.c').read_text());from fixed_profile_source import transform
++s,_=transform('src/battle/bobj_a.c',s);mathtext,_,_=portsrc.enable_attempts((up/'src/sys/math3d.c').read_text());mathsrc=out/'math3d.c';mathsrc.write_text(mathtext);original=out/'bobj_a.c';original.write_text(s)
++mathftext,_,_=portsrc.enable_attempts((up/'src/sys/mathf.c').read_text());mathfsrc=out/'mathf.c';mathfsrc.write_text(mathftext)
++original_geometry=[]
++for stem in ('col_a','col_b','stg_d'):
++ text,_,_=portsrc.enable_attempts((up/'src/battle'/(stem+'.c')).read_text());src=out/(stem+'.c');src.write_text(text);original_geometry.append(src)
++sources=[e/'tests/test_native_fighter.c',e/'platform/platform/xb_battle_fighter.c',original,*[project/'src'/(s+'.c') for s in ('dr_body_model','dr_face_vif','dr_container','dr_anim','dr_bpe','dr_skeleton','dr_disc','dr_texfile','dr_gs_texture')],up/'src/port/vu0_a.c',up/'src/port/vu0_b.c',mathsrc,mathfsrc,up/'port/src/mathf_pc.c',*original_geometry,up/'port/src/plat_fastvec.c']
+ common=['gcc','-std=gnu99','-O1','-g','-fcommon','-fno-strict-aliasing','-ffunction-sections','-fdata-sections','-fsanitize=address,undefined','-fno-omit-frame-pointer','-I'+str(e/'platform/platform'),'-I'+str(project/'src'),'-I'+str(up/'include'),'-I'+str(up/'port/include'),'-I'+str(up/'port/src')]
++extra=[];linkextra=[]
++if a.i386_root:
++ root=a.i386_root.resolve();lib=root/'usr/lib32';extra=['-m32','-B'+str(lib)+'/', '-B'+str(root/'usr/lib/gcc/x86_64-linux-gnu/13/32')+'/', '-isystem',str(root/'usr/include'),'-isystem',str(root/'usr/include/x86_64-linux-gnu'),'-isystem','/usr/include/x86_64-linux-gnu']
++ linkextra=['-m32','-B'+str(lib)+'/', '-B'+str(root/'usr/lib/gcc/x86_64-linux-gnu/13/32')+'/', '-L'+str(lib),'-Wl,--dynamic-linker='+str(lib/'ld-linux.so.2'),'-Wl,-rpath,'+str(lib)]
++common+=extra
++sanitize='undefined,bounds' if a.i386_root else 'address,undefined'
++common=[('-fsanitize='+sanitize if x.startswith('-fsanitize=') else x) for x in common]
+ objects=[];logs=[]
+ for i,src in enumerate(sources):
+- obj=out/(str(i)+'.o');flags=['-include',str(up/'port/include/port_compat.h')] if src==original else []
++ obj=out/(str(i)+'.o');flags=['-include',str(up/'port/include/port_compat.h')] if src in (original,mathsrc,mathfsrc,*original_geometry) else []
++ if src.name in ('vu0_a.c','vu0_b.c'):flags+=['-include','math.h','-include',str(up/'port/src/vu0_names.h'),'-DREF_VU0_EXTERN_ARITH']
+  r=subprocess.run(common+flags+['-c',str(src),'-o',str(obj)],capture_output=True,text=True);logs.append(r.stdout+r.stderr);(out/'compile.txt').write_text(''.join(logs));r.check_returncode();objects.append(obj)
+-r=subprocess.run(['gcc','-fsanitize=address,undefined',*map(str,objects),'-Wl,--gc-sections','-lm','-o',str(out/'native-fighter')],capture_output=True,text=True);logs.append(r.stdout+r.stderr);(out/'compile.txt').write_text(''.join(logs));r.check_returncode()
+-r=subprocess.run([str(out/'native-fighter'),str(a.model.resolve()),str(a.motions.resolve())],capture_output=True,text=True,env=dict(os.environ,ASAN_OPTIONS='detect_leaks=0:halt_on_error=1',UBSAN_OPTIONS='halt_on_error=1'));(out/'native-fighter-test.txt').write_text(r.stdout+r.stderr);print(r.stdout+r.stderr,end='');r.check_returncode()
+-(out/'native-fighter-test.json').write_text(json.dumps({'result':'PASS','original_PlayModel_and_Step':True,'frames':200,'owned_state_survives_source_free':True,'sanitizers':True,'host_only':True,'fighter_spawned_in_combat':False,'rendered':False},indent=2)+'\n')
++r=subprocess.run(['gcc',*linkextra,'-fsanitize='+sanitize,*map(str,objects),'-Wl,--gc-sections','-lm','-o',str(out/'native-fighter')],capture_output=True,text=True);logs.append(r.stdout+r.stderr);(out/'compile.txt').write_text(''.join(logs));r.check_returncode()
++r=subprocess.run(([str(a.qemu.resolve()),'-E','LD_LIBRARY_PATH='+str(a.i386_root.resolve()/'usr/lib32')] if a.qemu else [])+[str(out/'native-fighter'),str(a.model.resolve()),str(a.motions.resolve())]+([str(a.other_model.resolve()),str(a.other_motions.resolve())] if a.other_model and a.other_motions else []),capture_output=True,text=True,env=dict(os.environ,ASAN_OPTIONS='detect_leaks=0:halt_on_error=1',UBSAN_OPTIONS='halt_on_error=1'));(out/'native-fighter-test.txt').write_text(r.stdout+r.stderr);print(r.stdout+r.stderr,end='');r.check_returncode()
++(out/'native-fighter-test.json').write_text(json.dumps({'result':'PASS','original_PlayModel_and_Step':True,'frames':200,'owned_state_survives_source_free':True,'sanitizers':sanitize,'host_pointer_bits':32 if a.i386_root else 64,'host_only':True,'pose_matrix_and_volume_paths':bool(a.i386_root),'cross_owner_retarget':bool(a.i386_root and a.other_model),'fighter_spawned_in_combat':False,'rendered':False},indent=2)+'\n')
+--- a/src/demo_ui.c
++++ b/src/demo_ui.c
+@@ -99,7 +99,7 @@
+     p->rect(52,52,68,68,ORANGE);
+     text(p,66,66,2,0xFF211000,"DR");
+     text(p,144,48,2,WHITE,"DRAGON RAGE");
+-    text(p,146,94,1,GOLD,"XBOX 360  /  DEMO 0.37-D3");
++    text(p,146,94,1,GOLD,"XBOX 360  /  DEMO 0.38-D4");
+     text(p,930,56,1,u->connected?0xFF3DDC84:GOLD,u->connected?"CONTROLE CONECTADO":"CONECTE O CONTROLE");
+     text(p,930,88,1,MUTED,"Interface + leitor de ISO");
+     p->rect(52,154,300,480,PANEL);
+--- a/src/main.c
++++ b/src/main.c
+@@ -255,10 +255,27 @@
+         if(e){xsdk_log_write("fighter model-animation preparation: side=%u refused error=%d",side,e);return e;}
+         e=XbBattleFighter_PlayModel(native_fighters[side],7,2);uint32_t frame=0,length=0;
+         if(!e)e=XbBattleFighter_StepModel(native_fighters[side],&frame,&length);
++        unsigned body=0,spheres=0,boxes=0;
++        if(!e)e=XbBattleFighter_PlayMotion(native_fighters[side],0,2);
++        if(!e)e=XbBattleFighter_StepModel(native_fighters[side],&frame,&length);
++        if(!e)e=XbBattleFighter_SamplePose(native_fighters[side]);
++        if(!e)e=XbBattleFighter_CalcMatrices(native_fighters[side]);
++        if(!e)e=XbBattleFighter_UpdateVolumes(native_fighters[side],&body,&spheres,&boxes);
++        xsdk_log_write("fighter native pose/body: side=%u error=%d body_parts=%u attack_spheres=%u attack_boxes=%u; renderer/character managers still unavailable",side,e,body,spheres,boxes);
++        unsigned textures=0;if(!e)e=XbBattleFighter_PrepareTextures(native_fighters[side],&textures);
++        XbFighterMesh mesh;XbFighterTexture texture;
++        if(!e)e=XbBattleFighter_GetMesh(native_fighters[side],0,&mesh);
++        if(!e && textures)e=XbBattleFighter_GetTexture(native_fighters[side],0,&texture);
++        unsigned faces=0;for(unsigned shape=0;shape<8 && !e;shape++){const void *vif;size_t n;int rc=XbBattleFighter_GetFaceGeometry(native_fighters[side],shape,&vif,&n);if(!rc)faces++;else if(rc!=DR_NOT_FOUND)e=rc;}
++        xsdk_log_write("fighter renderer inputs: side=%u error=%d CPU_textures=%u facial_geometry_sets=%u; no draw submission or face animation",side,e,textures,faces);
+         xsdk_log_write("fighter model-animation: side=%u error=%d bones=%u motions=%u empty=%u model_motions=%u frame=%u/%u; NOT spawned in combat",side,e,stats.bones,stats.motions,stats.empty_motions,stats.model_motions,frame,length);
+         if(e)return e;
+     }
+-    return 0;
++    int retarget=XbBattleFighter_PlayRetargeted(native_fighters[0],native_fighters[1],0);
++    if(!retarget)retarget=XbBattleFighter_SamplePose(native_fighters[0]);
++    if(!retarget)retarget=XbBattleFighter_CalcMatrices(native_fighters[0]);
++    xsdk_log_write("fighter original retarget warm-up: error=%d; character managers NOT registered",retarget);
++    return retarget;
+ }
+ #endif
+ static int test_stage_collision(void)
+@@ -371,10 +388,10 @@
+ #ifdef DR_ENGINE_LINKED
+     extern int Battle_Main(void);
+     extern volatile uint32_t gPortDataStripped;
+-    xsdk_log_write("DragonRage360 0.37-D3: native diagnostic; Battle_Main linked at %p",(void *)(uintptr_t)Battle_Main);
++    xsdk_log_write("DragonRage360 0.38-D4: native diagnostic; Battle_Main linked at %p",(void *)(uintptr_t)Battle_Main);
+     xsdk_log_write("engine: data_stripped=%u; combat boot BLOCKED: typed main-data manifest and battle initialization missing",(unsigned)gPortDataStripped);
+ #else
+-    xsdk_log_write("DragonRage360 0.37-D3: component diagnostic; Battle_Main not linked in this build.");
++    xsdk_log_write("DragonRage360 0.38-D4: component diagnostic; Battle_Main not linked in this build.");
+ #endif
+     xsdk_log_write("%s: BPE decode + animation endian synthetic self-test",dr_resource_selftest()?"PASS":"FAIL");
+     xsdk_log_write("%s: bounded BIN + motion + skeleton synthetic self-test",dr_container_selftest()?"PASS":"FAIL");
+--- a/tests/check_xex.py
++++ b/tests/check_xex.py
+@@ -97,10 +97,10 @@
+         raise AssertionError(name)
+     cat=struct.unpack('>6I',data_at_symbol('gXbTypedMainCatalog',24))
+     assert cat[0]==1 and cat[1] in (0,1) and cat[3]==33 and cat[5]>2000
+-    assert {'XbTypedData_Load','XbTypedData_LoadFromDisc','XbTypedData_RequireBattleData','dr_stage_collision_open','dr_stage_collision_query','XbBattleStage_PrepareCollision','XbBattleStage_InstallCollision','XbBattleStage_QueryCollision','XbBattleFighter_PrepareModelAnimation','XbBattleFighter_PlayModel','XbBattleFighter_StepModel'}<=defined
++    assert {'XbTypedData_Load','XbTypedData_LoadFromDisc','XbTypedData_RequireBattleData','dr_stage_collision_open','dr_stage_collision_query','XbBattleStage_PrepareCollision','XbBattleStage_InstallCollision','XbBattleStage_QueryCollision','XbBattleFighter_PrepareModelAnimation','XbBattleFighter_PlayModel','XbBattleFighter_StepModel','XbBattleFighter_PlayMotion','XbBattleFighter_PlayRetargeted','XbBattleFighter_SamplePose','XbBattleFighter_CalcMatrices','XbBattleFighter_UpdateVolumes','XbBattleFighter_PrepareTextures','XbBattleFighter_GetMesh','XbBattleFighter_GetFaceGeometry'}<=defined
+     assert data_at_symbol('gPortDataStripped',4)==b'\x00\x00\x00\x02'
+     report.update(typed_main_catalog_linked=True,typed_catalog_complete=bool(cat[1]),
+         typed_regions=cat[3],typed_operations=cat[5],partial_data_preview_available=True,
+-        native_game_data_loaded=False,stage_collision_diagnostic_linked=True,stage_collision_original_readers_linked=True,stage_collision_install_path_linked=True,fighter_model_animation_preparation_linked=True,full_fighter_spawn=False,scope='0.37-D3: linked Battle_Main and reviewed native data catalog; original-only pools excluded with native reference proof; explicit typed-data startup preview commits only validated known fields, with readiness marker 2 retained. Native data catalog excludes 46 proven original-only pool bytes; full battle resource initialization, original Game_Main and combat execution remain absent. No hardware validation.')
++        native_game_data_loaded=False,stage_collision_diagnostic_linked=True,stage_collision_original_readers_linked=True,stage_collision_install_path_linked=True,fighter_model_animation_preparation_linked=True,native_pose_body_attack_and_texture_paths_linked=True,full_fighter_spawn=False,scope='0.38-D4: linked Battle_Main and reviewed native data catalog; original-only pools excluded with native reference proof; explicit typed-data startup preview commits only validated known fields, with readiness marker 2 retained. Native data catalog excludes 46 proven original-only pool bytes; full battle resource initialization, original Game_Main and combat execution remain absent. No hardware validation.')
+ report_path.write_text(json.dumps(report,ensure_ascii=False,indent=2)+'\n')
+ print(json.dumps(report,ensure_ascii=False,indent=2))

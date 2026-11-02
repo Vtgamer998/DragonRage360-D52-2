@@ -1,0 +1,72 @@
+{
+  "input_bytes": 3020816384,
+  "environment": "host CPU, little-endian",
+  "upstream": "3ca419c7966b11438e2dc3c9a7e1914f102ed545",
+  "afs": [
+    {
+      "name": "DATA/PZS3US0.AFS",
+      "bytes": 14336,
+      "bounded_entries": 1
+    },
+    {
+      "name": "DATA/PZS3US1.AFS",
+      "bytes": 1462016000,
+      "bounded_entries": 3399
+    },
+    {
+      "name": "DATA/PZS3US2.AFS",
+      "bytes": 1220337664,
+      "bounded_entries": 65201
+    }
+  ],
+  "animations": {
+    "packs": 161,
+    "nonempty": 66654,
+    "empty": 0,
+    "decoded_empty": 9395,
+    "decoded": 66654,
+    "validated": 57259,
+    "big_endian_semantic_matches": 57259,
+    "original_BPE_reference_matches": 336,
+    "failures": 0,
+    "examples": []
+  },
+  "models": {
+    "packs": 1288,
+    "empty_files": 0,
+    "absent_skin_placeholders": 590,
+    "pmdl": 698,
+    "skeletons": 698,
+    "nodes": 43121,
+    "core64_semantic_matches": 43121,
+    "texture_file_structures": 2148,
+    "unclassified_model_resources": 0,
+    "face_geometry_lists": 2722,
+    "face_vif_unpacks": 173798,
+    "face_vif_vectors": 5132078,
+    "face_vif_continues": 86899,
+    "face_vif_noops": 3659,
+    "failures": 0,
+    "examples": []
+  },
+  "limits": [
+    "not Xbox/XEX/PowerPC execution",
+    "not GPU rasterization",
+    "no combat loop or AI execution",
+    "skeleton core 64 bytes only; bounds, model headers, VU streams and skinning remain unconverted",
+    "texture packet structure validation only, no decoded real-texture pixel claim",
+    "face DMA/VIF is parsed, MSCNT microprograms are not executed",
+    "no online/rollback/NAT test",
+    "no FPS measurement"
+  ],
+  "seconds": 16.36,
+  "source_sha256": {
+    "dr_disc.c": "38f745a2a6d42dd81ed6acf591b39438782fc7ded2ab88d844afcc8f0f872556",
+    "dr_container.c": "2a55fa741185c18a22d4af7a26039a93914c2961fc0c601c07b8b59825b612a5",
+    "dr_bpe.c": "8a4588bc848abed4c93d586f0bc813fb2e038a7b9aa1886ed4382ce944fda3e4",
+    "dr_anim.c": "5aa697a8c7c40242b5c764f59eda8d251573bcf2a78f5892d86a7c44a92bfb48",
+    "dr_skeleton.c": "590efdeb82f4eb2e427313493feb43012f279ea5bb9ea84f3c65b0025428bd39",
+    "dr_face_vif.c": "c114deedc3e490bc22f4588b44e2b9936daaa1f6cb7bbbb023b0e9ffcaea9c56"
+  },
+  "result": "PASS"
+}

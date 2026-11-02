@@ -1,0 +1,1473 @@
+--- a/Makefile
++++ b/Makefile
+@@ -3,9 +3,9 @@
+ TOOLCHAIN ?= ../xsdk-gcc/bin/powerpc-xsdk-elf-
+ CC := $(TOOLCHAIN)gcc
+ # Retain real native component APIs for static verification in the diagnostic.
+-NATIVE_API_ROOTS := -Wl,--undefined=ADXT_Init -Wl,--undefined=ADXT_Create -Wl,--undefined=ADXT_SetReloadSct -Wl,--undefined=ADXT_SetSvrFreq -Wl,--undefined=ADXT_StartAfs -Wl,--undefined=ADXT_StartFname -Wl,--undefined=ADXT_Stop -Wl,--undefined=ADXT_Pause -Wl,--undefined=ADXT_SetOutVol -Wl,--undefined=ADXT_GetOutVol -Wl,--undefined=ADXT_SetOutPan -Wl,--undefined=ADXT_SetOutputMono -Wl,--undefined=ADXT_GetStat -Wl,--undefined=XbOverlay_PrepareBuild -Wl,--undefined=XbOverlay_Load -Wl,--undefined=XbMpeg_Open -Wl,--undefined=XbMpeg_Next -Wl,--undefined=XbMpeg_Close
++NATIVE_API_ROOTS := -Wl,--undefined=sceMpegInit -Wl,--undefined=sceMpegCreate -Wl,--undefined=sceMpegDelete -Wl,--undefined=sceMpegReset -Wl,--undefined=sceMpegIsEnd -Wl,--undefined=sceMpegAddCallback -Wl,--undefined=sceMpegAddStrCallback -Wl,--undefined=sceMpegDemuxPss -Wl,--undefined=sceMpegGetPicture -Wl,--undefined=sceGsResetPath -Wl,--undefined=sceGsResetGraph -Wl,--undefined=dr_gs_movie_build -Wl,--undefined=dr_gs_movie_send -Wl,--undefined=XbAdx_Clock -Wl,--undefined=ADXT_Init -Wl,--undefined=ADXT_Create -Wl,--undefined=ADXT_SetReloadSct -Wl,--undefined=ADXT_SetSvrFreq -Wl,--undefined=ADXT_StartAfs -Wl,--undefined=ADXT_StartFname -Wl,--undefined=ADXT_Stop -Wl,--undefined=ADXT_Pause -Wl,--undefined=ADXT_SetOutVol -Wl,--undefined=ADXT_GetOutVol -Wl,--undefined=ADXT_SetOutPan -Wl,--undefined=ADXT_SetOutputMono -Wl,--undefined=ADXT_GetStat -Wl,--undefined=XbOverlay_PrepareBuild -Wl,--undefined=XbOverlay_Load -Wl,--undefined=XbMpeg_Open -Wl,--undefined=XbMpeg_Next -Wl,--undefined=XbMpeg_Close
+ CFLAGS := -mcpu=cell -fno-pic -std=gnu17 -MMD -MP -O2 -g -ffunction-sections -fdata-sections -Wall -Wextra -Werror -I$(XSDK)/include -Isrc -Iengine/graphics -Iengine/capture/port/src/gs -Iengine/platform/platform -DDR_XBOX360
+-OBJECTS := build/dr_dma_engine.o build/dr_gs_native.o build/dr_dma_producer.o build/dr_gs_stream.o build/gs_draw.o build/gs_core.o build/gs_sony.o build/dr_gs_backend.o build/dr_gs_replay.o build/dr_capture_demo.o build/dr_capture_platform.o build/main.o build/demo_ui.o build/dr_disc.o build/bt3_wire.o build/net_check.o build/lobby.o build/dr_anim.o build/dr_bpe.o build/dr_resource_selftest.o build/dr_container.o build/dr_skeleton.o build/dr_xenos.o build/dr_gs_texture.o build/dr_graphics_demo.o build/dr_body_demo.o build/dr_texfile.o build/dr_body_pipeline.o build/dr_body_model.o build/dr_elf.o build/dr_face_vif.o build/dr_targets.o build/dr_vu1.o build/dr_vu1_selftest.o build/save_unlock.o build/save_export.o
++OBJECTS := build/dr_gs_movie.o build/dr_dma_engine.o build/dr_gs_native.o build/dr_dma_producer.o build/dr_gs_stream.o build/gs_draw.o build/gs_core.o build/gs_sony.o build/dr_gs_backend.o build/dr_gs_replay.o build/dr_capture_demo.o build/dr_capture_platform.o build/main.o build/demo_ui.o build/dr_disc.o build/bt3_wire.o build/net_check.o build/lobby.o build/dr_anim.o build/dr_bpe.o build/dr_resource_selftest.o build/dr_container.o build/dr_skeleton.o build/dr_xenos.o build/dr_gs_texture.o build/dr_graphics_demo.o build/dr_body_demo.o build/dr_texfile.o build/dr_body_pipeline.o build/dr_body_model.o build/dr_elf.o build/dr_face_vif.o build/dr_targets.o build/dr_vu1.o build/dr_vu1_selftest.o build/save_unlock.o build/save_export.o
+ .PHONY: all clean host-test
+ PLATFORM_OBJECTS := $(patsubst engine/platform/platform/%.c,build/%.o,$(wildcard engine/platform/platform/*.c))
+ OBJECTS += $(PLATFORM_OBJECTS)
+@@ -82,3 +82,6 @@
+ 
+ build/dr_dma_engine.o: engine/graphics/dr_dma_engine.c engine/graphics/dr_dma_engine.h
+ 	$(CC) $(CFLAGS) -c $< -o $@
++
++build/dr_gs_movie.o: engine/graphics/dr_gs_movie.c engine/graphics/dr_gs_movie.h
++	$(CC) $(CFLAGS) -c $< -o $@
+--- a/engine/capture/port/src/gs/gs_core.c
++++ b/engine/capture/port/src/gs/gs_core.c
+@@ -857,9 +857,10 @@
+     return value;
+ }
+ /* One run of GIF data (whole quadwords). */
++static uint64_t tag_lo,tag_hi;
++static uint32_t loops,reg;
++void Gs_GifReset(void) {tag_lo=tag_hi=0;loops=reg=0;gs.transfer=0;gs.tpos=0;gs.vcount=gs.strip=0;}
+ void Gs_Gif(const uint8_t *p, uint32_t qwc) {
+-    static uint64_t tag_lo, tag_hi; /* current tag: persists across runs */
+-    static uint32_t loops, reg;     /* loops left, register index within the loop */
+     const uint8_t *q = p;
+ 
+     while (qwc != 0) {
+@@ -1564,6 +1565,7 @@
+ void Gs_XenosCaptureEnable(int enabled) {
+     if(enabled) {
+         tables_init(); memset(&gs,0,sizeof(gs)); gs.prmodecont=1;
++        Gs_GifReset();gGsFbUploads=0;
+         for(unsigned i=0;i<512;i++)gGsPageGen[i]++;
+     }
+     sGpu=enabled!=0;
+--- a/engine/capture/port/src/gs/gs_sony.c
++++ b/engine/capture/port/src/gs/gs_sony.c
+@@ -111,6 +111,20 @@
+ }
+ 
+ #ifdef DR_XBOX360
++int32_t sceGsSyncPath(int32_t,uint16_t);
++extern void Gs_GifReset(void);
++extern void Gs_XenosCaptureEnable(int);
++int32_t sceGsResetPath(void) {
++    int e=sceGsSyncPath(0,0);if(e)return e;
++    e=dr_gs_native_reset();if(e)return e;
++    Gs_GifReset();return 0;
++}
++int32_t sceGsResetGraph(int32_t mode,int32_t inter,int32_t omode,int32_t ffmd) {
++    if(mode || inter!=1 || omode!=2 || (ffmd!=0 && ffmd!=1))return DR_GS_SDK_ARGUMENT;
++    int e=sceGsSyncPath(0,0);if(e)return e;
++    e=dr_gs_native_reset();if(e)return e;
++    Gs_XenosCaptureEnable(1);gGsMainFbp=-1;return 0;
++}
+ /* A descriptor belongs to its caller; use memcpy for the game's byte arrays. */
+ typedef struct {
+     uint32_t magic,version;
+--- /dev/null
++++ b/engine/combat/movie.c
+@@ -0,0 +1,435 @@
++/* SPDX-License-Identifier: AGPL-3.0-or-later
++ * Native adaptation of pinned src/sys/movie.c, no IPU/DMA MMIO. */
++#include "common.h"
++#include "sys/adx.h"
++#include "sys/dma.h"
++#include "sys/fade.h"
++#include "sys/file.h"
++#include "sys/gfx.h"
++#include "sys/heap.h"
++#include "sys/movie.h"
++#include "sys/pad.h"
++#include "dr_gs_movie.h"
++#include <stdint.h>
++extern int XbAdx_Clock(void *,uint64_t *,int *);
++#include "xb_time.h"
++#include "xb_movie_clock.h"
++#include "xsdk/log.h"
++extern int XbSonyMpeg_End(void *);
++extern int XbSonyMpeg_Error(void *);
++extern int XbSonyMpeg_CanQueue(void *,u32);
++extern void Port_VBlank(void);
++static int movie_eof,movie_error;
++
++extern void *memset(void *dst, s32 c, u32 n);
++extern void *memcpy(void *dst, const void *src, u32 n);
++
++/* libmpeg */
++extern s32 sceMpegInit(void);
++extern s32 sceMpegCreate(sceMpeg *mp, u8 *work, s32 size);
++extern s32 sceMpegDelete(sceMpeg *mp);
++extern s32 sceMpegGetPicture(sceMpeg *mp, u8 *rgb, s32 mbCount);
++extern s32 sceMpegReset(sceMpeg *mp);
++extern s32 sceMpegIsEnd(sceMpeg *mp);
++extern void *sceMpegAddCallback(sceMpeg *mp, s32 type, sceMpegCallback cb, void *data);
++extern void *sceMpegAddStrCallback(sceMpeg *mp, s32 strType, s32 ch, sceMpegCallback cb, void *data);
++extern s32 sceMpegDemuxPss(sceMpeg *mp, u8 *data, s32 len);
++
++/* CRI */
++extern ADXF ADXF_Open(char *fname, void *atr);
++extern void ADXF_Close(ADXF adxf);
++extern s32 ADXF_ReadNw(ADXF adxf, s32 nsct, void *buf);
++extern s32 ADXF_GetStat(ADXF adxf);
++extern s32 ADXF_Tell(ADXF adxf);    /* file position in sectors (locked wrapper around adxf_Tell) */
++extern s32 ADXT_GetStat(ADXT_HN adxt);
++extern void ADXT_Pause(ADXT_HN adxt, s32 sw);
++extern s32 func_00277A70(ADXT_HN adxt); /* non-zero while the player's own stream must not be disturbed (inferred) */
++extern void ADXM_ExecMain(void);
++
++/* hardware timer helpers (src/sys/timer.c, declared locally): timer 0 counts horizontal blanks */
++extern void Timer_Init(s32 ch);      /* sets the timer up */
++extern void Timer_Start(s32 ch);     /* starts it and clears the count */
++extern void Timer_Reset(s32 ch);     /* clears the count */
++extern f32 Timer_GetFrames(s32 ch);  /* time since the count was cleared, in 1/60 s */
++
++extern void Pad_Update(void);
++
++extern AdxPlayer gAdxPlayerTbl[6];
++extern s32 gMovieRunCount;
++extern u8 *gMovieEsBuf;
++extern s32 gMovieEsSize;
++extern u8 *gMovieEsWrite;
++extern u8 *gMovieEsDmaStart;
++extern u8 *gMovieEsDmaEnd;
++/* "idle", "nodata" and "full": string literals in the original (the compiler puts strings of 8 bytes or less in
++   .sdata, 0x2FE980..0x2FE998, and still addresses them with lui/addiu). Kept as externs until the data is linked. */
++extern char gMovieTagIdle[];
++extern char gMovieTagNoData[];
++extern char gMovieTagFull[];
++
++#ifdef PORT
++extern volatile u32 *Port_DmaChcr(s32 channel);
++#define D4_CHCR Port_DmaChcr(4)
++#else
++#define D4_CHCR ((volatile u32 *)0x1000B400)
++#endif
++#define D4_MADR ((volatile u32 *)0x1000B410)
++#define D4_QWC ((volatile u32 *)0x1000B420)
++
++#ifdef PORT
++#define UNCACHED(p) ((void *)(p)) /* no uncached mirror of memory on PC */
++#else
++#define UNCACHED(p) ((void *)(((u32)(p) & 0x0FFFFFFF) | 0x20000000))
++#endif
++
++/* Builds the chain that uploads a w x h RGBA32 picture stored as 16x16 macroblocks in column order. */
++void MovieTag_BuildImage(u32 *tags, u8 *image, s32 x, s32 y, s32 w, s32 h) {
++    MovieTag_BuildBlocks(tags, image, MOVIE_MB_SIZE, x, y, w, h);
++}
++
++/* Builds the same chain with every block reading the same 16x16 pixels. */
++void MovieTag_BuildFill(u32 *tags, u8 *image, s32 x, s32 y, s32 w, s32 h) {
++    MovieTag_BuildBlocks(tags, image, 0, x, y, w, h);
++}
++
++/* Builds a GIF DMA chain that copies 16x16 blocks, columns first, from `image` to frame buffer page 0 at (x, y). */
++void MovieTag_BuildBlocks(u32 *tags, u8 *image, s32 step, s32 x, s32 y, s32 w, s32 h) {
++    if(dr_gs_movie_build(tags,image,step,x,y,w,h)) {
++        movie_error=1;xsdk_log_write("movie: invalid native upload descriptor");
++    }
++}
++
++/* Writes one DMA source-chain tag. */
++void MovieTag_SetDmaTag(u64 *p, s32 spr, s32 addr, s32 irq, s32 id, s32 pce, s32 qwc) {
++    *p = ((u64)spr << 63) | ((u64)(addr & ~0xF) << 32) | ((u64)(u32)irq << 31) | ((u64)(u32)id << 28) |
++         ((u64)(u32)pce << 26) | (u64)(u32)qwc;
++}
++
++/* Writes one GIF tag. */
++void MovieTag_SetGifTag(u32 *p, u64 regs, s32 nreg, s32 flg, s32 prim, s32 pre, s32 eop, s32 nloop) {
++    p[0] = (eop << 15) | nloop;
++    p[1] = (pre << 14) | (prim << 15) | (flg << 26) | (nreg << 28);
++    p[2] = regs & 0xFFFFFFFF;
++    p[3] = regs >> 32;
++}
++
++/* Writes one A+D quadword: a GS register value and the register number. */
++void MovieTag_SetReg(u32 *p, s32 reg, u64 value) {
++    p[2] = reg;
++    p[1] = value >> 32;
++    p[0] = value & 0xFFFFFFFF;
++    p[3] = 0;
++}
++
++/* Writes BITBLTBUF: destination buffer pointer, width and pixel format. */
++void MovieTag_SetBitBltBuf(u32 *p, s32 dbp, s32 dbw, s32 dpsm) {
++    MovieTag_SetReg(p, 0x50, ((u64)dpsm << 56) | ((u64)dbw << 48) | ((u64)dbp << 32));
++}
++
++/* Writes TRXPOS: destination position. */
++void MovieTag_SetTrxPos(u32 *p, s32 dir, s32 x, s32 y) {
++    MovieTag_SetReg(p, 0x51, ((u64)dir << 59) | ((u64)y << 48) | ((u64)x << 32));
++}
++
++/* Writes TRXREG: size of the transferred rectangle. */
++void MovieTag_SetTrxReg(u32 *p, s32 w, s32 h) {
++    MovieTag_SetReg(p, 0x52, ((u64)h << 32) | (u64)(u32)w);
++}
++
++/* Writes TRXDIR: 0 starts a host-to-local transfer. */
++void MovieTag_SetTrxDir(u32 *p, s32 dir) {
++    MovieTag_SetReg(p, 0x53, (u64)(u32)dir);
++}
++
++/* Starts an upload chain on the GIF DMA channel without waiting for it. */
++void MovieTag_Send(u32 *tags) {
++    int error=dr_gs_movie_send(tags);
++    if(error){movie_error=1;xsdk_log_write("movie: GIF upload failed %d",error);}
++}
++
++/* Initialises libmpeg; called once at boot. */
++void Movie_Init(void) {
++    sceMpegInit();
++}
++
++/* Closes the movie if one is open. */
++void Movie_Term(void) {
++    Movie_Close();
++}
++
++/* Opens a movie: the .PSS video file and the .ADX sound file (started paused), all buffers and the decoder. */
++void Movie_Open(char *pss, char *adx) {
++    ADXF adxf;
++    Movie *m;
++    MovieBuf *buf;
++    s32 i;
++
++    Movie_Close();movie_eof=movie_error=0;
++    adxf=ADXF_Open(pss,NULL);
++    if(!adxf){movie_error=1;xsdk_log_write("movie: PSS open failed");return;}
++    Adx_PlayFilePaused(ADX_CH_BGM, adx, 0x40, 0);
++    gMovie = Heap_Alloc(sizeof(Movie), 0x20, 0, 2);
++    if(!gMovie){ADXF_Close(adxf);Adx_Stop(ADX_CH_BGM);movie_error=1;return;}
++    memset(gMovie, 0, sizeof(Movie));
++    m = gMovie;
++    m->adxf = adxf;
++    m->adxt = gAdxPlayerTbl[ADX_CH_BGM].adxt;
++    m->rgbSize = MOVIE_RGB_SIZE;
++    m->tagSize = MOVIE_TAG_SIZE;
++    m->workSize = MOVIE_WORK_SIZE;
++    m->esSize = MOVIE_ES_SIZE;
++    m->rgb = Heap_Alloc(MOVIE_RGB_SIZE, 0x40, 0, 2);
++    m->tags[0] = Heap_Alloc(m->tagSize, 0x40, 0, 2);
++    m->tags[1] = Heap_Alloc(m->tagSize, 0x40, 0, 2);
++    m->work = Heap_Alloc(m->workSize, 0x40, 0, 2);
++    m->es = Heap_Alloc(m->esSize, 0x40, 0, 2);
++    for (i = 0, buf = m->buf; i < MOVIE_BUF_COUNT; i++, buf++) {
++        buf->data = Heap_Alloc(MOVIE_BUF_SIZE, 0x40, 0, 2);
++    }
++    if(!m->rgb || !m->tags[0] || !m->tags[1] || !m->work || !m->es) {
++        movie_error=1;Movie_Close();return;
++    }
++    for(i=0;i<MOVIE_BUF_COUNT;i++)if(!m->buf[i].data){movie_error=1;Movie_Close();return;}
++    if(sceMpegCreate(&m->mpeg,m->work,m->workSize)<0){movie_error=1;Movie_Close();return;}
++    sceMpegAddStrCallback(&m->mpeg, SCE_MPEG_STR_M2V, 0, (sceMpegCallback)Movie_CbVideoData, NULL);
++    sceMpegAddCallback(&m->mpeg, SCE_MPEG_CB_NODATA, Movie_CbNoData, NULL);
++    sceMpegAddCallback(&m->mpeg, SCE_MPEG_CB_BACKGROUND, Movie_CbBackground, NULL);
++    sceMpegAddCallback(&m->mpeg, SCE_MPEG_CB_ERROR, Movie_CbError, NULL);
++    MovieTag_BuildImage(m->tags[0], m->rgb, 0, 0, MOVIE_WIDTH, MOVIE_HEIGHT);
++    MovieTag_BuildImage(m->tags[1], m->rgb, 0, MOVIE_HEIGHT, MOVIE_WIDTH, MOVIE_HEIGHT);
++}
++
++/* Stops the sound, deletes the decoder, closes the file and frees everything Movie_Open allocated. */
++void Movie_Close(void) {
++    Movie *m = gMovie;
++    MovieBuf *buf;
++    s32 i;
++
++    if (m != NULL) {
++        Adx_Stop(ADX_CH_BGM);
++        sceMpegReset(&m->mpeg);
++        sceMpegDelete(&m->mpeg);
++        ADXF_Close(m->adxf);
++        Heap_Free(m->rgb);
++        Heap_Free(m->tags[0]);
++        Heap_Free(m->tags[1]);
++        Heap_Free(m->work);
++        Heap_Free(m->es);
++        for (i = 0, buf = m->buf; i < MOVIE_BUF_COUNT; i++, buf++) {
++            Heap_Free(buf->data);
++        }
++        Heap_Free(m);
++        gMovie = NULL;
++    }
++}
++
++/* Plays the opening movie from start to end (or until it is skipped). */
++void Movie_PlayOpening(void) {
++    Movie_Open("zs3usop.pss", "zs3usop.adx");
++    Movie_Run();
++    Movie_Close();
++}
++
++/* Plays the ending movie. */
++void Movie_PlayEnding(void) {
++    Movie_Open("zs3used.pss", "zs3used.adx");
++    Movie_Run();
++    Movie_Close();
++}
++
++/* The player's frame loop: decodes and shows one picture per frame until the stream ends or START skips it. */
++void Movie_Run(void) {
++    Movie *m=gMovie;
++    XbMovieClock clock={0};u32 frame=0;int started=0,skip=0,wait=0;
++    if(!m || movie_error)return;
++    gMovieRunCount++;
++    Movie_FillBufs();Movie_Demux();
++    while(!movie_error && !sceMpegIsEnd(&m->mpeg)) {
++        uint64_t audio,now;int ended,due,result;
++        Gfx_BeginFrame();Pad_Update();
++        if(!skip && (gPad[0].gamePressed & MOVIE_SKIP_BUTTON)) {Fade_Start(0,FADE_OUT,0.5f);skip=1;}
++        if(skip && Fade_IsDone(0) && ++wait>=4)break;
++        result=sceMpegGetPicture(&m->mpeg,m->rgb,MOVIE_MB_COUNT);
++        if(result<0){if(!sceMpegIsEnd(&m->mpeg))movie_error=1;break;}
++        if(result!=0){movie_error=1;xsdk_log_write("movie: no progress feeding decoder");break;}
++        if(started)for(;;) {
++            if(XbAdx_Clock(m->adxt,&audio,&ended)){movie_error=1;break;}
++            now=XbTime_NowNs();due=XbMovieClock_Due(&clock,frame,now,audio,ended);
++            if(due<0){movie_error=1;xsdk_log_write("movie: audio clock stalled or regressed");break;}
++            if(due)break;
++            Port_VBlank();
++        }
++        if(movie_error)break;
++        if(sceGsSyncPath(0,0)<0){movie_error=1;break;}
++        MovieTag_Send(gGfx.field?m->tags[0]:m->tags[1]);
++        if(movie_error || sceGsSyncPath(0,0)<0){movie_error=1;break;}
++        Dma_Flush();Gfx_EndFrame(1);
++        if(!started) {
++            Adx_Resume(ADX_CH_BGM);m->audioOn=1;started=1;
++            if(XbAdx_Clock(m->adxt,&audio,&ended)){movie_error=1;break;}
++            (void)XbMovieClock_Due(&clock,0,XbTime_NowNs(),audio,ended);
++        }
++        frame++;
++    }
++    Adx_Stop(ADX_CH_BGM);m->audioOn=0;
++    Fade_Start(0,FADE_OUT,0.0f);
++    Gfx_BeginFrame();Dma_Flush();Gfx_EndFrame(1);
++    Gfx_BeginFrame();Dma_Flush();Gfx_EndFrame(1);Fade_Reset(0);
++    xsdk_log_write("movie: presented %u frames error=%d decoder=%d",frame,movie_error,XbSonyMpeg_Error(&m->mpeg));
++}
++
++/* libmpeg stream callback: appends demuxed video data to the ring buffer; returns 0 when it does not fit. */
++s32 Movie_CbVideoData(sceMpeg *mp, sceMpegCbDataStr *str, void *data) {
++    (void)data;
++    if(!str || (str->len && !str->data) || str->type!=SCE_MPEG_STR_M2V)return 0;
++    return XbSonyMpeg_CanQueue(mp,str->len);
++}
++
++/* libmpeg "no data" callback: makes sure up to 0x1000 bytes are queued and sends them to the IPU by DMA. */
++s32 Movie_CbNoData(sceMpeg *mp, void *cbData, void *data) {
++    int bytes;(void)cbData;(void)data;
++    bytes=Movie_Demux();
++    if(!bytes && !movie_eof){Movie_ReadAhead("native no data");bytes=Movie_Demux();}
++    if(movie_eof && Movie_FindBuf(1)==NULL) {
++        if(XbSonyMpeg_End(mp)<0)movie_error=1;
++        return !movie_error;
++    }
++    return bytes>0 && !movie_error;
++}
++
++/* libmpeg "background" callback, called while the decoder is busy: demuxes and reads ahead. */
++s32 Movie_CbBackground(sceMpeg *mp, void *cbData, void *data) {
++    (void)mp;(void)cbData;(void)data;
++    if(!movie_eof)Movie_ReadAhead("native background");
++    return !movie_error;
++}
++
++/* libmpeg error callback: carries on. */
++s32 Movie_CbError(sceMpeg *mp, void *cbData, void *data) {
++    (void)mp;(void)data;movie_error=1;
++    xsdk_log_write("movie: MPEG error %d",cbData?*(s32 *)cbData:-1);return 0;
++}
++
++/* Returns the oldest filled read buffer (once its data has arrived) or the first empty one; NULL if none. */
++MovieBuf *Movie_FindBuf(s32 full) {
++    Movie *m = gMovie;
++    MovieBuf *best = NULL;
++    MovieBuf *buf = m->buf;
++    s32 i;
++    s32 end;
++
++    if (full) {
++        for (i = 0; i < MOVIE_BUF_COUNT; i++, buf++) {
++            if (buf->used) {
++                if (best == NULL || buf->seq < best->seq) {
++                    best = buf;
++                }
++            }
++        }
++        if (best != NULL) {
++            end = best->startSct + best->sectors;
++            if (ADXF_Tell(m->adxf) < end) {
++                Movie_WaitRead(end);
++            }
++        }
++    } else {
++        for (i = 0; i < MOVIE_BUF_COUNT; i++, buf++) {
++            if (!buf->used) {
++                best = buf;
++                break;
++            }
++        }
++    }
++    return best;
++}
++
++/* Starts reading the next 0x100 sectors of the file into a buffer; returns the bytes requested. */
++/* The six header stores sit in a `do { } while (0)` (presumably a statement macro in the original). Written as
++   plain statements, every order of them compiles to the same wrong store order with `n << 11` computed late: the
++   order comes from the scheduler, and the loop notes of the wrapper change it (found by decomp-permuter). */
++s32 Movie_ReadBuf(MovieBuf *buf, char *tag) {
++    Movie *m = gMovie;
++    s32 pos;
++    s32 n;
++
++    if (buf == NULL) {
++        return 0;
++    }
++    Movie_WaitRead(-1);
++    pos = ADXF_Tell(m->adxf);
++    n = ADXF_ReadNw(m->adxf, MOVIE_BUF_SECTORS, buf->data);
++    if (n <= 0) {
++        movie_eof=1;if(n<0)movie_error=1;
++        return 0;
++    }
++    ADXM_ExecMain();
++    do {
++        buf->used = 1;
++        buf->startSct = pos;
++        buf->pos = 0;
++        buf->sectors = n;
++        buf->bytes = n << 11;
++        buf->seq = m->seq;
++    } while (0);
++    m->seq++;
++    return n << 11;
++}
++
++/* Waits for the disc read (to a sector, or to its end with -1), pausing the sound if the wait drags on. */
++void Movie_WaitRead(s32 sector) {
++    Movie *m=gMovie;s32 stat;(void)sector;
++    if(!m)return;
++    do {stat=ADXF_GetStat(m->adxf);if(stat==ADXF_STAT_READING)Port_VBlank();}while(stat==ADXF_STAT_READING);
++    if(stat==4){movie_error=1;xsdk_log_write("movie: disc read failed");}
++}
++
++/* Starts a read into the first empty buffer, if there is one. */
++s32 Movie_ReadAhead(char *tag) {
++    MovieBuf *buf = Movie_FindBuf(0);
++    s32 ret = 0;
++
++    if (buf != NULL) {
++        ret = Movie_ReadBuf(buf, tag);
++    }
++    return ret;
++}
++
++/* Starts reads until no buffer is empty; returns the bytes requested. */
++s32 Movie_FillBufs(void) {
++    s32 total = 0;
++    MovieBuf *buf;
++
++    while ((buf = Movie_FindBuf(0)) != NULL) {
++        s32 n=Movie_ReadBuf(buf,gMovieTagFull);if(n<=0)break;total+=n;
++    }
++    return total;
++}
++
++/* Feeds the filled buffers to the demuxer in read order until it stops taking data; returns the bytes taken. */
++s32 Movie_Demux(void) {
++    MovieBuf *buf;
++    s32 len;
++    s32 n;
++    s32 total;
++    sceMpeg *mp;
++
++    mp = &gMovie->mpeg;
++    total = 0;
++    do {
++        buf = Movie_FindBuf(1);
++        if (buf == NULL) {
++            break;
++        }
++        len = buf->bytes - buf->pos;
++        n = sceMpegDemuxPss(mp, buf->data + buf->pos, len);
++        if(n<0){movie_error=1;break;}
++        total += n;
++        if (n >= len) {
++            buf->used = 0;
++            continue;
++        }
++        buf->pos += n;
++        break;
++    } while (1);
++    return total;
++}
+--- /dev/null
++++ b/engine/combat/offline_profile.c
+@@ -0,0 +1,18 @@
++/* SPDX-License-Identifier: AGPL-3.0-or-later
++ * Explicit fixed-battle build policy, enabled only by --fixed-battle.
++ * Query meanings: pinned port/src/{plat_stages.c,plat_songs.c,gs/net.c}.
++ * No transport, session or lobby can be created by this translation unit.
++ * These are configuration answers, not implementations of missing services.
++ */
++int Port_TestScreen(void) {return 0;} /* one full-screen view */
++int Port_TestStage(void) {return 0;} /* original disc stage index 0 */
++int Port_TestBgm(void) {return -1;} /* no BGM override; does not implement/mute audio */
++int Port_NetActive(void) {return 0;}
++int Port_NetSession(void) {return 0;}
++int Port_NetMe(void) {return 0;} /* local side */
++int Port_NetView(void) {return 0;} /* fixed full-screen view of side 0 */
++int Port_NetSideOptions(int *camera,int *shake) {
++    /* No negotiated remote options. As in the upstream offline path, leave
++     * the caller's local settings intact; zero denotes no override. */
++    (void)camera;(void)shake;return 0;
++}
+--- a/engine/graphics/dr_gs_backend.c
++++ b/engine/graphics/dr_gs_backend.c
+@@ -15,7 +15,7 @@
+ static uint32_t attached_width,attached_height;
+ static struct {
+     int opened,error;uint32_t failed,width,height,white_native,serial,pipe_count;
+-    GsTex white;
++    GsTex white,movie[2];
+     uint32_t keys[PIPES];
+     struct {GsTex handle;uint32_t width,height,levels;} texture[TEXTURES];
+ } state;
+@@ -169,10 +169,33 @@
+     int e=dr_xenos_begin_target((unsigned)dst);if(e) {fail(e,UINT32_MAX);return;}
+     e=blit(src,GS_W,GS_H,1);int end=dr_xenos_end();if(!e)e=end;if(e)fail(e,UINT32_MAX);
+ }
++/* Snapshot after the final IMAGE payload reached VRAM, before replay. The
++ * two private textures are reused, so one movie frame does not leak slots. */
++static uint32_t movie_texture(unsigned second) {
++    extern uint32_t Gs_VramRead(uint32_t,uint32_t,uint32_t,uint32_t,uint32_t);
++    uint8_t *rgba=malloc(512*448*4);if(!rgba){fail(DR_GS_MEMORY,UINT32_MAX);return 0;}
++    for(unsigned y=0;y<448;y++)for(unsigned x=0;x<512;x++) {
++        uint32_t pixel=Gs_VramRead(second?0xe00:0,8,0,x,y);
++        for(unsigned b=0;b<4;b++)rgba[(y*512+x)*4+b]=(uint8_t)(pixel>>(b*8));
++    }
++    if(!state.movie[second])state.movie[second]=tex_create(512,448,GS_TEXFMT_RGBA8,1);
++    if(!state.movie[second]){free(rgba);return 0;}
++    if(!tex_upload(state.movie[second],0,512,448,GS_TEXFMT_RGBA8,rgba,512*448*4))return 0;
++    return native_texture(state.movie[second],NULL);
++}
+ static void frame_end(void)
+ {
+     if(state.error || !state.opened) return;
+-    DrGsReplay replay={.vu_vertices=gsVuVerts,.vu_indices=gsVuIdx,.vu_uniforms=gsVuUni,
++    uint32_t movies[2]={0};
++    for(unsigned i=0;i<gsDrawCount;i++)if(gsDraws[i].native==100 || gsDraws[i].native==101) {
++        unsigned second=(unsigned)gsDraws[i].native-100;
++        if(gsDraws[i].target<0 || gsDraws[i].target>=gsTargetCount ||
++           gsTargets[gsDraws[i].target].fbp!=(second?0x70u:0u)){fail(DR_GS_UNSUPPORTED,i);return;}
++        if(!movies[second])movies[second]=movie_texture(second);
++        if(!movies[second])return;
++        if(!state.pipe_count && pipe_get(1u<<10)<0)return;
++    }
++    DrGsReplay replay={.movie_texture={movies[0],movies[1]},.vu_vertices=gsVuVerts,.vu_indices=gsVuIdx,.vu_uniforms=gsVuUni,
+         .vu_vertex_count=gsVuVertCount,.vu_index_count=gsVuIdxCount,.vu_uniform_count=gsVuUniCount,.depth_max=gsZMax,
+         .logical_width=GS_W,.logical_height=GS_H,.saved_targets=1,
+         .white_texture=state.white_native,.pipeline_keys=state.keys,.pipeline_count=state.pipe_count,
+@@ -194,6 +217,7 @@
+     }
+     for(int i=0;i<gsTargetCount;i++) gsTargets[i].draws=0;
+     gsDrawCount=gsVertCount=gsVuVertCount=gsVuIdxCount=gsVuUniCount=0;gsAnchor=0;gsSkipped=gsNative=0;
++    extern unsigned gGsFbUploads;gGsFbUploads=0;
+ }
+ GsBackend sXenosBackend={.name="xenos",.init=init,.frameEnd=frame_end,.scaleChanged=scale_changed,
+     .whiteTex=white_tex,.texCreate=tex_create,.texUpload=tex_upload,.texDestroy=tex_destroy,.texSlotsLeft=tex_slots,
+--- /dev/null
++++ b/engine/graphics/dr_gs_movie.c
+@@ -0,0 +1,43 @@
++/* SPDX-License-Identifier: AGPL-3.0-or-later */
++#include "dr_gs_movie.h"
++#include "dr_gs_native.h"
++#include <stdlib.h>
++#include <string.h>
++typedef struct {uint32_t magic,version;const uint8_t *image;int32_t step,x,y,w,h;} Upload;
++static int valid(const Upload *s) {
++    return s->magic==0x584d4f56 && s->version==1 && s->image &&
++        (s->step==0 || s->step==1024) && s->x==0 && (s->y==0 || s->y==448) && s->w==512 && s->h==448;
++}
++int dr_gs_movie_build(void *tags,const uint8_t *image,int step,int x,int y,int w,int h) {
++    if(!tags)return DR_STREAM_INVALID;
++    Upload s={0x584d4f56,1,image,step,x,y,w,h};memset(tags,0,128);
++    if(!valid(&s))return DR_STREAM_INVALID;
++    memcpy(tags,&s,sizeof(s));return 0;
++}
++static void le64(uint8_t *p,uint64_t v){for(unsigned i=0;i<8;i++)p[i]=(uint8_t)(v>>(i*8));}
++int dr_gs_movie_send(const void *tags) {
++    if(!tags)return DR_STREAM_INVALID;
++    Upload s;memcpy(&s,tags,sizeof(s));if(!valid(&s))return DR_STREAM_INVALID;
++    /* One canonical GIF run per column. 28 whole 16x16 macroblocks remain
++     * separate IMAGE transfers, preserving the game's column-major layout. */
++    const size_t block=6*16+1024,bytes=block*28;
++    uint8_t *packet=malloc(bytes);if(!packet)return DR_STREAM_BUDGET;
++    int e=0;
++    for(unsigned x=0;x<32 && !e;x++) {
++        for(unsigned y=0;y<28;y++) {
++            uint8_t *p=packet+y*block;
++            le64(p,4ull|(1ull<<60));le64(p+8,14);
++            le64(p+16,8ull<<48);le64(p+24,0x50);
++            /* TRXREG and TRXPOS; TRXDIR follows in its own A+D tag below. */
++            le64(p+32,16ull|(16ull<<32));le64(p+40,0x52);
++            le64(p+48,(uint64_t)(x*16)<<32|(uint64_t)(s.y+y*16)<<48);le64(p+56,0x51);
++            le64(p+64,0);le64(p+72,0x53);
++            le64(p+80,64ull|(1ull<<15)|(2ull<<58));le64(p+88,0);
++            memcpy(p+96,s.image+(x*28+y)*(size_t)s.step,1024);
++        }
++        DrGsSpan span={0x46000000,packet,bytes};
++        e=dr_gs_native_bind(&span,1);
++        if(!e){e=dr_gs_native_gif(span.address,(uint32_t)(bytes/16),0);dr_gs_native_unbind();}
++    }
++    free(packet);return e;
++}
+--- /dev/null
++++ b/engine/graphics/dr_gs_movie.h
+@@ -0,0 +1,10 @@
++/* SPDX-License-Identifier: AGPL-3.0-or-later */
++#ifndef DR_GS_MOVIE_H
++#define DR_GS_MOVIE_H
++#include <stddef.h>
++#include <stdint.h>
++/* Typed native descriptor, not a legacy pointer-as-address DMA chain.
++ * Caller owns tags >=128 bytes and image until Send returns. */
++int dr_gs_movie_build(void *tags,const uint8_t *image,int step,int x,int y,int w,int h);
++int dr_gs_movie_send(const void *tags);
++#endif
+--- a/engine/graphics/dr_gs_native.c
++++ b/engine/graphics/dr_gs_native.c
+@@ -17,6 +17,12 @@
+ {
+     if(!native.opened || native.busy)return DR_STREAM_INVALID;
+     dr_vu1_reset(NULL,NULL);memset(&native,0,sizeof(native));return 0;
++}
++int dr_gs_native_reset(void)
++{
++    if(!native.opened || native.busy || native.count)return DR_STREAM_INVALID;
++    DrStreamGif gif=native.stream.gif;void *opaque=native.stream.opaque;
++    return dr_gs_stream_init(&native.stream,gif,opaque);
+ }
+ int dr_gs_native_bind(const DrGsSpan *spans,size_t count)
+ {
+--- a/engine/graphics/dr_gs_native.h
++++ b/engine/graphics/dr_gs_native.h
+@@ -8,6 +8,7 @@
+  * Raw engine pointers and mixed-endian packets are never inferred/mapped. */
+ int dr_gs_native_open(DrStreamGif,void *);
+ int dr_gs_native_close(void);
++int dr_gs_native_reset(void); /* explicit path reset, refuses active/bound ownership */
+ int dr_gs_native_bind(const DrGsSpan *,size_t);
+ void dr_gs_native_unbind(void);
+ int dr_gs_native_vif1(uint32_t,int);
+--- a/engine/graphics/dr_gs_replay.c
++++ b/engine/graphics/dr_gs_replay.c
+@@ -48,6 +48,15 @@
+ }
+ static int translate(const DrGsReplay *r,const GsDraw *d,uint32_t vertex_count,DrXenosCommand *out)
+ {
++    if(d->native==100 || d->native==101) {
++        if(!r->saved_targets || r->logical_width<512 || r->logical_height<448 ||
++           d->target<0 || !dr_targets_is_gs((unsigned)d->target) || d->vu || d->wall || d->count)
++            return DR_GS_UNSUPPORTED;
++        memset(out,0,sizeof(*out));out->count=6;out->texture=r->movie_texture[d->native-100];
++        out->draw=(DrXenosDraw){.logical_width=r->logical_width,.logical_height=r->logical_height,.depth=1,.gs_material=1,
++            .textured=1,.tfx=1,.tcc=1,.gs_blend=1,.write_mask=15,.sampler=6,.scissor={0,0,512,448}};
++        return out->texture?0:DR_GS_TEXTURE;
++    }
+     if(d->native==4 || d->native==5) {
+         if(!r->saved_targets || d->target<0 || !dr_targets_is_gs((unsigned)d->target)) return DR_GS_UNSUPPORTED;
+         memset(out,0,sizeof(*out));return 0;
+@@ -120,8 +129,8 @@
+             targets[ntargets].target=(unsigned)draws[i].target;targets[ntargets++].snapshot=draws[i].native==5?1:2;
+             continue;
+         }
+-        if(draws[i].native==1 || draws[i].native==3) {
+-            commands[i].vertices=copy+total;effect_quad(copy+total,r->logical_width,r->logical_height);
++        if(draws[i].native==1 || draws[i].native==3 || draws[i].native==100 || draws[i].native==101) {
++            commands[i].vertices=copy+total;effect_quad(copy+total,draws[i].native>=100?512:r->logical_width,draws[i].native>=100?448:r->logical_height);
+         } else if(draws[i].vu) {
+             commands[i].vu_vertices=vu+total*12;
+             for(uint32_t j=0;j<commands[i].count;j++) {
+--- a/engine/graphics/dr_gs_replay.h
++++ b/engine/graphics/dr_gs_replay.h
+@@ -14,6 +14,7 @@
+     int target; /* The single GS target represented by this diagnostic pass. */
+     uint32_t saved_targets; /* 1: use created native saved-target IDs from each GsDraw.target. */
+     uint32_t white_texture;
++    uint32_t movie_texture[2]; /* pre-uploaded immutable VRAM snapshots for native 100/101 */
+     const uint32_t *pipeline_keys; /* Indexed by GsDraw.pipeline, from pipeGet. */
+     uint32_t pipeline_count;
+     /* Resolve an engine handle to an existing dr_xenos texture. 0 = unavailable.
+--- a/engine/platform/platform/xb_adxt.c
++++ b/engine/platform/platform/xb_adxt.c
+@@ -20,7 +20,10 @@
+     int loop,loop_have,rendering,c1,c2,hist[2][2],loop_hist[2][2];
+     int16_t cache[64];unsigned cache_n,cache_at,phase;int hold;
+     int16_t left,right;int64_t ticks;float gain;
++    uint64_t mixed48,played48;uint32_t generation;
+ } Player;
++typedef struct {uint32_t serial,generation[PLAYERS];uint64_t end[PLAYERS];} AudioStamp;
++static AudioStamp stamps[32];static uint32_t submitted,collected,generation;
+ static Player players[PLAYERS];static int opened,hooked,error,mono,device_dead;
+ static int reject(int e){error=e;return e;}
+ int XbAdx_LastError(void){return error;}
+@@ -31,12 +34,12 @@
+ }
+ static uint32_t be16(const uint8_t *p){return (uint32_t)p[0]<<8|p[1];}
+ static uint32_t be32(const uint8_t *p){return (uint32_t)p[0]<<24|(uint32_t)p[1]<<16|(uint32_t)p[2]<<8|p[3];}
+-static void stop(Player *p){free(p->file);p->file=NULL;p->size=0;p->status=STOP;p->rendering=0;p->ticks=0;p->hold=0;p->cache_n=p->cache_at=0;}
++static void stop(Player *p){p->generation=++generation;p->mixed48=p->played48=0;free(p->file);p->file=NULL;p->size=0;p->status=STOP;p->rendering=0;p->ticks=0;p->hold=0;p->cache_n=p->cache_at=0;}
+ int XbAdx_Close(void) {
+     for(unsigned i=0;i<PLAYERS;i++){stop(players+i);players[i].used=0;}
+     device_dead=1;
+     if(opened && !NT_SUCCESS(xsdk_audio_close()))return reject(DEVICE);
+-    opened=0;mono=0;error=0;device_dead=0;return 0;
++    opened=0;mono=0;error=0;device_dead=0;submitted=collected=0;memset(stamps,0,sizeof(stamps));return 0;
+ }
+ void ADXT_Init(void) {
+     if(XbAdx_Close())return;
+@@ -135,14 +138,34 @@
+         for(unsigned i=0;i<256;i++){
+             if(!p->hold){if(!next_sample(p,&p->left,&p->right)){p->rendering=0;break;}p->hold=1;}
+             frame[i]+=gain*(p->left*gl[0]+p->right*gl[1]);frame[256+i]+=gain*(p->left*gr[0]+p->right*gr[1]);
+-            p->phase+=p->rate;if(p->phase>=48000){p->phase-=48000;p->hold=0;}
++            p->mixed48++;p->phase+=p->rate;if(p->phase>=48000){p->phase-=48000;p->hold=0;}
+         }
+     }
+     for(unsigned i=0;i<512;i++){if(frame[i]>1)frame[i]=1;if(frame[i]<-1)frame[i]=-1;}
+     return 0;
+ }
++static int collect_audio(void) {
++    XsdkAudioStats stats;xsdk_audio_stats(&stats);
++    uint32_t available=stats.played-collected;
++    if(available>32 || stats.played-collected>submitted-collected)return reject(DEVICE);
++    while(collected!=stats.played) {
++        uint32_t serial=++collected;AudioStamp *stamp=&stamps[serial%32];
++        if(stamp->serial!=serial)return reject(DEVICE);
++        for(unsigned i=0;i<PLAYERS;i++)if(players[i].used && stamp->generation[i]==players[i].generation)
++            players[i].played48=stamp->end[i];
++    }
++    return 0;
++}
++int XbAdx_Clock(void *h,uint64_t *ns,int *ended) {
++    Player *p=player(h);if(!p || !ns || !ended || !opened || !p->file)return BAD;
++    if(collect_audio())return DEVICE;
++    *ns=p->played48*1000000000ull/48000;
++    *ended=!p->loop && p->played48>=(uint64_t)p->total*48000/p->rate;
++    return 0;
++}
+ void XbAdx_Tick(void) {
+     if(!opened || device_dead)return;
++    if(collect_audio())return;
+     unsigned quota=1;
+     for(unsigned i=0;i<PLAYERS;i++)if(players[i].used && (players[i].status==PLAY || players[i].rendering)){
+         Player *p=players+i;unsigned need=(188u+(unsigned)p->freq-1)/(unsigned)p->freq+1;if(need>8)need=8;if(need>quota)quota=need;
+@@ -153,6 +176,9 @@
+         if(s==STATUS_IO_TIMEOUT)break;
+         if(!NT_SUCCESS(s) || !frame){reject(DEVICE);break;}
+         if(XbAdx_Mix(frame))break;
++        if(submitted-collected>=32){reject(DEVICE);break;}
++        AudioStamp *stamp=&stamps[(submitted+1)%32];stamp->serial=++submitted;
++        for(unsigned k=0;k<PLAYERS;k++){stamp->generation[k]=players[k].generation;stamp->end[k]=players[k].mixed48;}
+         xsdk_audio_queue_frame();
+     }
+ }
+--- a/engine/platform/platform/xb_adxt.h
++++ b/engine/platform/platform/xb_adxt.h
+@@ -2,6 +2,7 @@
+ #ifndef XB_ADXT_H
+ #define XB_ADXT_H
+ #include <stddef.h>
++#include <stdint.h>
+ void ADXT_Init(void);
+ void *ADXT_Create(int,void *,int);
+ void ADXT_SetReloadSct(void *,int);
+@@ -15,6 +16,9 @@
+ void ADXT_SetOutPan(void *,int,int);
+ void ADXT_SetOutputMono(int);
+ int ADXT_GetStat(void *);
++/* Media time of this player consumed by the SDK, quantized to 256/48000 s.
++ * Does not count queued-ahead audio, silence from underruns or paused samples. */
++int XbAdx_Clock(void *,uint64_t *,int *);
+ int XbAdx_LastError(void);
+ void XbAdx_Tick(void);
+ int XbAdx_Close(void);
+--- /dev/null
++++ b/engine/platform/platform/xb_movie_clock.c
+@@ -0,0 +1,12 @@
++/* SPDX-License-Identifier: AGPL-3.0-or-later */
++#include "xb_movie_clock.h"
++int XbMovieClock_Due(XbMovieClock *c,uint32_t frame,uint64_t now,uint64_t audio,int ended) {
++    if(!c)return -1;
++    if(!c->started){c->started=1;c->last_progress=now;c->media=audio;}
++    if(now<c->last_progress || audio<c->media)return -1;
++    if(audio>c->media){c->media=audio;c->last_progress=now;}
++    if(ended && !c->tail){c->tail=1;c->wall_anchor=now;c->media_anchor=audio;}
++    uint64_t time=c->tail?c->media_anchor+now-c->wall_anchor:audio;
++    if(!c->tail && now-c->last_progress>2000000000ull)return -1;
++    return time>=(uint64_t)frame*1001000000000ull/30000;
++}
+--- /dev/null
++++ b/engine/platform/platform/xb_movie_clock.h
+@@ -0,0 +1,9 @@
++/* SPDX-License-Identifier: AGPL-3.0-or-later */
++#ifndef XB_MOVIE_CLOCK_H
++#define XB_MOVIE_CLOCK_H
++#include <stdint.h>
++typedef struct {uint64_t media,last_progress,wall_anchor,media_anchor;int started,tail;} XbMovieClock;
++/* 29.97 fps. 1 = picture due, 0 = wait, -1 = nonmonotonic/stalled audio.
++ * Audio ends explicitly before tail switches to wall time. No frame skipping. */
++int XbMovieClock_Due(XbMovieClock *,uint32_t frame,uint64_t now,uint64_t played_ns,int audio_ended);
++#endif
+--- /dev/null
++++ b/engine/platform/platform/xb_mpeg.c
+@@ -0,0 +1,138 @@
++/* SPDX-License-Identifier: AGPL-3.0-or-later
++ * Real streaming libmpeg subset used by BT3; no MIPS/IPU, no path side channel.
++ */
++#include "xb_mpeg.h"
++#include "xb_mpeg2.h"
++#include <stddef.h>
++#include <stdlib.h>
++#include <string.h>
++#if UINTPTR_MAX==UINT32_MAX
++_Static_assert(sizeof(XbMpegObject)==0x48,"sceMpeg size");
++_Static_assert(offsetof(XbMpegObject,sys)==0x40,"sceMpeg sys");
++#endif
++typedef struct {XbMpegCallback call;void *data;} Callback;
++typedef struct {
++    XbMpegObject *object;XbMpeg *decoder;uint8_t *rgba;
++    uint8_t packet[65541+8];size_t have,need;
++    Callback cb[5],video;int error,ended,drained,decoding,demuxing,notifying;
++} State;
++static State states[8];
++static State *get(void *object){for(unsigned i=0;i<8;i++)if(object && states[i].object==object)return states+i;return NULL;}
++static int callback(State *s,Callback cb,void *data) {
++    if(!cb.call)return 1;
++    s->notifying++;int result=cb.call(s->object,data,cb.data);s->notifying--;return result;
++}
++static int fail(State *s,int e) {
++    if(!s->error){s->error=e;s->object->flags|=1;(void)callback(s,s->cb[0],&s->error);}
++    return s->error;
++}
++static int busy(const State *s){return s->decoding || s->demuxing || s->notifying;}
++int32_t sceMpegInit(void) {
++    for(unsigned i=0;i<8;i++)if(states[i].object && busy(states+i))return XB_MPEG_ARGUMENT;
++    for(unsigned i=0;i<8;i++)if(states[i].object)sceMpegDelete(states[i].object);
++    return 0;
++}
++int32_t sceMpegCreate(void *mp,uint8_t *work,int32_t size) {
++    if(!mp || !work || size<128 || get(mp))return XB_MPEG_ARGUMENT;
++    State *s=NULL;for(unsigned i=0;i<8;i++)if(!states[i].object){s=states+i;break;}
++    if(!s)return XB_MPEG_LIMIT;
++    XbMpeg *decoder=XbMpeg_OpenStream();uint8_t *rgba=malloc(XB_MPEG_RGBA_BYTES);
++    if(!decoder || !rgba){XbMpeg_Close(decoder);free(rgba);return XB_MPEG_MEMORY;}
++    memset(mp,0,sizeof(XbMpegObject));memset(s,0,sizeof(*s));
++    s->object=mp;s->decoder=decoder;s->rgba=rgba;s->need=4;s->object->sys=s;
++    return 0;
++}
++int32_t sceMpegDelete(void *mp) {
++    State *s=get(mp);if(!s || busy(s))return XB_MPEG_ARGUMENT;
++    XbMpeg_Close(s->decoder);free(s->rgba);memset(mp,0,sizeof(XbMpegObject));memset(s,0,sizeof(*s));return 0;
++}
++int32_t sceMpegReset(void *mp) {
++    State *s=get(mp);if(!s || busy(s))return XB_MPEG_ARGUMENT;
++    XbMpeg *decoder=XbMpeg_OpenStream();if(!decoder)return fail(s,XB_MPEG_MEMORY);
++    XbMpeg_Close(s->decoder);s->decoder=decoder;s->error=s->ended=s->drained=0;s->have=0;s->need=4;
++    memset(mp,0,sizeof(XbMpegObject));s->object->sys=s;return 0;
++}
++void *sceMpegAddCallback(void *mp,int32_t type,XbMpegCallback cb,void *data) {
++    State *s=get(mp);if(!s || busy(s) || (type!=0 && type!=1 && type!=4))return NULL;
++    void *old=(void *)s->cb[type].call;s->cb[type]=(Callback){cb,data};return old;
++}
++void *sceMpegAddStrCallback(void *mp,int32_t type,int32_t ch,XbMpegCallback cb,void *data) {
++    State *s=get(mp);if(!s || busy(s) || type || ch)return NULL;
++    void *old=(void *)s->video.call;s->video=(Callback){cb,data};return old;
++}
++int XbSonyMpeg_CanQueue(void *mp,uint32_t bytes){State *s=get(mp);return s && !s->error && !s->ended && bytes<=XbMpeg_StreamSpace(s->decoder);}
++int XbSonyMpeg_Error(void *mp){State *s=get(mp);return s?s->error:XB_MPEG_ARGUMENT;}
++/* 1 delivered, 0 backpressure, negative error. packet includes full PES header. */
++static int deliver(State *s) {
++    uint8_t *p=s->packet;unsigned code=p[3];
++    if(code==0xba || code==0xbb || code==0xbe || code==0xbd || code==0xbf)return 1;
++    if(code==0xb9){s->ended=1;return XbMpeg_EndStream(s->decoder)?fail(s,XB_MPEG_FORMAT):1;}
++    if(code<0xe0 || code>0xef)return 1; /* other complete non-video PES */
++    if(code!=0xe0 || s->need<9 || (p[6]&0xc0)!=0x80)return fail(s,XB_MPEG_FORMAT);
++    size_t off=9+(size_t)p[8];if(off>s->need)return fail(s,XB_MPEG_FORMAT);
++    size_t len=s->need-off;if(!XbSonyMpeg_CanQueue(s->object,(uint32_t)len))return 0;
++    XbMpegStreamData str={0,p+6,p+off,(uint32_t)len,-1,-1};
++    if(s->video.call && !callback(s,s->video,&str))return 0;
++    int e=XbMpeg_PushES(s->decoder,p+off,len);return e?fail(s,e):1;
++}
++int32_t sceMpegDemuxPss(void *mp,uint8_t *bytes,int32_t size) {
++    State *s=get(mp);if(!s || size<0 || (!bytes && size) || s->demuxing)return XB_MPEG_ARGUMENT;
++    if(s->error)return s->error;
++    if(s->ended)return 0;
++    s->demuxing=1;size_t at=0;
++    while(!s->error && !s->ended) {
++        if(s->have==s->need && s->need>=4) {
++            uint8_t *p=s->packet;
++            if(s->need==4) {
++                if(p[0] || p[1] || p[2]!=1){fail(s,XB_MPEG_FORMAT);break;}
++                s->need=p[3]==0xba?14:p[3]==0xb9?4:6;
++            } else if(s->need==6 && p[3]!=0xba) {
++                s->need=6+(size_t)p[4]*256+p[5];
++                if(s->need==6 && p[3]>=0xe0 && p[3]<=0xef){fail(s,XB_MPEG_FORMAT);break;}
++            } else if(s->need==14 && p[3]==0xba) {
++                if((p[4]&0xc0)!=0x40){fail(s,XB_MPEG_FORMAT);break;}
++                s->need=14+(p[13]&7);
++            }
++            if(s->have==s->need) {
++                int e=deliver(s);if(e<=0)break;
++                s->have=0;s->need=4;continue;
++            }
++        }
++        if(at==(size_t)size)break;
++        size_t n=s->need-s->have;if(n>(size_t)size-at)n=(size_t)size-at;
++        memcpy(s->packet+s->have,bytes+at,n);s->have+=n;at+=n;
++    }
++    s->demuxing=0;return s->error?s->error:(int32_t)at;
++}
++int XbSonyMpeg_End(void *mp) {
++    State *s=get(mp);if(!s || s->demuxing)return XB_MPEG_ARGUMENT;
++    if(s->error)return s->error;
++    if(s->have)return fail(s,XB_MPEG_FORMAT);
++    s->ended=1;return XbMpeg_EndStream(s->decoder);
++}
++int32_t sceMpegIsEnd(void *mp) {State *s=get(mp);return !s || s->error || s->drained;}
++int32_t sceMpegGetPicture(void *mp,uint8_t *out,int32_t blocks) {
++    State *s=get(mp);if(!s || busy(s) || !out || blocks<896)return XB_MPEG_ARGUMENT;
++    if(s->error)return s->error;
++    if(s->drained)return -1;
++    s->decoding=1;int result=XB_MPEG_NEED_INPUT;
++    for(unsigned retry=0;retry<64;retry++) {
++        result=XbMpeg_Next(s->decoder,s->rgba,XB_MPEG_RGBA_BYTES);
++        if(result!=XB_MPEG_NEED_INPUT)break;
++        if(!s->cb[1].call || !callback(s,s->cb[1],NULL))break;
++        if(s->cb[4].call)(void)callback(s,s->cb[4],NULL);
++        if(s->error){result=s->error;break;}
++    }
++    if(result==1) {
++        for(unsigned x=0;x<32;x++)for(unsigned y=0;y<28;y++)for(unsigned row=0;row<16;row++) {
++            uint8_t *d=out+((x*28+y)*256+row*16)*4;
++            const uint8_t *a=s->rgba+((y*16+row)*512+x*16)*4;
++            for(unsigned col=0;col<16;col++){memcpy(d+col*4,a+col*4,3);d[col*4+3]=0x80;}
++        }
++        s->object->width=512;s->object->height=448;
++        s->object->pts=s->object->dts=(int64_t)s->object->frameCount*3003;
++        s->object->frameCount++;
++    } else if(!result)s->drained=1;
++    else if(result<0)fail(s,result);
++    s->decoding=0;return result==1?0:result==XB_MPEG_NEED_INPUT?XB_MPEG_NEED_INPUT:-1;
++}
+--- /dev/null
++++ b/engine/platform/platform/xb_mpeg.h
+@@ -0,0 +1,26 @@
++/* SPDX-License-Identifier: AGPL-3.0-or-later */
++#ifndef XB_MPEG_H
++#define XB_MPEG_H
++#include <stdint.h>
++/* Native layout compatible with include/sys/movie.h; no Sony binary state. */
++typedef struct {
++    int32_t width,height,frameCount;
++    int64_t pts,dts;uint64_t flags;int64_t pts2nd,dts2nd;uint64_t flags2nd;
++    void *sys;
++} XbMpegObject;
++typedef struct {int32_t type;uint8_t *header,*data;uint32_t len;int64_t pts,dts;} XbMpegStreamData;
++typedef int32_t (*XbMpegCallback)(void *,void *,void *);
++int32_t sceMpegInit(void);
++int32_t sceMpegCreate(void *,uint8_t *,int32_t);
++int32_t sceMpegDelete(void *);
++int32_t sceMpegReset(void *);
++int32_t sceMpegGetPicture(void *,uint8_t *,int32_t);
++int32_t sceMpegIsEnd(void *);
++void *sceMpegAddCallback(void *,int32_t,XbMpegCallback,void *);
++void *sceMpegAddStrCallback(void *,int32_t,int32_t,XbMpegCallback,void *);
++int32_t sceMpegDemuxPss(void *,uint8_t *,int32_t);
++/* Native EOF only after all file bytes/PES data were supplied, not starvation. */
++int XbSonyMpeg_End(void *);
++int XbSonyMpeg_Error(void *);
++int XbSonyMpeg_CanQueue(void *,uint32_t);
++#endif
+--- a/engine/platform/platform/xb_mpeg2.c
++++ b/engine/platform/platform/xb_mpeg2.c
+@@ -11,7 +11,7 @@
+     XbMpegReader reader;
+     uint64_t cursor;
+     uint8_t input[8192];size_t inputAt,inputSize;
+-    int error;
++    int error,streaming,waiting;
+     size_t remainingBits;
+     uint8_t covered[32*28];int macroblocks;
+ 
+@@ -508,6 +508,7 @@
+     return 1;
+ }
+ static int more(XbMpeg *m) {
++    if(m->streaming)return 0;
+     uint8_t h[14];
+     while(!m->eof && !m->error) {
+         int first=input_byte(m);
+@@ -562,6 +563,31 @@
+     if(!sVlcReady)vlc_init();
+     m->reader=*reader;return m;
+ }
++XbMpeg *XbMpeg_OpenStream(void) {
++    XbMpeg *m=calloc(1,sizeof(*m));if(!m)return NULL;
++    if(!sVlcReady)vlc_init();
++    m->streaming=1;return m;
++}
++size_t XbMpeg_StreamSpace(const XbMpeg *m) {
++    return m && m->streaming && !m->eof && !m->error?2*1024*1024-m->esSize:0;
++}
++int XbMpeg_PushES(XbMpeg *m,const void *bytes,size_t n) {
++    if(!m || !m->streaming || m->eof || (!bytes && n))return XB_MPEG_ARGUMENT;
++    if(m->error)return m->error;
++    if(n>XbMpeg_StreamSpace(m))return XB_MPEG_LIMIT; /* backpressure, no mutation */
++    size_t need=m->esSize+n;
++    if(need>m->esCap) {
++        size_t cap=(need+65535)&~(size_t)65535;uint8_t *newEs=realloc(m->es,cap);
++        if(!newEs)return m->error=XB_MPEG_MEMORY;
++        m->es=newEs;m->esCap=cap;
++    }
++    if(n)memcpy(m->es+m->esSize,bytes,n);
++    m->esSize=need;return 0;
++}
++int XbMpeg_EndStream(XbMpeg *m) {
++    if(!m || !m->streaming)return XB_MPEG_ARGUMENT;
++    m->eof=1;return m->error;
++}
+ void XbMpeg_Close(XbMpeg *m) {
+     if(!m)return;
+     if(m->reader.close)m->reader.close(m->reader.context);
+@@ -582,6 +608,7 @@
+             break;
+         }
+         if (!more(m)) {
++            if(m->streaming && !m->eof){m->waiting=1;return 0;}
+             /* Sequence-end code may trail the last decoded picture. Other
+              * leftover ES without any picture is not a clean stream. */
+             if(m->esSize && !(m->esSize==4 && !memcmp(m->es,"\0\0\1\267",4)))
+@@ -600,6 +627,7 @@
+             searched = (size_t)first + 4;
+         }
+         if (!more(m)) {
++            if(m->streaming && !m->eof){m->waiting=1;return 0;}
+             second = (long)m->esSize;
+             break;
+         }
+@@ -621,8 +649,9 @@
+     uint8_t *rgba=out;
+     int x, y, w, h, stride;
+ 
++    m->waiting=0;
+     if (!next_planes(m)) {
+-        return m->error?m->error:0;
++        return m->error?m->error:m->waiting?XB_MPEG_NEED_INPUT:0;
+     }
+     w = m->width;
+     h = m->height;
+--- a/engine/platform/platform/xb_mpeg2.h
++++ b/engine/platform/platform/xb_mpeg2.h
+@@ -19,7 +19,13 @@
+ enum { XB_MPEG_WIDTH=512, XB_MPEG_HEIGHT=448,
+        XB_MPEG_RGBA_BYTES=512*448*4,
+        XB_MPEG_IO=-1, XB_MPEG_FORMAT=-2, XB_MPEG_MEMORY=-3,
+-       XB_MPEG_LIMIT=-4, XB_MPEG_ARGUMENT=-5 };
++       XB_MPEG_LIMIT=-4, XB_MPEG_ARGUMENT=-5, XB_MPEG_NEED_INPUT=2 };
++/* Push mode: PES demux feeds bounded ES; NeedInput never consumes a partial
++ * picture or changes output. EndStream flushes the last complete picture. */
++XbMpeg *XbMpeg_OpenStream(void);
++size_t XbMpeg_StreamSpace(const XbMpeg *);
++int XbMpeg_PushES(XbMpeg *,const void *,size_t);
++int XbMpeg_EndStream(XbMpeg *);
+ XbMpeg *XbMpeg_OpenReader(const XbMpegReader *reader);
+ /* Uses the real mounted ISO; every refill rejects a changed mount generation. */
+ XbMpeg *XbMpeg_Open(const char *disc_relative_path);
+--- a/engine/tests/test_capture.c
++++ b/engine/tests/test_capture.c
+@@ -7,6 +7,9 @@
+ #include "dr_gs_sdk.h"
+ #include "dr_dma_engine.h"
+ #include "dr_gs_native.h"
++#include "dr_gs_movie.h"
++extern int sceGsResetPath(void);
++extern int sceGsResetGraph(int,int,int,int);
+ #include "dr_dma_producer.h"
+ extern int sceGsSetDefDBuff(void *,int,int,int,int,int,int);
+ extern int sceGsSwapDBuff(void *,int);
+@@ -60,8 +63,36 @@
+     Gs_RegWrite(0x4c,8ull<<16);Gs_RegWrite(0x4e,1ull<<32|64);
+     Gs_RegWrite(0x18,0);Gs_RegWrite(0x40,511ull<<16|447ull<<48);
+ }
++static void movie_upload_test(void) {
++    assert(!dr_capture_demo_open(1280,720));
++    uint8_t *mb=malloc(512*448*4);assert(mb);uint8_t descriptor[129];
++    for(unsigned repeat=0;repeat<4;repeat++) {
++        unsigned second=repeat&1;
++        for(unsigned x=0;x<32;x++)for(unsigned y=0;y<28;y++)for(unsigned i=0;i<256;i++) {
++            unsigned gx=x*16+i%16,gy=y*16+i/16;uint8_t *p=mb+((x*28+y)*256+i)*4;
++            p[0]=(uint8_t)(gx+42);p[1]=(uint8_t)gy;p[2]=(uint8_t)((gy>>8)|(second<<1));p[3]=0x80;
++        }
++        assert(!dr_gs_movie_build(descriptor+1,mb,1024,0,second?448:0,512,448));
++        assert(!dr_gs_movie_send(descriptor+1));
++        for(unsigned y=0;y<448;y++)for(unsigned x=0;x<512;x++) {
++            uint32_t expected=(uint8_t)(x+42)|((uint32_t)(uint8_t)y<<8)|((uint32_t)((y>>8)|(second<<1))<<16)|0x80000000u;
++            assert(Gs_VramRead(second?0xe00:0,8,0,x,y)==expected);
++        }
++        unsigned before=draws;assert(!GsDraw_XenosSubmit() && draws>before);
++        assert(uploaded_pixel[0]==42 && uploaded_pixel[1]==0 && uploaded_pixel[2]==(second<<1) && uploaded_pixel[3]==0x80);
++    }
++    assert(dr_gs_movie_build(descriptor,mb,1,0,0,512,448)<0 && dr_gs_movie_send(descriptor)<0);
++    assert(sceGsResetGraph(1,1,2,0)==DR_GS_SDK_ARGUMENT);
++    assert(!sceGsResetPath() && !sceGsResetGraph(0,1,2,1));
++    /* Reset path discards a partial GIF tag; next packet is a fresh A+D run. */
++    uint8_t partial[16]={0};le64(partial,2|(1ull<<60));le64(partial+8,14);Gs_Gif(partial,1);
++    assert(!sceGsResetPath());uint8_t fresh[32]={0};le64(fresh,1|(1ull<<60));le64(fresh+8,14);le64(fresh+16,0x44);le64(fresh+24,0x42);
++    Gs_Gif(fresh,2);assert(gGs.alpha[0]==0x44);
++    assert(!dr_capture_demo_close());free(mb);
++}
+ int main(void)
+ {
++    movie_upload_test();
+     for(unsigned iteration=0;iteration<9;iteration++) {
+         assert(dr_capture_demo_open(1280,720)==0);
+         unsigned before=draws;
+--- a/engine/tests/test_gs_backend.c
++++ b/engine/tests/test_gs_backend.c
+@@ -10,6 +10,8 @@
+ #include "xsdk/present.h"
+ #include <stdlib.h>
+ #ifndef DR_REAL_CAPTURE
++unsigned gGsFbUploads;
++uint32_t Gs_VramRead(uint32_t bp,uint32_t bw,uint32_t psm,uint32_t x,uint32_t y){(void)bp;(void)bw;(void)psm;return 0x80000000|x|(y<<8);}
+ int gsScale4=4,gsTargetW=1024,gsTargetH=1024,gsTargetCount,gGsMainFbp,gsAnchor;
+ unsigned gsSkipped,gsNative;
+ float *gsVuVerts;uint32_t *gsVuIdx;Vu0Uniform *gsVuUni;float gsZMax=16777215.0f;
+--- /dev/null
++++ b/engine/tests/test_movie_clock.c
+@@ -0,0 +1,19 @@
++/* SPDX-License-Identifier: AGPL-3.0-or-later */
++#include "xb_movie_clock.h"
++#include <assert.h>
++#include <stdio.h>
++int main(void) {
++    XbMovieClock c={0};assert(XbMovieClock_Due(&c,0,100,0,0)==1);
++    assert(!XbMovieClock_Due(&c,1,10000000,0,0));
++    assert(!XbMovieClock_Due(&c,1,20000000,33366665,0));
++    assert(XbMovieClock_Due(&c,1,33366666,33366666,0)==1);
++    /* Queue-ahead/wall clock alone cannot release the next picture. */
++    assert(!XbMovieClock_Due(&c,2,500000000,33366666,0));
++    assert(XbMovieClock_Due(&c,2,600000000,70000000,0)==1);
++    assert(XbMovieClock_Due(&c,3,610000000,60000000,0)==-1);
++    assert(!XbMovieClock_Due(&c,100,620000000,70000000,1));
++    assert(XbMovieClock_Due(&c,100,4000000000ull,70000000,1)==1);
++    c=(XbMovieClock){0};assert(!XbMovieClock_Due(&c,1,0,0,0));
++    assert(XbMovieClock_Due(&c,1,2000000001ull,0,0)==-1);
++    puts("PASS: 30000/1001 pacing, SDK-media master, late frames, underrun hold, regression/stall refusal, explicit audio-end tail");return 0;
++}
+--- /dev/null
++++ b/engine/tests/test_movie_player.c
+@@ -0,0 +1,62 @@
++/* SPDX-License-Identifier: AGPL-3.0-or-later
++ * Actual adapted player/ADXF/ADXT/decoder/ISO. NT, GPU, pad, fade, game heap
++ * and device pacing are fixtures; this does not execute Xbox hardware. */
++#define main iso_adapter_fixture_main
++#include "test_xb_iso_file.c"
++#undef main
++#include "port_compat.h"
++#undef malloc
++#include "sys/movie.h"
++#include "sys/gfx.h"
++#include "sys/pad.h"
++#include "xb_adxt.h"
++#include "xb_time.h"
++#include "xsdk/audio.h"
++#include "dr_gs_movie.h"
++Movie *gMovie;AdxPlayer gAdxPlayerTbl[6];Gfx gGfx;Pad gPad[2];
++s32 gMovieRunCount,gMovieEsSize;u8 *gMovieEsBuf,*gMovieEsWrite,*gMovieEsDmaStart,*gMovieEsDmaEnd;
++char gMovieTagIdle[]="idle",gMovieTagNoData[]="nodata",gMovieTagFull[]="full";
++static uint64_t now,device_next;static unsigned queued,played,silent;
++static unsigned presented,skipped,frames,heap_live;static int paused,fade,opened;
++static float audio_frame[1536];static void (*hook)(void);
++static void advance_audio(void) {
++    while(device_next<=now) {
++        if(played<queued)played++;else silent++;
++        device_next+=256ull*1000000000/48000;
++    }
++}
++uint64_t XbTime_NowNs(void){return now;}
++int XbTime_OnVBlank(void (*fn)(void)){assert(!hook);hook=fn;return 0;}
++void Port_VBlank(void){now+=16683350;advance_audio();if(hook)hook();}
++NTSTATUS xsdk_audio_open(uint32_t n){assert(n==8);queued=played=silent=0;device_next=now+5333333;opened=1;return STATUS_SUCCESS;}
++NTSTATUS xsdk_audio_close(void){opened=0;return STATUS_SUCCESS;}
++NTSTATUS xsdk_audio_next_frame(uint32_t wait,float **out){assert(!wait && opened);advance_audio();if(queued-played>=8)return STATUS_IO_TIMEOUT;*out=audio_frame;return STATUS_SUCCESS;}
++void xsdk_audio_queue_frame(void){assert(queued-played<8);queued++;}
++void xsdk_audio_stats(XsdkAudioStats *s){advance_audio();memset(s,0,sizeof(*s));s->played=played;s->silent=silent;}
++void *Port_LowAlloc(size_t size){return calloc(1,size);}
++void Port_LowFree(void *p){free(p);}
++void *Heap_Alloc(s32 bytes,s32 alignment,s32 flags,s32 heap){(void)alignment;(void)flags;(void)heap;assert(bytes>0);void *p=calloc(1,(size_t)bytes);assert(p);heap_live++;return p;}
++void Heap_Free(void *p){if(p){assert(heap_live);heap_live--;free(p);}}
++void Adx_PlayFilePaused(s32 ch,char *name,s32 vol,s32 pan){assert(ch==0 && vol==0x40 && !pan);ADXT_Pause(gAdxPlayerTbl[0].adxt,1);ADXT_StartFname(gAdxPlayerTbl[0].adxt,name);assert(!XbAdx_LastError());paused=1;}
++void Adx_Stop(s32 ch){assert(!ch);ADXT_Stop(gAdxPlayerTbl[0].adxt);}
++void Adx_Resume(s32 ch){assert(!ch && paused);ADXT_Pause(gAdxPlayerTbl[0].adxt,0);paused=0;}
++void Gfx_BeginFrame(void){frames++;if(frames==12)now+=100000000;}
++void Gfx_EndFrame(s32 fields){assert(fields==1);Port_VBlank();gGfx.field^=1;gGfx.frame++;presented++;}
++void Pad_Update(void){memset(gPad,0,sizeof(gPad));if(frames==32){gPad[0].gamePressed=MOVIE_SKIP_BUTTON;skipped++;}}
++void Fade_Start(s32 slot,s32 type,f32 duration){(void)type;(void)duration;assert(!slot);fade=1;}
++s32 Fade_IsDone(s32 slot){assert(!slot);return fade;}
++void Fade_Reset(s32 slot){assert(!slot);fade=0;}
++void Dma_Flush(void){}
++s32 sceGsSyncPath(s32 mode,u16 timeout){assert(!mode && !timeout);return 0;}
++/* This boundary is tested with the actual GS/core/backend in test_capture.
++ * Here verify the player keeps a valid live decoded buffer until upload. */
++int dr_gs_movie_build(void *tags,const uint8_t *image,int step,int x,int y,int w,int h){assert(step==1024 && !x && (y==0 || y==448) && w==512 && h==448);memcpy(tags,&image,sizeof(image));return 0;}
++int dr_gs_movie_send(const void *tags){const uint8_t *image;memcpy(&image,tags,sizeof(image));assert(image && image[3]==0x80);return 0;}
++int main(int argc,char **argv) {
++    assert(argc==2);image_path=argv[1];assert(!XbDisc_Mount("game:/test.iso"));
++    ADXT_Init();uint8_t work[128];gAdxPlayerTbl[0].adxt=ADXT_Create(2,work,sizeof(work));assert(gAdxPlayerTbl[0].adxt);
++    Movie_Init();Movie_PlayOpening();assert(!gMovie && !heap_live && skipped==1 && presented>=32 && gMovieRunCount==1);
++    unsigned before=presented;Movie_Open("absent.pss","zs3usop.adx");Movie_Run();Movie_Close();assert(!gMovie && !heap_live && presented==before);
++    assert(!XbAdx_Close());XbDisc_Unmount();
++    printf("PASS: adapted original Movie_PlayOpening/Run/Close, real ISO PSS and ADX, actual streaming codec/SDK-consumed audio clock, START/cleanup, missing-file refusal; %u mock presents, synthetic 100ms stall, NT/GPU/pacing/pad/heap mocked\n",presented);return 0;
++}
+--- a/engine/tests/test_xb_adxt.c
++++ b/engine/tests/test_xb_adxt.c
+@@ -9,12 +9,13 @@
+ #include <stdlib.h>
+ #include <string.h>
+ #include <math.h>
+-static int available,queued,read_calls;static float device_frame[XSDK_AUDIO_FRAME_FLOATS];
++static int available,queued,read_calls,played,auto_play=1;static float device_frame[XSDK_AUDIO_FRAME_FLOATS];
+ static NTSTATUS open_result=STATUS_SUCCESS,next_result=STATUS_SUCCESS,close_result=STATUS_SUCCESS;
+ static void (*tick_hook)(void);
+-NTSTATUS xsdk_audio_open(uint32_t n){assert(n==8);return open_result;}
++NTSTATUS xsdk_audio_open(uint32_t n){assert(n==8);queued=played=0;return open_result;}
+ NTSTATUS xsdk_audio_close(void){return close_result;}
+ NTSTATUS xsdk_audio_next_frame(uint32_t timeout,float **p){assert(!timeout);if(!NT_SUCCESS(next_result))return next_result;if(!available)return STATUS_IO_TIMEOUT;*p=device_frame;return STATUS_SUCCESS;}
++void xsdk_audio_stats(XsdkAudioStats *s){memset(s,0,sizeof(*s));s->played=(uint32_t)(auto_play?queued:played);}
+ void xsdk_audio_queue_frame(void){assert(available>0);available--;queued++;}
+ int XbTime_OnVBlank(void (*fn)(void)){assert(!tick_hook);tick_hook=fn;return 0;}
+ static uint8_t *fixture;static size_t fixture_size;
+@@ -103,6 +104,17 @@
+     assert(!XbAdx_Close());ADXT_Init();for(unsigned i=0;i<16;i++)assert(ADXT_Create(2,work,sizeof(work)));assert(!ADXT_Create(2,work,sizeof(work)));
+     assert(!XbAdx_Close());open_result=STATUS_INVALID_PARAMETER;ADXT_Init();assert(!ADXT_Create(2,work,sizeof(work)));
+     open_result=STATUS_SUCCESS;ADXT_Init();assert(create());assert(!XbAdx_Close());
++    /* SDK-consumed sample clock: queued-ahead samples must not move it. */
++    ADXT_Init();h=create();assert(!XbAdx_StartBytes(h,data,n));
++    auto_play=0;available=8;tick_hook();
++    uint64_t ns=99;int ended=99;
++    assert(!XbAdx_Clock(h,&ns,&ended) && ns==0 && !ended && queued>0);
++    played=1;assert(!XbAdx_Clock(h,&ns,&ended) && ns==256ull*1000000000/48000);
++    ADXT_Pause(h,1);played=queued;assert(!XbAdx_Clock(h,&ns,&ended));uint64_t before=ns;
++    available=2;tick_hook();played=queued;assert(!XbAdx_Clock(h,&ns,&ended) && ns==before);
++    ADXT_Stop(h);assert(XbAdx_Clock(h,&ns,&ended)!=0);
++    assert(!XbAdx_StartBytes(h,data,n));assert(!XbAdx_Clock(h,&ns,&ended) && ns==0);
++    assert(!XbAdx_Close());auto_play=1;
+     free(data);free(bad);
+     puts("PASS: native ADXT, real 16/24k and synthetic 48k ADX PCM matches original decoder sample-hold resampling; controls, loop predictor restore, deterministic tick status, bounded ISO read path and 6-channel xsdk queue mocks; invalid formats/device errors rejected; no hardware audio");
+ }
+--- /dev/null
++++ b/engine/tests/test_xb_mpeg_stream.c
+@@ -0,0 +1,62 @@
++/* SPDX-License-Identifier: AGPL-3.0-or-later */
++#define main iso_adapter_fixture_main
++#include "test_xb_iso_file.c"
++#undef main
++#include "xb_mpeg.h"
++#include "xb_mpeg2.h"
++typedef struct {dr_span span;uint64_t at;uint8_t buffer[65537];size_t size,pos,chunk;unsigned callbacks,errors;} Feed;
++static int feed(void *mp,void *data,void *opaque) {
++    (void)data;Feed *f=opaque;
++    assert(sceMpegReset(mp)==XB_MPEG_ARGUMENT && sceMpegDelete(mp)==XB_MPEG_ARGUMENT);
++    for(unsigned tries=0;tries<128;tries++) {
++        if(f->pos==f->size) {
++            if(f->at==f->span.size){assert(!XbSonyMpeg_End(mp));return 1;}
++            size_t n=f->chunk;if((uint64_t)n>f->span.size-f->at)n=(size_t)(f->span.size-f->at);
++            assert(!XbDisc_ReadSpan(&f->span,f->at,f->buffer,n));f->at+=n;f->size=n;f->pos=0;
++        }
++        int n=sceMpegDemuxPss(mp,f->buffer+f->pos,(int)(f->size-f->pos));
++        assert(n>=0);f->pos+=(size_t)n;if(!n)return 1;
++    }
++    return 1;
++}
++static int video(void *mp,void *data,void *opaque) {
++    Feed *f=opaque;XbMpegStreamData *s=data;
++    assert(s && s->type==0 && s->len<=65535 && XbSonyMpeg_CanQueue(mp,s->len));
++    assert(sceMpegDelete(mp)==XB_MPEG_ARGUMENT);f->callbacks++;return 1;
++}
++static int error(void *mp,void *data,void *opaque){(void)mp;assert(data);((Feed *)opaque)->errors++;return 0;}
++int main(int argc,char **argv) {
++    assert(argc==5);image_path=argv[1];int count=atoi(argv[3]);size_t chunk=(size_t)atoi(argv[4]);assert(chunk && chunk<=65537);
++    assert(!XbDisc_Mount("game:/test.iso"));Feed f={0};f.chunk=chunk;assert(!XbDisc_FindFile(argv[2],&f.span));
++    XbMpegObject object;uint8_t work[128];assert(!sceMpegInit() && !sceMpegCreate(&object,work,sizeof(work)));
++    assert(sceMpegCreate(&object,work,sizeof(work))<0);
++    sceMpegAddCallback(&object,1,feed,&f);sceMpegAddCallback(&object,0,error,&f);sceMpegAddStrCallback(&object,0,0,video,&f);
++    XbMpeg *reference=XbMpeg_Open(argv[2]);assert(reference);
++    uint8_t *linear=malloc(XB_MPEG_RGBA_BYTES),*blocks=malloc(XB_MPEG_RGBA_BYTES);assert(linear && blocks);
++    for(int i=0;i<count;i++) {
++        int n=2;unsigned tries=0;
++        while(n==2 && ++tries<1024)n=sceMpegGetPicture(&object,blocks,896);
++        if(n)fprintf(stderr,"frame %d result %d decoder %d\n",i,n,XbSonyMpeg_Error(&object));
++        assert(n==0 && !sceMpegIsEnd(&object) && object.frameCount==i+1 && object.pts==(int64_t)i*3003);
++        assert(XbMpeg_Next(reference,linear,XB_MPEG_RGBA_BYTES)==1);
++        for(unsigned x=0;x<32;x++)for(unsigned y=0;y<28;y++)for(unsigned row=0;row<16;row++)for(unsigned col=0;col<16;col++) {
++            const uint8_t *a=linear+((y*16+row)*512+x*16+col)*4;
++            const uint8_t *b=blocks+((x*28+y)*256+row*16+col)*4;
++            assert(!memcmp(a,b,3) && b[3]==0x80);
++        }
++    }
++    if(count>=2810) {
++        assert(sceMpegGetPicture(&object,blocks,896)==-1 && sceMpegIsEnd(&object));
++        assert(XbMpeg_Next(reference,linear,XB_MPEG_RGBA_BYTES)==0);
++    }
++    assert(!f.errors && f.callbacks>0);
++    assert(!sceMpegReset(&object) && !sceMpegIsEnd(&object));
++    uint8_t invalid[4]={9,8,7,6};assert(sceMpegDemuxPss(&object,invalid,4)==XB_MPEG_FORMAT && f.errors==1);
++    assert(sceMpegIsEnd(&object));memset(blocks,0xa5,XB_MPEG_RGBA_BYTES);
++    assert(sceMpegGetPicture(&object,blocks,896)==XB_MPEG_FORMAT);
++    for(size_t i=0;i<XB_MPEG_RGBA_BYTES;i++)assert(blocks[i]==0xa5);
++    assert(!sceMpegDelete(&object) && sceMpegDelete(&object)<0);
++    XbMpeg_Close(reference);XbDisc_Unmount();free(linear);free(blocks);
++    printf("PASS: %d actual ISO movie frames, PSS chunks %zu, 9 APIs, RGB identical to pull decoder, macroblock ordering/alpha, callbacks/reset/end and reentry refusal\n",count,chunk);
++    return 0;
++}
+--- a/engine/tools/link_battle.py
++++ b/engine/tools/link_battle.py
+@@ -22,9 +22,11 @@
+     p.add_argument('--host-cxx',default='g++')
+     p.add_argument('--plugin-include',action='append',default=[])
+     p.add_argument('--platform',action='store_true')
++    p.add_argument('--fixed-battle',action='store_true',help='offline stage-0/full-screen policy; Battle_Main root only, no native boot implied')
+     p.add_argument('--host-audit',action='store_true',help='compile C only on host; never link or claim PPC validation')
+     a=p.parse_args();repo=a.upstream.resolve();cc=a.compiler.resolve();sdk=a.xsdk.resolve();out=a.output.resolve()
+     roots=list(dict.fromkeys(['Battle_Main',*a.root]))
++    if a.fixed_battle and (not a.platform or roots!=['Battle_Main']):p.error('--fixed-battle requires --platform and Battle_Main as the only root')
+     if any(not re.fullmatch(r'[A-Za-z_][A-Za-z_0-9]*',r) for r in roots):p.error('invalid root symbol')
+     project=Path(__file__).resolve().parents[2];out.mkdir(parents=True,exist_ok=True)
+     import float_build
+@@ -39,6 +41,7 @@
+     # Original replacements used by the upstream portable build. No Sony/SDL
+     # platform stub module is included to make a missing platform appear ready.
+     sources.append(project/'engine/combat/dma_tex.c')
++    if a.fixed_battle:sources.append(project/'engine/combat/offline_profile.c')
+     sources += [repo/'src/port/vu0_a.c',repo/'src/port/vu0_b.c']
+     sources += [repo/'port/src'/name for name in ['softfloat_ps2.c','mathf_pc.c','plat_fastvec.c','plat_libm.c']]
+     if plugin:
+@@ -51,10 +54,10 @@
+     if a.host_audit:sources=[f for f in sources if f.suffix!='.s']
+     common=([] if a.host_audit else ['-mcpu=cell'])+['-fno-pic','-ffunction-sections','-fdata-sections','-O2','-g','-ffp-contract=off','-fno-strict-aliasing','-fcommon','-fno-builtin']
+     includes=['-I'+str(repo/'include'),'-I'+str(repo/'port/include'),'-I'+str(repo/'port/src'),
+-              '-I'+str(project/'src'),'-I'+str(project/'engine/platform/platform'),'-I'+str(sdk/'include')]
++              '-I'+str(project/'src'),'-I'+str(project/'engine/graphics'),'-I'+str(project/'engine/platform/platform'),'-I'+str(sdk/'include')]
+     def compile_one(f):
+         rel=f.relative_to(repo).as_posix() if f.is_relative_to(repo) else f.relative_to(project).as_posix()
+-        local={'src/main.c':'engine/combat/main.c','src/battle/battle.c':'engine/combat/battle.c','src/sys/bpe.c':'engine/combat/bpe.c','src/sys/heap.c':'engine/combat/heap.c','src/sys/gfx.c':'engine/combat/gfx.c'}
++        local={'src/sys/movie.c':'engine/combat/movie.c','src/main.c':'engine/combat/main.c','src/battle/battle.c':'engine/combat/battle.c','src/sys/bpe.c':'engine/combat/bpe.c','src/sys/heap.c':'engine/combat/heap.c','src/sys/gfx.c':'engine/combat/gfx.c'}
+         input_file=project/local[rel] if rel in local and (project/local[rel]).exists() else f
+         input_bytes=input_file.read_bytes()
+         lowered=False
+@@ -144,6 +147,7 @@
+             if len(fields)==3 and fields[1].isupper():definitions.setdefault(fields[2],[]).append(path.name)
+     (out/'definitions.json').write_text(json.dumps(definitions,indent=2)+'\n')
+     report={'diagnostic_roots':roots,'upstream':PIN,'compiled':len(compiled),'total':len(rows),'files':rows,
++            'fixed_battle_policy':a.fixed_battle,
+             'float_mode':a.float_mode,'platform_04_sources':a.platform,
+             'arithmetic_audit':arithmetic_audit,
+             'Battle_Main_C_object_compiled':'Battle_Main' in definitions,
+--- a/engine/tools/test_capture.py
++++ b/engine/tools/test_capture.py
+@@ -8,7 +8,7 @@
+ sdk,out=(Path(p).resolve() for p in sys.argv[1:3]);out.mkdir(parents=True,exist_ok=True)
+ files=[engine/'tests/test_capture.c']
+ files += [engine/'capture/port/src/gs'/s for s in ['gs_draw.c','gs_core.c','gs_sony.c']]
+-files += [engine/'graphics'/s for s in ['dr_gs_backend.c','dr_gs_replay.c','dr_xenos.c','dr_targets.c','dr_gs_texture.c','dr_graphics_demo.c','dr_gs_stream.c','dr_gs_native.c','dr_dma_producer.c','dr_dma_engine.c']]
++files += [engine/'graphics'/s for s in ['dr_gs_backend.c','dr_gs_replay.c','dr_xenos.c','dr_targets.c','dr_gs_texture.c','dr_graphics_demo.c','dr_gs_stream.c','dr_gs_native.c','dr_dma_producer.c','dr_dma_engine.c','dr_gs_movie.c']]
+ files += [root/'src'/s for s in ['dr_capture_demo.c','dr_capture_platform.c','dr_vu1.c']]
+ cmd=['gcc','-std=gnu17','-O2','-Wall','-Wextra','-Werror','-DDR_XBOX360','-ffp-contract=off','-ffunction-sections','-fdata-sections','-Wl,--gc-sections']
+ cmd += ['-I'+str(p) for p in [engine/'graphics',engine/'capture/port/src/gs',sdk/'include',root/'src']]
+--- a/src/dr_gs_native.c
++++ b/src/dr_gs_native.c
+@@ -17,6 +17,12 @@
+ {
+     if(!native.opened || native.busy)return DR_STREAM_INVALID;
+     dr_vu1_reset(NULL,NULL);memset(&native,0,sizeof(native));return 0;
++}
++int dr_gs_native_reset(void)
++{
++    if(!native.opened || native.busy || native.count)return DR_STREAM_INVALID;
++    DrStreamGif gif=native.stream.gif;void *opaque=native.stream.opaque;
++    return dr_gs_stream_init(&native.stream,gif,opaque);
+ }
+ int dr_gs_native_bind(const DrGsSpan *spans,size_t count)
+ {
+--- a/src/dr_gs_native.h
++++ b/src/dr_gs_native.h
+@@ -8,6 +8,7 @@
+  * Raw engine pointers and mixed-endian packets are never inferred/mapped. */
+ int dr_gs_native_open(DrStreamGif,void *);
+ int dr_gs_native_close(void);
++int dr_gs_native_reset(void); /* explicit path reset, refuses active/bound ownership */
+ int dr_gs_native_bind(const DrGsSpan *,size_t);
+ void dr_gs_native_unbind(void);
+ int dr_gs_native_vif1(uint32_t,int);
+--- a/src/main.c
++++ b/src/main.c
+@@ -260,7 +260,7 @@
+     XbPlatform_Install();
+     DrLobby lobby;dr_lobby_init(&lobby);int logged_lobby_state=LOBBY_OFF;
+     demo_init(&ui);settings_load();
+-    xsdk_log_write("DragonRage360 demo 0.33: native VIF/VU / platform diagnostics; Battle_Main not linked.");
++    xsdk_log_write("DragonRage360 demo 0.34: native VIF/VU / platform diagnostics; Battle_Main not linked.");
+     xsdk_log_write("%s: BPE decode + animation endian synthetic self-test",dr_resource_selftest()?"PASS":"FAIL");
+     xsdk_log_write("%s: bounded BIN + motion + skeleton synthetic self-test",dr_container_selftest()?"PASS":"FAIL");
+     xsdk_log_write("%s: GS texture address synthetic self-test",dr_gs_texture_selftest()?"PASS":"FAIL");
+@@ -374,7 +374,7 @@
+         if(capture_mode) {
+             int error=dr_capture_demo_draw();
+             if(error) {xsdk_log_write("FAIL: actual capture draw rc=%d",error);if(!dr_capture_demo_close())capture_mode=false;}
+-            xsdk_text_draw(50,44,2,0xffe0e0ff,"CAPTURA ORIGINAL GS · 0.33 EXPERIMENTAL");
++            xsdk_text_draw(50,44,2,0xffe0e0ff,"CAPTURA ORIGINAL GS · 0.34 EXPERIMENTAL");
+             xsdk_text_draw(52,100,1,0xffe0e0ff,"Captura GS / VU / sombras / contorno / tabelas por ID e Z");
+             xsdk_text_draw(52,650,1,0xffe0e0ff,"Dados sintéticos · sem combate · B voltar");
+         } else if(body_mode) {
+@@ -383,7 +383,7 @@
+                 xsdk_log_write("FAIL: real body diagnostic draw rc=%d",error);
+                 if(!dr_body_demo_close())body_mode=false;
+             }
+-            xsdk_text_draw(50,44,2,0xffe0e0ff,"MODELO DA ISO · POSE DE REFERÊNCIA · 0.33");
++            xsdk_text_draw(50,44,2,0xffe0e0ff,"MODELO DA ISO · POSE DE REFERÊNCIA · 0.34");
+             xsdk_text_draw(52,100,1,0xffe0e0ff,"Corpo e materiais reais / programa 0 da VU1");
+             xsdk_text_draw(950,175,1,0xffe0e0ff,"Texturas do pacote");
+             xsdk_text_draw(52,650,1,0xffe0e0ff,"Pose fixa / sem combate · X expressão · B voltar");
+@@ -393,7 +393,7 @@
+                 xsdk_log_write("FAIL: native graphics diagnostic draw, error=%d",error);
+                 dr_graphics_demo_close();graphics_mode=false;
+             }
+-            xsdk_text_draw(50,44,2,0xff101020,"DIAGNÓSTICO GS · DATE/FBA · 0.33");
++            xsdk_text_draw(50,44,2,0xff101020,"DIAGNÓSTICO GS · DATE/FBA · 0.34");
+             xsdk_text_draw(52,100,1,0xff101020,"PSMT8 / paleta / MODULATE / alpha / aditivo");
+             xsdk_text_draw(52,650,1,0xff101020,"Dados sintéticos · Y captura original · B voltar");
+         } else demo_draw(&ui,&paint,tick);
+--- a/tests/check_xex.py
++++ b/tests/check_xex.py
+@@ -31,7 +31,7 @@
+ assert required<=defined, 'body pipeline/native modules absent from link'
+ capture_required={'Dma_Flush','Dma_ResetBuffers','Dma_AddFrame','Dma_AddScissor','Dma_AddXyOffset','Dma_AddZbuf','dr_dma_write_ad','dr_dma_producer_open_mapped','dr_dma_map_chain','Dma_AddNext','dr_gs_stream_init','dr_gs_stream_chain','dr_gs_stream_vif','dr_vu1_vif_control','sXenosBackend','GsGpu_Init','GsGpu_Draw','GsGpu_DrawVu0','GsGpu_DrawVu4','GsGpu_DrawVu6','dr_gs_replay','dr_vu0_vert_container','dr_vu4_vert_container','dr_vu6_vert_container','dr_outline_frag_container','dr_dclut_frag_container','Gs_Gif','Gs_XenosCaptureEnable','GsDraw_XenosSubmit','dr_capture_demo_open','dr_capture_demo_draw'}
+ assert capture_required<=defined, 'actual capture/backend integration absent from link'
+-native_required={'XbMpeg_Open','XbMpeg_OpenReader','XbMpeg_Next','XbMpeg_Close','ADXT_Init','ADXT_Create','ADXT_SetReloadSct','ADXT_SetSvrFreq','ADXT_StartAfs','ADXT_StartFname','ADXT_Stop','ADXT_Pause','ADXT_SetOutVol','ADXT_GetOutVol','ADXT_SetOutPan','ADXT_SetOutputMono','ADXT_GetStat','XbOverlay_PrepareBuild','XbOverlay_Load','Dma_InitBuffers','Dma_SendGif','dr_dma_engine_init','dr_dma_engine_send_u64','Port_GsMarker','sceGsSyncPath','sceGsSetDefStoreImage','sceGsExecStoreImage','dr_gs_backend_sync','GsDraw_XenosReadFrameExact','sceGsSetDefDBuff','sceGsPutDrawEnv','sceGsSwapDBuff','Port_GsVif1Chain','Port_GsGifChannel','dr_gs_native_open','dr_gs_native_bind','dr_gs_native_vif1','dr_gs_native_gif','dr_gs_native_error','dr_gs_stream_gif_chain'}
++native_required={'sceMpegInit','sceMpegCreate','sceMpegDelete','sceMpegReset','sceMpegIsEnd','sceMpegAddCallback','sceMpegAddStrCallback','sceMpegDemuxPss','sceMpegGetPicture','sceGsResetPath','sceGsResetGraph','dr_gs_movie_build','dr_gs_movie_send','XbAdx_Clock','XbMpeg_Open','XbMpeg_OpenReader','XbMpeg_Next','XbMpeg_Close','ADXT_Init','ADXT_Create','ADXT_SetReloadSct','ADXT_SetSvrFreq','ADXT_StartAfs','ADXT_StartFname','ADXT_Stop','ADXT_Pause','ADXT_SetOutVol','ADXT_GetOutVol','ADXT_SetOutPan','ADXT_SetOutputMono','ADXT_GetStat','XbOverlay_PrepareBuild','XbOverlay_Load','Dma_InitBuffers','Dma_SendGif','dr_dma_engine_init','dr_dma_engine_send_u64','Port_GsMarker','sceGsSyncPath','sceGsSetDefStoreImage','sceGsExecStoreImage','dr_gs_backend_sync','GsDraw_XenosReadFrameExact','sceGsSetDefDBuff','sceGsPutDrawEnv','sceGsSwapDBuff','Port_GsVif1Chain','Port_GsGifChannel','dr_gs_native_open','dr_gs_native_bind','dr_gs_native_vif1','dr_gs_native_gif','dr_gs_native_error','dr_gs_stream_gif_chain'}
+ assert native_required<=defined, 'shared native VIF/GIF engine entry points absent'
+ platform_required={'sceOpen','sceClose','sceRead','sceLseek','sceCdSearchFile','XbIsoFiles_Probe','XbDisc_Generation','XbPlatform_Install','XbPlatform_ProbeFiles','XbDisc_Mount','ADXF_ReadNw','ADXF_OpenAfs',
+                    'XbRes_Install','XbRes_Report','XbRes_LoadMap','XbRes_RegisterChecked',
+@@ -73,6 +73,6 @@
+         'platform_sources_compiled':True,'platform_resource_hook_linked':True,
+         'linked_platform_symbols':sorted(platform_required),'Bpe_Decode_linked':'Bpe_Decode' in defined,
+         'experimental_backend_linked':True,'original_GS_capture_linked':True,'linked_capture_symbols':sorted(capture_required),'registration_patch_provided':True,
+-        'native_VU_shader_path_linked':True,'shadow_stencil_run_path_linked':True,'buffer_consumers_linked':['outline from frozen IDs','depth/ID CLUT with raw alpha MRT','sampled target raw alpha and primitive feedback resolves'],'bounded_DMA_VIF_consumer_linked':True,'combat_DMA_producers_adapted':False,'adapted_DMA_producer_subset_linked':['Frame','Zbuf','Scissor','XYOffset','AD register','Flush','ResetBuffers'],'native_packet_producers_compiled':['Dma_Alloc','Dma_AddData','Dma_AddRef','Dma_BeginDirect','Dma_EndDirect','Dma_AddNext'],'mapped_chain_diagnostic_linked':True,'native_DMA_buffer_initialization_linked':True,'raw_ISO_Sony_byte_file_API_linked':True,'native_PSS_decoder_retained':True,'PSS_playback_integrated':False,'native_ADXT_APIs_retained':True,'overlay_loader_retained':True,'native_overlay_catalog_in_launcher':False,'scope':'0.33 retains bounded native CPU PSS decoder APIs; no sceMpeg/movie player/GPU or AV sync integration. 0.32 retains real ADXT/native overlay APIs for static verification; does not initialize audio, load menus or start combat. Strong complete native overlay catalogue generated only for strict engine link. 0.31 adds shared DMA initialization and typed boot GIF plus read-only ISO Sony byte-file API and bounded ELF probe; Game_Main and Battle_Main absent. 0.30 adds ordered effect marker, blocking real GPU sync and exact CT24 RGB frame readback for supported game profile; no hardware execution. 0.27 replaces native legacy DMA/VIF/GIF traversal with bounded canonical mappings and one shared VU session; Port_Gs entry points and synthetic MPG/UNPACK/MSCAL/XGKICK probe linked. No combat boot/presentation integration. 0.25 DMA patch and platform 0.4 integrated: ADXF post-read, converter registry/map/adapters and first-file ISO probes; combat remains outside XEX. Prior 0.24 features: adapted canonical-LE register producers and adapted Dma_Flush/ResetBuffers linked to bounded DMA/VIF/GS capture in synthetic diagnostic; rectangle and other helpers byte-tested against original source; Battle_Main, full combat producers and IA/collisions/animation integration absent; no hardware pixel validation'}
++        'native_VU_shader_path_linked':True,'shadow_stencil_run_path_linked':True,'buffer_consumers_linked':['outline from frozen IDs','depth/ID CLUT with raw alpha MRT','sampled target raw alpha and primitive feedback resolves'],'bounded_DMA_VIF_consumer_linked':True,'combat_DMA_producers_adapted':False,'adapted_DMA_producer_subset_linked':['Frame','Zbuf','Scissor','XYOffset','AD register','Flush','ResetBuffers'],'native_packet_producers_compiled':['Dma_Alloc','Dma_AddData','Dma_AddRef','Dma_BeginDirect','Dma_EndDirect','Dma_AddNext'],'mapped_chain_diagnostic_linked':True,'native_DMA_buffer_initialization_linked':True,'raw_ISO_Sony_byte_file_API_linked':True,'native_PSS_decoder_retained':True,'PSS_playback_integrated':False,'native_streaming_sceMpeg_APIs_retained':True,'native_movie_GIF_upload_retained':True,'native_ADXT_APIs_retained':True,'overlay_loader_retained':True,'native_overlay_catalog_in_launcher':False,'scope':'0.34 retains real streaming sceMpeg APIs, typed movie GIF upload and GS resets; adapted Movie_Run only in strict engine attempt; full Game_Main/Battle_Main absent. 0.33 retains bounded native CPU PSS decoder APIs; no sceMpeg/movie player/GPU or AV sync integration. 0.32 retains real ADXT/native overlay APIs for static verification; does not initialize audio, load menus or start combat. Strong complete native overlay catalogue generated only for strict engine link. 0.31 adds shared DMA initialization and typed boot GIF plus read-only ISO Sony byte-file API and bounded ELF probe; Game_Main and Battle_Main absent. 0.30 adds ordered effect marker, blocking real GPU sync and exact CT24 RGB frame readback for supported game profile; no hardware execution. 0.27 replaces native legacy DMA/VIF/GIF traversal with bounded canonical mappings and one shared VU session; Port_Gs entry points and synthetic MPG/UNPACK/MSCAL/XGKICK probe linked. No combat boot/presentation integration. 0.25 DMA patch and platform 0.4 integrated: ADXF post-read, converter registry/map/adapters and first-file ISO probes; combat remains outside XEX. Prior 0.24 features: adapted canonical-LE register producers and adapted Dma_Flush/ResetBuffers linked to bounded DMA/VIF/GS capture in synthetic diagnostic; rectangle and other helpers byte-tested against original source; Battle_Main, full combat producers and IA/collisions/animation integration absent; no hardware pixel validation'}
+ (root/'VALIDACAO.json').write_text(json.dumps(report,ensure_ascii=False,indent=2)+'\n')
+ print(json.dumps(report,ensure_ascii=False,indent=2))

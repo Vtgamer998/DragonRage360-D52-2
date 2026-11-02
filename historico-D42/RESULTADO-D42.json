@@ -1,0 +1,69 @@
+{
+  "delivery": "D42",
+  "complete_game": false,
+  "stable_30_fps": false,
+  "NOT_READY": 2,
+  "Battle_Main_called": false,
+  "Game_Main_called": false,
+  "console_xex_sha256": "b8cb948d6f30c66ca1c1383ab75ae8ac1c11def0d846852ffd45afbac5d1834a",
+  "xenia_xex_sha256": "70576698660b11702bc4e777dc68eede88680e4d5089c7a1c26f44b89fc8715e",
+  "D41_physical_baseline": {
+    "frames": 33,
+    "elapsed_us": 8511942,
+    "fps": 3.8769061161365994,
+    "median_us": 250926,
+    "p95_us": 262922,
+    "max_us": 409394
+  },
+  "fixes": [
+    "Bounded native OT mixed-struct serialization of RGBAQ/ST/XYZF; Q NaN root cause corrected",
+    "Original HUD and sprite numeric masks on PowerPC BE",
+    "Bounded continuous original Battle_StepFrame driver and between-frame Back+Start cancellation"
+  ],
+  "tests": {
+    "actual_PPC_and_LE_packet_struct_fixtures_ASAN_UBSAN": "PASS",
+    "original_Ot_Send_bounds_ASAN_UBSAN": "PASS",
+    "original_HUD_setters_ASAN_UBSAN": "PASS",
+    "cancel_all_65536_button_masks_ASAN_UBSAN": "PASS",
+    "console_and_xenia_static": "PASS",
+    "xenia_battle_check": {
+      "original_steps": 89,
+      "FIGHT_frames": 4,
+      "cancelled": true,
+      "natural_end": false,
+      "max_steps": 3600,
+      "begin_end": [
+        181,
+        181
+      ],
+      "converted_files": 42,
+      "conversion_rejections": 0,
+      "close_result": 0,
+      "harness": {
+        "elapsed_seconds": 3.0027054679994762,
+        "frames_seen": [],
+        "process_exit": -7,
+        "token": "original-battle-check",
+        "renderer": "llvmpipe; no physical-console performance claim"
+      }
+    }
+  },
+  "runtime_scope": "Xenia Vulkan llvmpipe; no D42 physical hardware validation",
+  "unverified_or_incomplete": [
+    "Natural KO and result/end-of-match sequence",
+    "Physical controller combat on D42",
+    "30 stable FPS",
+    "Terrain black outline/grid rendering",
+    "Full original menu and character/stage selection",
+    "Audible audio",
+    "Original saves",
+    "All stages 1..38",
+    "Online"
+  ],
+  "dependencies": {
+    "upstream_commit": "3ca419c7966b11438e2dc3c9a7e1914f102ed545",
+    "xsdk_commit": "8c58c7a3fb37bb261c5a11a8a1f4fa8a8bfd0d28",
+    "required_patch": "engine/platform/xsdk-keep-kernel-lut.patch",
+    "ISO_SHA256": "93f1f911e9a2bbdf92e5794fc3075ddf3f87db3df4b1cb8cfbb0448721c91172"
+  }
+}

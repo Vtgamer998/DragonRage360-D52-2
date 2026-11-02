@@ -1,0 +1,470 @@
+{
+  "source_integrity": "PASS",
+  "commit": "7b43a75bd8b0aeabcce0a22c45e1ad66162ac9d7",
+  "verified_files": 566,
+  "game_C_units": 272,
+  "menu_C_units": 72,
+  "C_attempts_enabled": 44,
+  "missing_original_C_bodies": 0,
+  "original_flow": [
+    "Game_Main",
+    "Overlay_Load",
+    "Progress_Main",
+    "Battle_Main",
+    "Battle_Init",
+    "Battle_Loop",
+    "Battle_Term"
+  ],
+  "host_syntax_result": "PASS",
+  "host_syntax_units": [
+    {
+      "path": "src/menu/menu_a.c",
+      "exit_code": 0,
+      "warnings": 2,
+      "log": "logs/src_menu_menu_a.c.log"
+    },
+    {
+      "path": "src/menu/menu_a_b.c",
+      "exit_code": 0,
+      "warnings": 0,
+      "log": "logs/src_menu_menu_a_b.c.log"
+    },
+    {
+      "path": "src/menu/menu_a_c.c",
+      "exit_code": 0,
+      "warnings": 0,
+      "log": "logs/src_menu_menu_a_c.c.log"
+    },
+    {
+      "path": "src/menu/menu_a_d.c",
+      "exit_code": 0,
+      "warnings": 0,
+      "log": "logs/src_menu_menu_a_d.c.log"
+    },
+    {
+      "path": "src/menu/menu_b_b.c",
+      "exit_code": 0,
+      "warnings": 0,
+      "log": "logs/src_menu_menu_b_b.c.log"
+    },
+    {
+      "path": "src/menu/menu_b_c.c",
+      "exit_code": 0,
+      "warnings": 0,
+      "log": "logs/src_menu_menu_b_c.c.log"
+    },
+    {
+      "path": "src/menu/menu_b_d.c",
+      "exit_code": 0,
+      "warnings": 0,
+      "log": "logs/src_menu_menu_b_d.c.log"
+    },
+    {
+      "path": "src/menu/menu_c_b.c",
+      "exit_code": 0,
+      "warnings": 0,
+      "log": "logs/src_menu_menu_c_b.c.log"
+    },
+    {
+      "path": "src/menu/menu_c_c.c",
+      "exit_code": 0,
+      "warnings": 0,
+      "log": "logs/src_menu_menu_c_c.c.log"
+    },
+    {
+      "path": "src/menu/menu_c_d.c",
+      "exit_code": 0,
+      "warnings": 0,
+      "log": "logs/src_menu_menu_c_d.c.log"
+    },
+    {
+      "path": "src/menu/menu_c_e.c",
+      "exit_code": 0,
+      "warnings": 3,
+      "log": "logs/src_menu_menu_c_e.c.log"
+    },
+    {
+      "path": "src/menu/menu_e_b.c",
+      "exit_code": 0,
+      "warnings": 9,
+      "log": "logs/src_menu_menu_e_b.c.log"
+    },
+    {
+      "path": "src/menu/menu_g.c",
+      "exit_code": 0,
+      "warnings": 0,
+      "log": "logs/src_menu_menu_g.c.log"
+    },
+    {
+      "path": "src/menu/menu_g_b.c",
+      "exit_code": 0,
+      "warnings": 0,
+      "log": "logs/src_menu_menu_g_b.c.log"
+    },
+    {
+      "path": "src/menu/menu_g_c.c",
+      "exit_code": 0,
+      "warnings": 0,
+      "log": "logs/src_menu_menu_g_c.c.log"
+    },
+    {
+      "path": "src/menu/menu_h_b.c",
+      "exit_code": 0,
+      "warnings": 1,
+      "log": "logs/src_menu_menu_h_b.c.log"
+    },
+    {
+      "path": "src/menu/menu_h_c.c",
+      "exit_code": 0,
+      "warnings": 0,
+      "log": "logs/src_menu_menu_h_c.c.log"
+    },
+    {
+      "path": "src/menu/menu_h_d.c",
+      "exit_code": 0,
+      "warnings": 1,
+      "log": "logs/src_menu_menu_h_d.c.log"
+    },
+    {
+      "path": "src/menu/menu_i_b.c",
+      "exit_code": 0,
+      "warnings": 0,
+      "log": "logs/src_menu_menu_i_b.c.log"
+    },
+    {
+      "path": "src/menu/menu_i_c.c",
+      "exit_code": 0,
+      "warnings": 0,
+      "log": "logs/src_menu_menu_i_c.c.log"
+    },
+    {
+      "path": "src/menu/menu_i_d.c",
+      "exit_code": 0,
+      "warnings": 0,
+      "log": "logs/src_menu_menu_i_d.c.log"
+    },
+    {
+      "path": "src/menu/menu_j_b.c",
+      "exit_code": 0,
+      "warnings": 0,
+      "log": "logs/src_menu_menu_j_b.c.log"
+    },
+    {
+      "path": "src/menu/menu_k_b.c",
+      "exit_code": 0,
+      "warnings": 0,
+      "log": "logs/src_menu_menu_k_b.c.log"
+    },
+    {
+      "path": "src/menu/menu_k_c.c",
+      "exit_code": 0,
+      "warnings": 0,
+      "log": "logs/src_menu_menu_k_c.c.log"
+    },
+    {
+      "path": "src/menu/menu_k_d.c",
+      "exit_code": 0,
+      "warnings": 0,
+      "log": "logs/src_menu_menu_k_d.c.log"
+    },
+    {
+      "path": "src/menu/menu_k_e.c",
+      "exit_code": 0,
+      "warnings": 0,
+      "log": "logs/src_menu_menu_k_e.c.log"
+    },
+    {
+      "path": "src/menu/menu_k_f.c",
+      "exit_code": 0,
+      "warnings": 1,
+      "log": "logs/src_menu_menu_k_f.c.log"
+    },
+    {
+      "path": "src/menu/menu_l_b.c",
+      "exit_code": 0,
+      "warnings": 0,
+      "log": "logs/src_menu_menu_l_b.c.log"
+    },
+    {
+      "path": "src/menu/menu_m_b.c",
+      "exit_code": 0,
+      "warnings": 0,
+      "log": "logs/src_menu_menu_m_b.c.log"
+    },
+    {
+      "path": "src/menu/menu_n_b.c",
+      "exit_code": 0,
+      "warnings": 0,
+      "log": "logs/src_menu_menu_n_b.c.log"
+    },
+    {
+      "path": "src/menu/menu_n_c.c",
+      "exit_code": 0,
+      "warnings": 0,
+      "log": "logs/src_menu_menu_n_c.c.log"
+    },
+    {
+      "path": "src/menu/menu_n_d.c",
+      "exit_code": 0,
+      "warnings": 0,
+      "log": "logs/src_menu_menu_n_d.c.log"
+    },
+    {
+      "path": "src/menu/menu_o_b.c",
+      "exit_code": 0,
+      "warnings": 1,
+      "log": "logs/src_menu_menu_o_b.c.log"
+    },
+    {
+      "path": "src/menu/menu_o_c.c",
+      "exit_code": 0,
+      "warnings": 0,
+      "log": "logs/src_menu_menu_o_c.c.log"
+    },
+    {
+      "path": "src/menu/menu_o_d.c",
+      "exit_code": 0,
+      "warnings": 0,
+      "log": "logs/src_menu_menu_o_d.c.log"
+    },
+    {
+      "path": "src/menu/menu_p_b.c",
+      "exit_code": 0,
+      "warnings": 0,
+      "log": "logs/src_menu_menu_p_b.c.log"
+    },
+    {
+      "path": "src/menu/menu_p_c.c",
+      "exit_code": 0,
+      "warnings": 0,
+      "log": "logs/src_menu_menu_p_c.c.log"
+    },
+    {
+      "path": "src/menu/menu_p_d.c",
+      "exit_code": 0,
+      "warnings": 0,
+      "log": "logs/src_menu_menu_p_d.c.log"
+    },
+    {
+      "path": "src/menu/menu_q_b.c",
+      "exit_code": 0,
+      "warnings": 0,
+      "log": "logs/src_menu_menu_q_b.c.log"
+    },
+    {
+      "path": "src/menu/menu_r_b.c",
+      "exit_code": 0,
+      "warnings": 0,
+      "log": "logs/src_menu_menu_r_b.c.log"
+    },
+    {
+      "path": "src/menu/menu_r_c.c",
+      "exit_code": 0,
+      "warnings": 0,
+      "log": "logs/src_menu_menu_r_c.c.log"
+    },
+    {
+      "path": "src/menu/menu_r_d.c",
+      "exit_code": 0,
+      "warnings": 0,
+      "log": "logs/src_menu_menu_r_d.c.log"
+    },
+    {
+      "path": "src/menu/menu_s_b.c",
+      "exit_code": 0,
+      "warnings": 0,
+      "log": "logs/src_menu_menu_s_b.c.log"
+    },
+    {
+      "path": "src/menu/menu_s_c.c",
+      "exit_code": 0,
+      "warnings": 0,
+      "log": "logs/src_menu_menu_s_c.c.log"
+    },
+    {
+      "path": "src/menu/menu_s_d.c",
+      "exit_code": 0,
+      "warnings": 0,
+      "log": "logs/src_menu_menu_s_d.c.log"
+    },
+    {
+      "path": "src/menu/menu_t_b.c",
+      "exit_code": 0,
+      "warnings": 0,
+      "log": "logs/src_menu_menu_t_b.c.log"
+    },
+    {
+      "path": "src/menu/menu_u.c",
+      "exit_code": 0,
+      "warnings": 0,
+      "log": "logs/src_menu_menu_u.c.log"
+    },
+    {
+      "path": "src/menu/menu_u_b.c",
+      "exit_code": 0,
+      "warnings": 0,
+      "log": "logs/src_menu_menu_u_b.c.log"
+    },
+    {
+      "path": "src/menu/menu_u_c.c",
+      "exit_code": 0,
+      "warnings": 0,
+      "log": "logs/src_menu_menu_u_c.c.log"
+    },
+    {
+      "path": "src/menu/menu_u_d.c",
+      "exit_code": 0,
+      "warnings": 0,
+      "log": "logs/src_menu_menu_u_d.c.log"
+    },
+    {
+      "path": "src/menu/menu_u_e.c",
+      "exit_code": 0,
+      "warnings": 0,
+      "log": "logs/src_menu_menu_u_e.c.log"
+    },
+    {
+      "path": "src/menu/menu_u_f.c",
+      "exit_code": 0,
+      "warnings": 0,
+      "log": "logs/src_menu_menu_u_f.c.log"
+    },
+    {
+      "path": "src/menu/menu_u_g.c",
+      "exit_code": 0,
+      "warnings": 0,
+      "log": "logs/src_menu_menu_u_g.c.log"
+    },
+    {
+      "path": "src/menu/menu_u_h.c",
+      "exit_code": 0,
+      "warnings": 0,
+      "log": "logs/src_menu_menu_u_h.c.log"
+    },
+    {
+      "path": "src/menu/menu_v_b.c",
+      "exit_code": 0,
+      "warnings": 0,
+      "log": "logs/src_menu_menu_v_b.c.log"
+    },
+    {
+      "path": "src/menu/menu_v_c.c",
+      "exit_code": 0,
+      "warnings": 0,
+      "log": "logs/src_menu_menu_v_c.c.log"
+    },
+    {
+      "path": "src/menu/menu_v_d.c",
+      "exit_code": 0,
+      "warnings": 0,
+      "log": "logs/src_menu_menu_v_d.c.log"
+    },
+    {
+      "path": "src/menu/menu_w_b.c",
+      "exit_code": 0,
+      "warnings": 0,
+      "log": "logs/src_menu_menu_w_b.c.log"
+    },
+    {
+      "path": "src/menu/menu_w_c.c",
+      "exit_code": 0,
+      "warnings": 0,
+      "log": "logs/src_menu_menu_w_c.c.log"
+    },
+    {
+      "path": "src/menu/menu_x_b.c",
+      "exit_code": 0,
+      "warnings": 0,
+      "log": "logs/src_menu_menu_x_b.c.log"
+    },
+    {
+      "path": "src/menu/menu_x_c.c",
+      "exit_code": 0,
+      "warnings": 1,
+      "log": "logs/src_menu_menu_x_c.c.log"
+    },
+    {
+      "path": "src/menu/menu_y_b.c",
+      "exit_code": 0,
+      "warnings": 1,
+      "log": "logs/src_menu_menu_y_b.c.log"
+    },
+    {
+      "path": "src/menu/menu_z_b.c",
+      "exit_code": 0,
+      "warnings": 0,
+      "log": "logs/src_menu_menu_z_b.c.log"
+    },
+    {
+      "path": "src/menu/menu_z_c.c",
+      "exit_code": 0,
+      "warnings": 1,
+      "log": "logs/src_menu_menu_z_c.c.log"
+    },
+    {
+      "path": "src/menu/menu_z_d.c",
+      "exit_code": 0,
+      "warnings": 1,
+      "log": "logs/src_menu_menu_z_d.c.log"
+    },
+    {
+      "path": "src/menu/menu_za_b.c",
+      "exit_code": 0,
+      "warnings": 0,
+      "log": "logs/src_menu_menu_za_b.c.log"
+    },
+    {
+      "path": "src/menu/menu_za_c.c",
+      "exit_code": 0,
+      "warnings": 0,
+      "log": "logs/src_menu_menu_za_c.c.log"
+    },
+    {
+      "path": "src/menu/menu_za_d.c",
+      "exit_code": 0,
+      "warnings": 0,
+      "log": "logs/src_menu_menu_za_d.c.log"
+    },
+    {
+      "path": "src/menu/menu_za_e.c",
+      "exit_code": 0,
+      "warnings": 0,
+      "log": "logs/src_menu_menu_za_e.c.log"
+    },
+    {
+      "path": "src/menu/port_language.c",
+      "exit_code": 0,
+      "warnings": 0,
+      "log": "logs/src_menu_port_language.c.log"
+    },
+    {
+      "path": "src/menu/port_screen.c",
+      "exit_code": 0,
+      "warnings": 0,
+      "log": "logs/src_menu_port_screen.c.log"
+    },
+    {
+      "path": "src/menu/port_tbo.c",
+      "exit_code": 0,
+      "warnings": 0,
+      "log": "logs/src_menu_port_tbo.c.log"
+    },
+    {
+      "path": "src/main.c",
+      "exit_code": 0,
+      "warnings": 0,
+      "log": "logs/src_main.c.log"
+    },
+    {
+      "path": "src/battle/battle.c",
+      "exit_code": 0,
+      "warnings": 0,
+      "log": "logs/src_battle_battle.c.log"
+    }
+  ],
+  "host_syntax_failed": 0,
+  "scope": "Host syntax and source integrity only. No PowerPC ABI validation, native linking, UI rendering, game execution or FPS claim.",
+  "XEX_rebuilt": false,
+  "Xbox_menus_running": false,
+  "last_native_binary": "D42"
+}

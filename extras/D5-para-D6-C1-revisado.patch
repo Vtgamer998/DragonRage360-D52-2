@@ -1,0 +1,351 @@
+--- a/Makefile
++++ b/Makefile
+@@ -7,7 +7,8 @@
+ CFLAGS := -mcpu=cell -fno-pic -std=gnu17 -MMD -MP -O2 -g -ffunction-sections -fdata-sections -Wall -Wextra -Werror -I$(XSDK)/include -Isrc -Iengine/graphics -Iengine/capture/port/src/gs -Iengine/platform/platform -DDR_XBOX360
+ OBJECTS := build/dr_gs_movie.o build/dr_dma_engine.o build/dr_gs_native.o build/dr_dma_producer.o build/dr_gs_stream.o build/gs_draw.o build/gs_core.o build/gs_sony.o build/dr_gs_backend.o build/dr_gs_replay.o build/dr_capture_demo.o build/dr_capture_platform.o build/main.o build/demo_ui.o build/dr_disc.o build/bt3_wire.o build/net_check.o build/lobby.o build/dr_anim.o build/dr_bpe.o build/dr_resource_selftest.o build/dr_container.o build/dr_stage_collision.o build/dr_skeleton.o build/dr_xenos.o build/dr_gs_texture.o build/dr_graphics_demo.o build/dr_body_demo.o build/dr_texfile.o build/dr_body_pipeline.o build/dr_body_model.o build/dr_elf.o build/dr_face_vif.o build/dr_targets.o build/dr_vu1.o build/dr_vu1_selftest.o build/save_unlock.o build/save_export.o
+ .PHONY: all clean host-test
+-PLATFORM_OBJECTS := $(patsubst engine/platform/platform/%.c,build/%.o,$(wildcard engine/platform/platform/*.c))
++PLATFORM_SOURCES := $(addprefix engine/platform/platform/,$(shell cat engine/platform/platform-sources.txt))
++PLATFORM_OBJECTS := $(patsubst engine/platform/platform/%.c,build/%.o,$(PLATFORM_SOURCES))
+ OBJECTS += $(PLATFORM_OBJECTS)
+ $(PLATFORM_OBJECTS): build/%.o: engine/platform/platform/%.c
+ 	$(CC) $(CFLAGS) -DPORT_BIGENDIAN -DXB_USE_NTALLOC -DXB_USE_XAM -DXB_USE_NTDELAY -c $< -o $@
+@@ -119,3 +120,11 @@
+ build/xb_battle_fighter.o: CFLAGS += -I$(UPSTREAM)/include -I$(UPSTREAM)/port/include -mcheck-fpr-alignment
+ 
+ build/xb_fighter_registry.o: CFLAGS += -I$(UPSTREAM)/include -I$(UPSTREAM)/port/include -mcheck-fpr-alignment
++
++# Refuse accidental decomp duplicates, compatibility-header shadowing and raw
++# binary tables before compiling or linking platform modules.
++.PHONY: platform-audit
++platform-audit:
++	python3 engine/tools/audit_platform_sources.py .
++$(OBJECTS): | platform-audit
++build/default.elf: | platform-audit
+--- a/README.md
++++ b/README.md
+@@ -1,3 +1,14 @@
++# DragonRage360 — revisão D6-C1
++
++**Pacote corrigido e verificado. A luta ainda não inicia.**
++
++A D6 enviada acrescentava chamadas incompletas e mantinha o XEX da D5. Esta revisão incorpora o main.c correto, deixa essas adições fora do port e usa um inventário explícito de fontes com testes contra sua reintrodução. O executável de diagnóstico foi recompilado sobre a base D5; não há funcionalidade de combate nova.
++
++Leia [REVISAO-D6-C1.md](REVISAO-D6-C1.md). Evidências em checkpoint-D6-C1/. A identidade de execução continua 0.39-D5; D6-C1 identifica a revisão dos fontes/build. startup_test.txt=typed-data permanece disponível. Não reaplique os patches históricos sobre estes fontes.
++
++---
++Histórico anterior:
++
+ # DragonRage360 0.39-D5 — tabelas e registro original de objetos
+ 
+ **Diagnóstico: a luta ainda não roda. Esta versão não foi executada no Xbox/Xenia.**
+--- /dev/null
++++ b/REVISAO-D6-C1.md
+@@ -0,0 +1,77 @@
++# Revisão D6-C1 dos dois pacotes enviados
++
++**A D6 enviada não é uma integração funcional de combate. A correção do main.c é válida e foi incorporada. Este pacote recompila o diagnóstico da D5 e acrescenta verificações de build; a luta continua sem iniciar. Nenhuma execução nova em Xbox/Xenia foi realizada.**
++
++## Comparação comprovada
++
++A comparação dos ZIPs com a 0.39-D5 verificada encontrou:
++
++- Um único arquivo existente modificado na D6: src/main.c.
++- 136 arquivos acrescentados e nenhum removido.
++- default.xex da D6 idêntico ao da D5: SHA-256 ff48957be7fd58bd482addee8ea9106cae7dbfa765de4339dd103ef5c2c9b81a. Ele não contém as integrações anunciadas pelos fontes novos.
++- main.c do correcao-D6.zip idêntico, byte a byte, ao main.c da D5.
++- 102 headers, btl_obj_decomp.c, btl_char_mgr_decomp.c e port_compat.h idênticos às cópias já presentes no upstream fixado. Copiá-los para a plataforma não implementa novas funcionalidades e pode duplicar definições/shadowing.
++- 25 blocos binários, somando 86.048 bytes, sem esquema tipado ou ligação válida comprovada. Não foram incluídos nesta entrega. Seus nomes, tamanhos e hashes estão no relatório JSON; nenhum byte desses recursos é necessário para reproduzir os fontes corrigidos.
++
++O script engine/tools/audit_d6_bundle.py reproduz a comparação a partir dos três ZIPs e do upstream. Ele não executa o código ou os binários enviados.
++
++## Problemas reais nos fontes da D6
++
++| Arquivo | Constatação |
++|---|---|
++| xb_battle_activate.c | A função CompleteTables **existe**, mas retorna sucesso com TODO e sem concluir tabelas. O texto da correção é impreciso ao tratá-la como ausente. A ativação não prepara os recursos exigidos pelo ciclo original de BtlChar_AllocAll/Setup. |
++| xb_tables_complete.c | Publica ponteiros derivados de common2/common4 e libera os buffers ao final, deixando referências sem memória válida. Usa campos inexistentes no upstream fixado: BtlResWork.unk0 e BtlObjState.unk. |
++| xb_boot_combat.c | Declara gScenarioReady sem definição no port. Escrever nele não modifica a guarda real gPortDataStripped nem o NOT_READY do cenário. A chamada Battle_Main permanece comentada; o log de desbloqueio não comprova inicialização. |
++| xb_facial_hook.c | Chama dr_face_vif_init/update, ausentes nas implementações do port. Encaminhar essas chamadas não implementa blink, expressão, mandíbula ou lip-sync. |
++| xb_render_hook.c | Chama dr_gs_backend_submit, ausente no port. Não prepara materiais, mipmaps, skinning ou os consumidores de comandos do combate. |
++| src/main.c | Acrescenta chamadas de ativação antes de o diagnóstico carregar/preparar seus recursos. Não condiciona as etapas seguintes ao sucesso das anteriores. |
++
++Os dois primeiros módulos falharam também na compilação isolada PowerPC. Os outros três compilaram isoladamente, mas seus objetos conservaram as referências ausentes mencionadas; isso não constitui vínculo ou execução. Os logs estão em checkpoint-D6-C1/D6-PPC/.
++
++Não foram criadas definições vazias para fazer essas chamadas passarem. Não foi simplesmente acrescentado stdio.h ou declarado um estado fictício: isso não corrigiria a vida útil, os layouts, os dados e a inicialização.
++
++## O que entrou nesta revisão
++
++A árvore de fontes foi reconstruída sobre a D5 verificada, incorporando o main.c restaurado pela correção. As adições defeituosas da D6 ficaram fora dela. Os anexos originais não foram alterados.
++
++O build deixava entrar automaticamente qualquer .c em engine/platform/platform. Agora Makefile e link_battle.py usam a mesma lista explícita de 29 módulos, engine/platform/platform-sources.txt. Antes de invocar o compilador/plugin, a auditoria recusa:
++
++- módulos extras ou ausentes;
++- nomes duplicados ou caminhos inválidos no inventário;
++- port_compat.h local, que resolveria antes do header do upstream;
++- tabelas .bin sem esquema dentro da árvore de fontes da plataforma.
++
++Os testes injetam essas situações e conferem que Make recusa antes de tentar executar o compilador. Também conferem as adições reais da D6 com o novo inventário aplicado numa cópia temporária. A lista exige revisão explícita para novos módulos; **não é um analisador capaz de provar que uma implementação é correta**. Compilação, vínculo, dados e testes de execução continuam necessários.
++
++## Estado do jogo
++
++Não há novo gerenciador de personagens/IA, fluxo facial, renderer de luta ou boot nativo completo nesta revisão. Permanecem os avanços reais da D5: quatro janelas tipadas de tabelas por lutador, poses/volumes, cache de texturas, retarget comum e registro inativo nas listas originais. Battle_Main entra no executável, mas não é chamado pelo diagnóstico. O marcador de prontidão continua 2 e o cenário conserva NOT_READY.
++
++O diagnóstico recompilado se identifica como 0.39-D5 porque seu código de execução foi restaurado para essa base. D6-C1 identifica esta revisão de fontes/verificações, sem anunciar uma fase de combate inexistente.
++
++## Reprodução
++
++```
++python3 engine/tools/audit_platform_sources.py .
++python3 engine/tools/test_platform_sources.py OUTPUT --d6 CAMINHO_D6_EXTRAIDA
++python3 engine/tools/audit_d6_bundle.py ZIP_D5 ZIP_D6 ZIP_CORRECAO UPSTREAM OUTPUT
++```
++
++Os comandos de build existentes continuam aplicáveis, usando o upstream e SDK fixados em BUILD.md. A auditoria entra automaticamente no build Make e no vínculo estrito. Para testar no console, startup_test.txt continua typed-data e escreve default.log; ainda não há uma luta para selecionar/iniciar.
++
++Esta revisão não incorpora ISO, programas MIPS, extrações do jogo ou os dumps sem tipo da D6. Consulte o resumo dos testes e o hash do XEX ao final deste relatório.
++
++## Validação concluída
++
++- SDK e toolchain restaurados; testes de recusa de ABI misturada e alinhamento aprovados.
++- Compilação final: 401/401 unidades PowerPC, zero indefinidos e zero conflitos de ABI.
++- Catálogo regenerado com os programas reais verificados: C idêntico ao anterior. No ELF final, 33 regiões, 2.738 operações e 1.779 bindings de ponteiro conferidos.
++- Interface, disco e saves no host: PASS. Carregador tipado com ASan/UBSan, carga transacional e recusa de boot incompleto: PASS.
++- Auditoria do inventário e casos negativos de Make paralelo e entrada do vínculo antes do plugin: PASS.
++- Exclusões auditadas e isolamento dos 103 símbolos de bibliotecas originais: PASS. O probe de Game_Main original continua com 69 dependências; não foi integrado.
++- XEX2/PE, hashes da imagem, ABI e presença da guarda de prontidão: PASS.
++- Modelos, poses, volumes, GPU, entrada de luta e partidas não foram exercitados nesta revisão. Os resultados anteriores da D5 são históricos, não novos testes em hardware.
++
++SHA-256 do default.xex recompilado: `38c3301f6b8268c8d826fc78f0f70bf63a518abb899ac747cb57853176f2c3f3`. Tamanho: 13.705.216 bytes.
++
++O XEX anterior da D5 foi preservado em diagnostico-anterior-D5/. O novo binário continua sendo diagnóstico; um hash diferente após a recompilação não implica nova funcionalidade de jogo.
+--- /dev/null
++++ b/engine/platform/platform-sources.txt
+@@ -0,0 +1,29 @@
++xb_a11y_text.c
++xb_adxt.c
++xb_battle_fighter.c
++xb_battle_stage.c
++xb_bpe.c
++xb_demo_resources.c
++xb_disc.c
++xb_fighter_registry.c
++xb_fighter_tables.c
++xb_game_profile.c
++xb_gamedata.c
++xb_iop.c
++xb_iso_file.c
++xb_movie_clock.c
++xb_movie_source.c
++xb_mpeg.c
++xb_mpeg2.c
++xb_overlay.c
++xb_plat_file.c
++xb_plat_mem.c
++xb_plat_pad.c
++xb_plat_sys.c
++xb_plat_time.c
++xb_platform.c
++xb_resconv.c
++xb_resource_map.c
++xb_sfx.c
++xb_tbo_text.c
++xb_text.c
+--- /dev/null
++++ b/engine/tools/audit_d6_bundle.py
+@@ -0,0 +1,50 @@
++#!/usr/bin/env python3
++# SPDX-License-Identifier: AGPL-3.0-or-later
++"""Reproduce the D6 comparison without extracting or executing its code/assets."""
++from pathlib import Path,PurePosixPath
++import argparse,zipfile,hashlib,json
++p=argparse.ArgumentParser();p.add_argument('baseline',type=Path);p.add_argument('d6',type=Path);p.add_argument('correction',type=Path);p.add_argument('upstream',type=Path);p.add_argument('output',type=Path);a=p.parse_args();a.output.mkdir(parents=True,exist_ok=True)
++def digest(b):return hashlib.sha256(b).hexdigest()
++def files(path):
++    result={}
++    with zipfile.ZipFile(path) as z:
++        for item in z.infolist():
++            if item.is_dir():continue
++            n=item.filename.removeprefix('DragonRage360-Demo/')
++            if n in result or PurePosixPath(n).is_absolute() or '..' in PurePosixPath(n).parts:raise ValueError('invalid archive entry')
++            result[n]=z.read(item)
++    return result
++base,d6,fix=map(files,(a.baseline,a.d6,a.correction))
++added=sorted(d6.keys()-base.keys());removed=sorted(base.keys()-d6.keys());changed=sorted(n for n in base.keys()&d6.keys() if base[n]!=d6[n])
++assert changed==['src/main.c'] and not removed
++assert fix['src/main.c']==base['src/main.c']
++assert d6['default.xex']==base['default.xex']
++headers=[n for n in added if n.startswith('engine/include/battle/')]
++assert all(d6[n]==(a.upstream/n.removeprefix('engine/')).read_bytes() for n in headers)
++copies={'engine/platform/platform/btl_obj_decomp.c':'src/battle/btl_obj.c','engine/platform/platform/btl_char_mgr_decomp.c':'src/battle/btl_char_mgr.c','engine/platform/platform/port_compat.h':'port/include/port_compat.h'}
++assert all(d6[n]==(a.upstream/old).read_bytes() for n,old in copies.items())
++blobs=[{'path':n,'bytes':len(d6[n]),'sha256':digest(d6[n])} for n in added if n.endswith('.bin')]
++# These are source facts, not a general-purpose semantic C analyzer.
++activate=d6['engine/platform/platform/xb_battle_activate.c'].decode()
++boot=d6['engine/platform/platform/xb_boot_combat.c'].decode()
++tables=d6['engine/platform/platform/xb_tables_complete.c'].decode()
++assert 'XbBattleActivate_CompleteTables' in activate and 'For now return success to unblock boot' in activate
++assert 'extern int gScenarioReady' in boot and 'gScenarioReady = 1' in boot
++assert 'if (common2) free(common2)' in tables and 'gBtlChars->tbl[0] = FILE_TABLE(common2, 3)' in tables
++assert 'if (common4) free(common4)' in tables and 'gBtlObjWork->res.unk0 = (s32)(uintptr_t)common4' in tables
++main=d6['src/main.c'].decode();assert main.index('XbBattleActivate_Fighters();')<main.index('xsdk_gpu_open();')
++report={'result':'PASS','meaning':'comparison assertions passed; D6 is NOT a playable or validated upgrade',
++        'input_archives':[{'name':f.name,'sha256':digest(f.read_bytes())} for f in (a.baseline,a.d6,a.correction)],
++        'added_files':added,'changed_files':changed,'removed_files':removed,
++        'correction_main_exactly_matches_D5':True,'XEX_identical_to_D5':True,'XEX_sha256':digest(base['default.xex']),
++        'upstream_identical_headers':len(headers),'upstream_identical_modules_and_shim':copies,
++        'untyped_binary_additions':blobs,'untyped_binary_total_bytes':sum(b['bytes'] for b in blobs),
++        'findings':['CompleteTables exists but returns success without completing tables; correction readme is imprecise about its absence',
++                    'boot writes a separately declared gScenarioReady, not the actual gPortDataStripped/NOT_READY state; Battle_Main call is commented out',
++                    'common2/common4 pointers are published then their buffers are freed',
++                    'raw tail buffers have no field conversion or native destination layout validation',
++                    'facial/render wrappers call APIs not implemented by the baseline',
++                    'main invokes activation before the diagnostic has prepared its resources'],
++        'hardware_execution':False,'assets_redistributed':False}
++(a.output/'D6-comparison.json').write_text(json.dumps(report,indent=2)+'\n')
++print(json.dumps({k:v for k,v in report.items() if k not in ('added_files','untyped_binary_additions','input_archives')},indent=2))
+--- /dev/null
++++ b/engine/tools/audit_platform_sources.py
+@@ -0,0 +1,14 @@
++#!/usr/bin/env python3
++# SPDX-License-Identifier: AGPL-3.0-or-later
++import argparse,json
++from pathlib import Path
++from platform_sources import reviewed_sources,PlatformSourceError
++p=argparse.ArgumentParser(description='Refuse unreviewed platform additions before compiling; no gameplay readiness claim.')
++p.add_argument('project',type=Path);p.add_argument('--output',type=Path);a=p.parse_args()
++try:
++    sources=reviewed_sources(a.project)
++    report={'result':'PASS','reviewed_platform_source_count':len(sources),'sources':[str(f.relative_to(a.project.resolve())) for f in sources],'gameplay_ready':False}
++except PlatformSourceError as e:
++    report={'result':'REFUSED','error':str(e),'gameplay_ready':False}
++if a.output:a.output.write_text(json.dumps(report,indent=2)+'\n')
++print(json.dumps(report,indent=2));raise SystemExit(0 if report['result']=='PASS' else 1)
+--- a/engine/tools/link_battle.py
++++ b/engine/tools/link_battle.py
+@@ -30,6 +30,8 @@
+     if a.fixed_battle and not a.platform:p.error('--fixed-battle requires --platform')
+     if any(not re.fullmatch(r'[A-Za-z_][A-Za-z_0-9]*',r) for r in roots):p.error('invalid root symbol')
+     project=Path(__file__).resolve().parents[2];out.mkdir(parents=True,exist_ok=True)
++    from platform_sources import reviewed_sources
++    platform_sources=reviewed_sources(project)
+     import float_build
+     plugin=float_build.build_plugin(cc,project,out,a.host_cxx,a.plugin_include) if a.float_mode=='native-ps2' else None
+     obj=out/'objects';gen=out/'prepared';logs=out/'logs'
+@@ -49,7 +51,7 @@
+         sources.remove(repo/'port/src/plat_libm.c')
+         sources.append(project/'engine/combat/math_bridge.c')
+     if a.platform:
+-        sources += sorted((project/'engine/platform/platform').glob('*.c'))
++        sources += platform_sources
+     typed_catalog=a.typed_catalog.resolve() if a.typed_catalog else None
+     if typed_catalog:
+         if not a.platform: p.error('--typed-catalog requires --platform')
+@@ -168,7 +170,7 @@
+     (out/'definitions.json').write_text(json.dumps(definitions,indent=2)+'\n')
+     report={'diagnostic_roots':roots,'upstream':PIN,'compiled':len(compiled),'total':len(rows),'files':rows,
+             'fixed_battle_policy':a.fixed_battle,'typed_catalog_linked':typed_catalog is not None,
+-            'float_mode':a.float_mode,'platform_04_sources':a.platform,
++            'reviewed_platform_source_count':len(platform_sources),'platform_source_inventory':'engine/platform/platform-sources.txt','float_mode':a.float_mode,'platform_04_sources':a.platform,
+             'arithmetic_audit':arithmetic_audit,
+             'Battle_Main_C_object_compiled':'Battle_Main' in definitions,
+             'stubs_generated':False,'native_data_sections_audited':data_section_audit is not None,'data_values_loaded':False,'resource_endian_adapted':False,
+@@ -185,7 +187,7 @@
+     # Makefile's separately appended platform objects are rebuilt above when
+     # --platform is selected; do not add duplicate definitions to the link.
+     if not a.platform:
+-        native += [project/'build'/(f.stem+'.o') for f in sorted((project/'engine/platform/platform').glob('*.c'))]
++        native += [project/'build'/(f.stem+'.o') for f in platform_sources]
+     if any(not f.exists() for f in native):raise SystemExit('build the native launcher first')
+     title=out/'battle-link.elf';title.unlink(missing_ok=True)
+     cmd=[str(cc),'-static','-nostdlib','-T',str(overlay_ld),
+--- /dev/null
++++ b/engine/tools/platform_sources.py
+@@ -0,0 +1,34 @@
++# SPDX-License-Identifier: AGPL-3.0-or-later
++"""One reviewed source inventory shared by the native and diagnostic builds.
++
++A new module must be deliberately added to the inventory. This does not prove
++its semantics or readiness; strict compilation/link and runtime checks remain
++required. Unknown modules are refused before any compiler/plugin is invoked.
++"""
++from pathlib import Path
++import re
++
++class PlatformSourceError(ValueError):
++    pass
++
++def reviewed_sources(project):
++    project=Path(project).resolve()
++    directory=project/'engine/platform/platform'
++    inventory=project/'engine/platform/platform-sources.txt'
++    if not inventory.is_file():raise PlatformSourceError('missing reviewed platform source inventory')
++    names=inventory.read_text().splitlines()
++    if not names or any(not re.fullmatch(r'[A-Za-z_][A-Za-z_0-9]*\.c',n) for n in names):
++        raise PlatformSourceError('invalid platform source inventory entry')
++    if len(set(names))!=len(names):raise PlatformSourceError('duplicate platform source inventory entry')
++    actual={f.name for f in directory.glob('*.c')}
++    extra=sorted(actual-set(names));missing=sorted(set(names)-actual)
++    problems=[]
++    if extra:problems.append('unreviewed platform sources: '+', '.join(extra))
++    if missing:problems.append('missing reviewed platform sources: '+', '.join(missing))
++    # A quote include resolves in the source directory before -I directories.
++    # Such a copy would silently shadow the pinned upstream compatibility shim.
++    if (directory/'port_compat.h').exists():problems.append('local port_compat.h shadows pinned upstream compatibility header')
++    blobs=sorted(str(f.relative_to(directory)) for f in directory.rglob('*.bin'))
++    if blobs:problems.append('untyped binary resources in platform source tree: '+', '.join(blobs))
++    if problems:raise PlatformSourceError('; '.join(problems))
++    return [directory/n for n in names]
+--- /dev/null
++++ b/engine/tools/test_platform_sources.py
+@@ -0,0 +1,50 @@
++#!/usr/bin/env python3
++# SPDX-License-Identifier: AGPL-3.0-or-later
++"""Exercise injected D6-style additions and verify Make refuses before CC."""
++from pathlib import Path
++import tempfile,shutil,json,subprocess,argparse,sys
++from platform_sources import reviewed_sources,PlatformSourceError
++p=argparse.ArgumentParser();p.add_argument('output',type=Path);p.add_argument('--d6',type=Path);a=p.parse_args();a.output.mkdir(parents=True,exist_ok=True)
++project=Path(__file__).resolve().parents[2]
++assert len(reviewed_sources(project))==29
++cases=[]
++with tempfile.TemporaryDirectory(prefix='platform-inventory-') as d:
++    dest=Path(d)
++    shutil.copytree(project/'engine',dest/'engine',ignore=shutil.ignore_patterns('__pycache__'))
++    shutil.copyfile(project/'Makefile',dest/'Makefile')
++    plat=dest/'engine/platform/platform'
++    for case,path,content in [('extra C','xb_battle_activate.c','int XbBattleActivate_Fighters(void){return 0;}'),('duplicate original C','btl_obj_decomp.c','void BtlObj_UpdateAll(void){}'),('shadow header','port_compat.h','#define malloc Port_Malloc'),('opaque table','tables_dump/common2_word3.bin','not typed')]:
++        f=plat/path;f.parent.mkdir(parents=True,exist_ok=True);f.write_text(content)
++        try:reviewed_sources(dest)
++        except PlatformSourceError:pass
++        else:raise AssertionError(case)
++        for target in ('build/xb_plat_time.o','build/main.o','all'):
++            run=subprocess.run(['make','-s','-j4','-C',str(dest),target,'CC=/must-not-invoke-a-compiler'],capture_output=True,text=True)
++            assert run.returncode and '/must-not-invoke-a-compiler' not in run.stdout+run.stderr,(case,target,run.stdout,run.stderr)
++        link=subprocess.run([sys.executable,str(dest/'engine/tools/link_battle.py'),str(dest/'no-upstream'),'/must-not-invoke-a-compiler',str(dest/'no-sdk'),str(dest/'out'),'--platform','--float-mode','native-ps2'],capture_output=True,text=True)
++        assert link.returncode and 'PlatformSourceError' in link.stderr and 'FileNotFoundError' not in link.stderr,(case,link.stderr)
++        f.unlink();cases.append(case)
++    inventory=dest/'engine/platform/platform-sources.txt';original=inventory.read_text()
++    for content in (original+'xb_plat_time.c\n',original+'../outside.c\n',original.replace('xb_plat_time.c\n','')):
++        inventory.write_text(content)
++        try:reviewed_sources(dest)
++        except PlatformSourceError:pass
++        else:raise AssertionError('malformed inventory accepted')
++    inventory.write_text(original)
++    f=plat/'xb_plat_time.c';f.unlink()
++    try:reviewed_sources(dest)
++    except PlatformSourceError:pass
++    else:raise AssertionError('missing source accepted')
++if a.d6:
++    # Supply the new inventory to the old bundle in an isolated copy: refusal
++    # must come from its actual additions, not merely its missing inventory.
++    with tempfile.TemporaryDirectory(prefix='d6-source-check-') as d:
++        candidate=Path(d);shutil.copytree(a.d6/'engine/platform/platform',candidate/'engine/platform/platform')
++        shutil.copyfile(project/'engine/platform/platform-sources.txt',candidate/'engine/platform/platform-sources.txt')
++        try:reviewed_sources(candidate)
++        except PlatformSourceError as e:
++            message=str(e);assert 'xb_battle_activate.c' in message and 'port_compat.h' in message and 'untyped binary resources' in message
++            cases.append('D6 actual added modules/header/blobs refused with new inventory')
++        else:raise AssertionError('D6 should not pass inventory audit')
++report={'result':'PASS','injected_regressions_refused_before_compile':cases,'inventory_duplicates_traversal_missing_checked':True,'parallel_Make_platform_main_and_all_checked':True,'strict_link_entry_refuses_before_plugin':True,'PowerPC_execution':False}
++(a.output/'platform-inventory-test.json').write_text(json.dumps(report,indent=2)+'\n');print(json.dumps(report))

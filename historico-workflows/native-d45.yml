@@ -1,0 +1,85 @@
+name: D45 native diagnostic
+
+on:
+  workflow_dispatch:
+  push:
+    paths:
+      - 'src/**'
+      - 'engine/**'
+      - 'tools/**'
+      - 'tests/**'
+      - 'manifesto-tipado/**'
+      - 'Makefile'
+      - '.github/workflows/native-d45.yml'
+
+permissions:
+  contents: read
+
+concurrency:
+  group: native-d45-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  diagnostic:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 180
+    env:
+      SDK_COMMIT: 8c58c7a3fb37bb261c5a11a8a1f4fa8a8bfd0d28
+      GAME_COMMIT: 3ca419c7966b11438e2dc3c9a7e1914f102ed545
+    steps:
+      - uses: actions/checkout@v4
+      - name: Host dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y build-essential bison flex texinfo libgmp-dev libmpfr-dev libmpc-dev curl xz-utils patch python3
+      - name: Pinned open-source dependencies
+        run: |
+          mkdir -p "$RUNNER_TEMP/dragonrage-deps"
+          git init "$RUNNER_TEMP/dragonrage-deps/xsdk"
+          git -C "$RUNNER_TEMP/dragonrage-deps/xsdk" fetch --depth=1 https://github.com/xenosworks/xsdk.git "$SDK_COMMIT"
+          git -C "$RUNNER_TEMP/dragonrage-deps/xsdk" checkout --detach FETCH_HEAD
+          git -C "$RUNNER_TEMP/dragonrage-deps/xsdk" apply "$GITHUB_WORKSPACE/engine/platform/xsdk-keep-kernel-lut.patch"
+          git init "$RUNNER_TEMP/dragonrage-deps/game"
+          git -C "$RUNNER_TEMP/dragonrage-deps/game" fetch --depth=1 https://github.com/z3xox/Tenkaichi3Decomp.git "$GAME_COMMIT"
+          git -C "$RUNNER_TEMP/dragonrage-deps/game" checkout --detach FETCH_HEAD
+      - name: Cache patched PowerPC compiler
+        id: compiler
+        uses: actions/cache@v4
+        with:
+          path: ~/dragonrage-xsdk-gcc
+          key: xsdk-gcc-${{ runner.os }}-${{ runner.arch }}-${{ env.SDK_COMMIT }}-v1
+      - name: Build patched PowerPC compiler
+        if: steps.compiler.outputs.cache-hit != 'true'
+        env:
+          PREFIX: /home/runner/dragonrage-xsdk-gcc
+          WORK: /home/runner/dragonrage-xsdk-gcc-work
+        run: JOBS=4 bash "$RUNNER_TEMP/dragonrage-deps/xsdk/tools/toolchain/build.sh"
+      - name: Host validation and PPC ABI fixtures
+        run: |
+          python3 tools/test_d45.py \
+            --upstream "$RUNNER_TEMP/dragonrage-deps/game" \
+            --toolchain-prefix "$HOME/dragonrage-xsdk-gcc/bin/powerpc-xsdk-elf-"
+      - name: Build and statically verify both XEX variants
+        run: |
+          python3 tools/build_d45.py \
+            --xsdk "$RUNNER_TEMP/dragonrage-deps/xsdk" \
+            --upstream "$RUNNER_TEMP/dragonrage-deps/game" \
+            --toolchain-prefix "$HOME/dragonrage-xsdk-gcc/bin/powerpc-xsdk-elf-" \
+            --plugin-include /usr/include \
+            --output build/d45 --jobs 4
+      - name: Upload diagnostic binaries and build evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: DragonRage360-D45-diagnostic
+          if-no-files-found: warn
+          path: |
+            build/d45/console/default.xex
+            build/d45/console/static.json
+            build/d45/console/engine-diagnostic.json
+            build/d45/xenia/default.xex
+            build/d45/xenia/static.json
+            build/d45/xenia/engine-diagnostic.json
+            build/d45/step-*.log
+            build/d45/commands.json
+            build/validation-d45/summary.json

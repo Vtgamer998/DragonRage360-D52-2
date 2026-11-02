@@ -1,0 +1,13 @@
+{
+  "elapsed_seconds": 442.5409142789995,
+  "frames_seen": [
+    0,
+    32,
+    64
+  ],
+  "process_exit": null,
+  "token": "original-actions-fast",
+  "renderer": "llvmpipe; no physical-console performance claim",
+  "host_audio_output": "dummy",
+  "audible_audio_verified": false
+}

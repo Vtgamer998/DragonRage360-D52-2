@@ -1,0 +1,4 @@
+Opcional: coloque aqui o arquivo de dados RAW USA BASLUS-21678DBZT3,
+com exatamente 16.384 bytes, para desbloquear uma cópia dele na aba Trapaças.
+Não coloque imagem inteira de memory card, replay, PSU ou PSV.
+O aplicativo grava em exports/save-NNN/ e preserva o arquivo de entrada.

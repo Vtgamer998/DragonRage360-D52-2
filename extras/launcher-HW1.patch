@@ -1,0 +1,71 @@
+--- a/src/main.c
++++ b/src/main.c
+@@ -255,12 +255,24 @@
+     xsdk_log_write("%s: interface first frame orange tile",valid?"PASS":"FAIL");
+     first_frame=valid;
+ }
++/* One optional, explicit hardware probe after the interface's first pixel
++ * check. Never enters Game_Main or combat. Strict tokens avoid typo fallback. */
++static int startup_test_load(void)
++{
++    FILE *f=fopen("game:/startup_test.txt","r");
++    if(!f)return DEMO_NONE;
++    char kind[32],extra[2];int n=fscanf(f,"%31s %1s",kind,extra);fclose(f);
++    if(n==1 && !strcmp(kind,"graphics"))return DEMO_GRAPHICS_TEST;
++    if(n==1 && !strcmp(kind,"model"))return DEMO_BODY_TEST;
++    xsdk_log_write("FAIL: startup_test.txt must contain only graphics or model");
++    return DEMO_NONE;
++}
+ int main(void)
+ {
+     XbPlatform_Install();
+     DrLobby lobby;dr_lobby_init(&lobby);int logged_lobby_state=LOBBY_OFF;
+     demo_init(&ui);settings_load();
+-    xsdk_log_write("DragonRage360 demo 0.33: native VIF/VU / platform diagnostics; Battle_Main not linked.");
++    xsdk_log_write("DragonRage360 demo 0.33-HW1: native VIF/VU / platform diagnostics; Battle_Main not linked.");
+     xsdk_log_write("%s: BPE decode + animation endian synthetic self-test",dr_resource_selftest()?"PASS":"FAIL");
+     xsdk_log_write("%s: bounded BIN + motion + skeleton synthetic self-test",dr_container_selftest()?"PASS":"FAIL");
+     xsdk_log_write("%s: GS texture address synthetic self-test",dr_gs_texture_selftest()?"PASS":"FAIL");
+@@ -274,6 +286,8 @@
+     if(!NT_SUCCESS(status)) {xsdk_log_write("FAIL: text_open 0x%08X",(unsigned)status);xsdk_present_close();return 1;}
+     xsdk_log_write("PASS: display and text opened %ux%u",(unsigned)display_width,(unsigned)display_height);
+     bool graphics_mode=false,body_mode=false,capture_mode=false;unsigned graphics_frames=0;int body_face=-1;
++    int startup_test=startup_test_load();
++    xsdk_log_write("startup: requested action=%d; automatic probe after interface pixel check",startup_test);
+     uint16_t last=0,repeat_direction=0;uint64_t next_repeat=0;bool running=true;
+     for(unsigned tick=0;running;tick++) {
+         INPUT_STATE input={0}; unsigned port;
+@@ -323,6 +337,12 @@
+                 xsdk_log_write("graphics diagnostic close: %d",error);
+             }
+         } else action=demo_input(&ui,pressed);
++        if(tick==2 && startup_test!=DEMO_NONE && running && !ui.exit_prompt &&
++           !graphics_mode && !body_mode && !capture_mode) {
++            action=startup_test;startup_test=DEMO_NONE;
++            xsdk_log_write("startup: executing diagnostic action=%d",action);
++            if(action==DEMO_BODY_TEST)scan_isos();
++        }
+         if(action==DEMO_GRAPHICS_TEST) {
+             int error=dr_graphics_demo_open();
+             xsdk_log_write("%s: native GS MRT/DATE/FBA diagnostic open, error=%d",error?"FAIL":"PASS",error);
+--- a/src/demo_ui.c
++++ b/src/demo_ui.c
+@@ -99,7 +99,7 @@
+     p->rect(52,52,68,68,ORANGE);
+     text(p,66,66,2,0xFF211000,"DR");
+     text(p,144,48,2,WHITE,"DRAGON RAGE");
+-    text(p,146,94,1,GOLD,"XBOX 360  /  DEMO 0.16");
++    text(p,146,94,1,GOLD,"XBOX 360  /  DEMO 0.33-HW1");
+     text(p,930,56,1,u->connected?0xFF3DDC84:GOLD,u->connected?"CONTROLE CONECTADO":"CONECTE O CONTROLE");
+     text(p,930,88,1,MUTED,"Interface + leitor de ISO");
+     p->rect(52,154,300,480,PANEL);
+--- a/tests/check_xex.py
++++ b/tests/check_xex.py
+@@ -73,6 +73,6 @@
+         'platform_sources_compiled':True,'platform_resource_hook_linked':True,
+         'linked_platform_symbols':sorted(platform_required),'Bpe_Decode_linked':'Bpe_Decode' in defined,
+         'experimental_backend_linked':True,'original_GS_capture_linked':True,'linked_capture_symbols':sorted(capture_required),'registration_patch_provided':True,
+-        'native_VU_shader_path_linked':True,'shadow_stencil_run_path_linked':True,'buffer_consumers_linked':['outline from frozen IDs','depth/ID CLUT with raw alpha MRT','sampled target raw alpha and primitive feedback resolves'],'bounded_DMA_VIF_consumer_linked':True,'combat_DMA_producers_adapted':False,'adapted_DMA_producer_subset_linked':['Frame','Zbuf','Scissor','XYOffset','AD register','Flush','ResetBuffers'],'native_packet_producers_compiled':['Dma_Alloc','Dma_AddData','Dma_AddRef','Dma_BeginDirect','Dma_EndDirect','Dma_AddNext'],'mapped_chain_diagnostic_linked':True,'native_DMA_buffer_initialization_linked':True,'raw_ISO_Sony_byte_file_API_linked':True,'native_PSS_decoder_retained':True,'PSS_playback_integrated':False,'native_ADXT_APIs_retained':True,'overlay_loader_retained':True,'native_overlay_catalog_in_launcher':False,'scope':'0.33 retains bounded native CPU PSS decoder APIs; no sceMpeg/movie player/GPU or AV sync integration. 0.32 retains real ADXT/native overlay APIs for static verification; does not initialize audio, load menus or start combat. Strong complete native overlay catalogue generated only for strict engine link. 0.31 adds shared DMA initialization and typed boot GIF plus read-only ISO Sony byte-file API and bounded ELF probe; Game_Main and Battle_Main absent. 0.30 adds ordered effect marker, blocking real GPU sync and exact CT24 RGB frame readback for supported game profile; no hardware execution. 0.27 replaces native legacy DMA/VIF/GIF traversal with bounded canonical mappings and one shared VU session; Port_Gs entry points and synthetic MPG/UNPACK/MSCAL/XGKICK probe linked. No combat boot/presentation integration. 0.25 DMA patch and platform 0.4 integrated: ADXF post-read, converter registry/map/adapters and first-file ISO probes; combat remains outside XEX. Prior 0.24 features: adapted canonical-LE register producers and adapted Dma_Flush/ResetBuffers linked to bounded DMA/VIF/GS capture in synthetic diagnostic; rectangle and other helpers byte-tested against original source; Battle_Main, full combat producers and IA/collisions/animation integration absent; no hardware pixel validation'}
++        'native_VU_shader_path_linked':True,'shadow_stencil_run_path_linked':True,'buffer_consumers_linked':['outline from frozen IDs','depth/ID CLUT with raw alpha MRT','sampled target raw alpha and primitive feedback resolves'],'bounded_DMA_VIF_consumer_linked':True,'combat_DMA_producers_adapted':False,'adapted_DMA_producer_subset_linked':['Frame','Zbuf','Scissor','XYOffset','AD register','Flush','ResetBuffers'],'native_packet_producers_compiled':['Dma_Alloc','Dma_AddData','Dma_AddRef','Dma_BeginDirect','Dma_EndDirect','Dma_AddNext'],'mapped_chain_diagnostic_linked':True,'native_DMA_buffer_initialization_linked':True,'raw_ISO_Sony_byte_file_API_linked':True,'native_PSS_decoder_retained':True,'PSS_playback_integrated':False,'native_ADXT_APIs_retained':True,'overlay_loader_retained':True,'native_overlay_catalog_in_launcher':False,'hardware_auto_probe_supported':True,'scope':'0.33-HW1 supports explicit graphics/model startup_test.txt after initial interface pixel check; this binary not executed on Xbox here. 0.33 retains bounded native CPU PSS decoder APIs; no sceMpeg/movie player/GPU or AV sync integration. 0.32 retains real ADXT/native overlay APIs for static verification; does not initialize audio, load menus or start combat. Strong complete native overlay catalogue generated only for strict engine link. 0.31 adds shared DMA initialization and typed boot GIF plus read-only ISO Sony byte-file API and bounded ELF probe; Game_Main and Battle_Main absent. 0.30 adds ordered effect marker, blocking real GPU sync and exact CT24 RGB frame readback for supported game profile; no hardware execution. 0.27 replaces native legacy DMA/VIF/GIF traversal with bounded canonical mappings and one shared VU session; Port_Gs entry points and synthetic MPG/UNPACK/MSCAL/XGKICK probe linked. No combat boot/presentation integration. 0.25 DMA patch and platform 0.4 integrated: ADXF post-read, converter registry/map/adapters and first-file ISO probes; combat remains outside XEX. Prior 0.24 features: adapted canonical-LE register producers and adapted Dma_Flush/ResetBuffers linked to bounded DMA/VIF/GS capture in synthetic diagnostic; rectangle and other helpers byte-tested against original source; Battle_Main, full combat producers and IA/collisions/animation integration absent; no hardware pixel validation'}
+ (root/'VALIDACAO.json').write_text(json.dumps(report,ensure_ascii=False,indent=2)+'\n')
+ print(json.dumps(report,ensure_ascii=False,indent=2))

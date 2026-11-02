@@ -1,0 +1,3 @@
+Coloque aqui a ISO USA SLUS-21678 da sua própria cópia.
+No aplicativo, abra Biblioteca e pressione Y.
+A demonstração verifica os arquivos internos; ainda não executa as lutas.

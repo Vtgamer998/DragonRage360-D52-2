@@ -1,0 +1,1135 @@
+--- a/LEIA-ME.txt
++++ b/LEIA-ME.txt
+@@ -1,3 +1,16 @@
++# Atualização 0.31 — ISO e DMA da inicialização
++
++Cinco chamadas de arquivo e duas de DMA implementadas e verificadas.
++384/384 unidades PowerPC, zero conflitos ABI. Vínculo com Game_Main e
++Battle_Main: 228 → 221 referências pendentes (133 combate + 88 adicionais).
++ISO real: ELF/overlay conferiram por SHA-256; testes de memória e captura
++passaram com ASan/UBSan e transportes NT/GPU simulados.
++**O pedido de vínculo completo ainda não está atendido. A luta não roda.**
++O default.xex é o diagnóstico 0.31. Game_Main e Battle_Main continuam ausentes.
++Consulte RELATORIO-0.31.md, inclusive o bloqueio do overlay MIPS, e TESTE-XBOX-0.31.md.
++
++--- Histórico ---
++
+ # Atualização 0.30 — chamadas GS e auditoria do boot
+ 
+ Quatro chamadas gráficas reais adaptadas e ligadas ao novo XEX de diagnóstico.
+--- a/Makefile
++++ b/Makefile
+@@ -3,7 +3,7 @@
+ TOOLCHAIN ?= ../xsdk-gcc/bin/powerpc-xsdk-elf-
+ CC := $(TOOLCHAIN)gcc
+ CFLAGS := -mcpu=cell -fno-pic -std=gnu17 -MMD -MP -O2 -g -ffunction-sections -fdata-sections -Wall -Wextra -Werror -I$(XSDK)/include -Isrc -Iengine/graphics -Iengine/capture/port/src/gs -Iengine/platform/platform -DDR_XBOX360
+-OBJECTS := build/dr_gs_native.o build/dr_dma_producer.o build/dr_gs_stream.o build/gs_draw.o build/gs_core.o build/gs_sony.o build/dr_gs_backend.o build/dr_gs_replay.o build/dr_capture_demo.o build/dr_capture_platform.o build/main.o build/demo_ui.o build/dr_disc.o build/bt3_wire.o build/net_check.o build/lobby.o build/dr_anim.o build/dr_bpe.o build/dr_resource_selftest.o build/dr_container.o build/dr_skeleton.o build/dr_xenos.o build/dr_gs_texture.o build/dr_graphics_demo.o build/dr_body_demo.o build/dr_texfile.o build/dr_body_pipeline.o build/dr_body_model.o build/dr_elf.o build/dr_face_vif.o build/dr_targets.o build/dr_vu1.o build/dr_vu1_selftest.o build/save_unlock.o build/save_export.o
++OBJECTS := build/dr_dma_engine.o build/dr_gs_native.o build/dr_dma_producer.o build/dr_gs_stream.o build/gs_draw.o build/gs_core.o build/gs_sony.o build/dr_gs_backend.o build/dr_gs_replay.o build/dr_capture_demo.o build/dr_capture_platform.o build/main.o build/demo_ui.o build/dr_disc.o build/bt3_wire.o build/net_check.o build/lobby.o build/dr_anim.o build/dr_bpe.o build/dr_resource_selftest.o build/dr_container.o build/dr_skeleton.o build/dr_xenos.o build/dr_gs_texture.o build/dr_graphics_demo.o build/dr_body_demo.o build/dr_texfile.o build/dr_body_pipeline.o build/dr_body_model.o build/dr_elf.o build/dr_face_vif.o build/dr_targets.o build/dr_vu1.o build/dr_vu1_selftest.o build/save_unlock.o build/save_export.o
+ .PHONY: all clean host-test
+ PLATFORM_OBJECTS := $(patsubst engine/platform/platform/%.c,build/%.o,$(wildcard engine/platform/platform/*.c))
+ OBJECTS += $(PLATFORM_OBJECTS)
+@@ -77,3 +77,6 @@
+ .PHONY: battle-link
+ battle-link: $(OBJECTS) $(XSDK)/build/libxsdk.a
+ 	python3 engine/tools/link_battle.py $(UPSTREAM) $(CC) $(XSDK) build/battle-native --float-mode $(FLOAT_MODE) --platform $(PLUGIN_ARGS)
++
++build/dr_dma_engine.o: engine/graphics/dr_dma_engine.c engine/graphics/dr_dma_engine.h
++	$(CC) $(CFLAGS) -c $< -o $@
+--- a/PENDENCIAS.md
++++ b/PENDENCIAS.md
+@@ -1,3 +1,16 @@
++# Atualização 0.31 — ISO e DMA da inicialização
++
++Cinco chamadas de arquivo e duas de DMA implementadas e verificadas.
++384/384 unidades PowerPC, zero conflitos ABI. Vínculo com Game_Main e
++Battle_Main: 228 → 221 referências pendentes (133 combate + 88 adicionais).
++ISO real: ELF/overlay conferiram por SHA-256; testes de memória e captura
++passaram com ASan/UBSan e transportes NT/GPU simulados.
++**O pedido de vínculo completo ainda não está atendido. A luta não roda.**
++O default.xex é o diagnóstico 0.31. Game_Main e Battle_Main continuam ausentes.
++Consulte RELATORIO-0.31.md, inclusive o bloqueio do overlay MIPS, e TESTE-XBOX-0.31.md.
++
++--- Histórico ---
++
+ # Atualização 0.30 — chamadas GS e auditoria do boot
+ 
+ Quatro chamadas gráficas reais adaptadas e ligadas ao novo XEX de diagnóstico.
+--- /dev/null
++++ b/RELATORIO-0.31.md
+@@ -0,0 +1,134 @@
++# 0.31 — leitura de arquivos e inicialização do produtor DMA
++
++O vínculo completo solicitado continua incompleto. Esta etapa implementa sete
++referências reais da inicialização e leva o diagnóstico para 228 → 221 nomes
++pendentes. Battle_Main e Game_Main continuam fora do default.xex.
++O executável entregue é um novo diagnóstico 0.31, não executa o jogo.
++
++| Raízes do vínculo estrito | Unidades PowerPC | ABI float | Pendências |
++| --- | ---: | --- | ---: |
++| Battle_Main | 384/384 | Sem conflitos | 133 |
++| Battle_Main + Game_Main | Mesmos objetos | Sem conflitos | 221 |
++
++As dependências adicionais alcançadas por Game_Main passam de 95 para 88.
++O motor/plataforma foi compilado nesta etapa com ambas as raízes; os objetos
++foram reutilizados no vínculo de comparação e após a correção final de posse
++do produtor DMA. Os hashes dos objetos nativos constam nos relatórios.
++A inspeção dos 294 objetos de aritmética rebaixada não encontrou aritmética
++float nativa. Não houve supressão da verificação de ABI ou geração de stubs.
++
++## Cinco chamadas de arquivo implementadas
++
++sceOpen, sceRead, sceLseek, sceClose e sceCdSearchFile usam a ISO montada por
++xb_disc.c e o parser ISO9660 real dr_disc.c. Os quatro primeiros operam em
++bytes, separadamente da leitura em setores da API ADXF já existente.
++
++Abertura aceita somente leitura e caminhos de disco, normalizando cdrom0:,
++barras e a versão ;1. Não aceita caminhos de host, diretórios ou arquivos
++maiores que INT32_MAX, pois a ABI de busca/retorno é assinada de 32 bits.
++Mantém até 32 descritores, com tokens que não são ponteiros nem descritores
++do sistema. Tokens fechados ou de outra montagem são recusados. A geração
++da montagem muda inclusive em tentativas de remonte malsucedidas.
++
++Leituras usam um buffer temporário de até 64 KiB, devolvem a quantidade real
++lida e não acrescentam padding. EOF retorna zero. Falha antes do primeiro
++bloco preserva posição e destino; falha posterior devolve os blocos completos
++já copiados. Buscas validam sinal, origem e estouro antes de alterar a posição.
++As APIs e a montagem continuam com um único dono/thread; não são sincronizadas
++para uma futura thread de áudio.
++
++sceCdSearchFile retorna LSN, tamanho e nome no layout público sceCdlFILE de
++32 bytes, com stores nativos seguros para destinos desalinhados. O campo
++date é indisponível e fica zerado; o único consumidor original identificado,
++Disc_Identify, usa apenas o resultado de localização. Isso não implementa
++todos os metadados nem os serviços de libcdvd.
++
++O diagnóstico da plataforma chama as cinco entradas, encontra SLUS_216.78 e
++verifica seu cabeçalho ELF32 little-endian/MIPS sem carregar código executável.
++O log identifica esse teste como `raw ISO open/read/seek/search USA ELF probe`.
++
++## Inicialização DMA e pacote gráfico de boot
++
++Dma_InitBuffers abre o produtor nativo limitado, com dois buffers de lista e
++o callback de submissão que liga o produtor à sessão GS/VU compartilhada.
++Exige que essa sessão já exista. Repetições preservam comandos enfileirados;
++um produtor de outro dono é recusado e permanece intacto. O fechamento libera
++somente os buffers que este módulo abriu. Isso substitui as alocações de
++display lists, não inicializa os antigos globais PS2 gDmaBuf/gDmaCur.
++
++Dma_SendGif aceita somente o intervalo virtual temporário registrado pelo
++adaptador tipado dr_dma_engine_send_u64. O único chamador original encontrado
++é o pacote u64 de Gfx_Init: engine/combat/gfx.c adapta exatamente esse local.
++Os u64 são serializados como little-endian, inclusive quando a fonte está
++desalinhada, antes da transferência GIF limitada. Não há cast de ponteiro
++nativo para um endereço PS2 inferido.
++
++O diagnóstico usa essas mesmas entradas e deixou de ter um callback privado
++duplicado para abrir o produtor. As novas rotinas são retidas e verificadas
++no ELF/XEX do diagnóstico; isso não liga a simulação do combate ao renderizador.
++Dma_InitBuffers tem a assinatura void original; o boot nativo ainda precisará
++verificar dr_dma_engine_error antes de avançar. O diagnóstico já o verifica.
++
++## Testes realizados
++
++A ISO fornecida foi recuperada novamente e conferiu com os 3.020.816.384 bytes
++e SHA-1 a1c4d21c154da8b1d4b15055907edb0abb055e63 validados anteriormente.
++O teste de arquivos compila xb_iso_file.c, xb_disc.c e dr_disc.c reais;
++apenas NtCreateFile/NtReadFile/NtQueryInformationFile/NtClose são transportados
++para stdio no host. Asserções cobrem EOF, canários, falha de IO que escreve
++no buffer temporário, buscas inválidas, capacidade, nomes/flags, descritores
++fechados e obsoletos e remonte. O ELF e DBZP.BIN lidos por essas APIs conferiram
++via SHA-256 com os hashes da extração independente anterior.
++
++O teste completo de captura/GS/backend passou com o novo módulo DMA e GPU
++simulada. Verifica init repetida sem apagar comandos, posse de um produtor
++externo, u64 desalinhados, envio real ao GS compartilhado, recusa de endereço
++não registrado e argumentos inválidos, fechamento e reabertura. As regressões
++de leitura RGB, VU, texturas e consumidores continuaram passando.
++Também passaram as 1.841 comparações dos produtores com o código original.
++ASan/UBSan foram usados com detect_leaks=0; não é uma medição de vazamentos.
++
++A validação estática do novo XEX confirmou as sete entradas, formato PowerPCBE,
++ABI, ausência de símbolos fortes indefinidos no diagnóstico e hashes da imagem.
++Não houve execução PowerPC, Xbox, emulador, medição de FPS ou validação de pixels.
++
++## O que impede atender ao pedido completo
++
++Os 221 nomes não são todos funções: incluem globais e referências em tabelas.
++A auditoria dos objetos encontrou 118 nomes com referência em código e 103
++somente em dados, incluindo seções depois descartadas por GC. Isso não prova
++desuso em execução; nenhuma tabela ou callback foi removido para baixar a conta.
++
++Continuam pendentes as 13 entradas ADXT e nove sceMpeg*, RPC/IOP, resets GS,
++serviços de interface/menus/rede e rótulos func_ usados pelo motor e tabelas.
++A lista exata e cada referência estão em engine/reports/0.31/boot.
++
++Há ainda um bloqueio além dos símbolos: Overlay_Load original lê DBZP.BIN
++para MainMenu_StartBallLoops, que no port é uma função PowerPC. Copiar o overlay
++MIPS para esse destino corromperia código nativo. Os testes desta etapa extraem
++esses bytes para arquivos de teste; nunca os copiam para uma função nem os
++executam. O carregamento nativo de tabelas, relocações e dados do overlay precisa
++substituir esse fluxo, e o manifesto tipado completo ainda não existe.
++
++O Game_Main original também depende do boot PS2, dados de tabelas incompletos,
++animações, IA, colisões e produtores de pacotes do combate ainda não integrados.
++Áudio, vídeo e interface completos não foram implementados nesta etapa. Um
++linker sem pendências, por si só, ainda não seria uma luta executável.
++
++## Reprodução
++
++Upstream: 3ca419c7966b11438e2dc3c9a7e1914f102ed545.
++xsdk: 57b02f1e60667e37d22c3aa613d23d2486514ff8.
++Toolchain: powerpc-xsdk-elf GCC 15.3.0 com o plugin de aritmética do projeto.
++
++```sh
++python3 engine/tools/test_iso_files.py XSDK ISO OUT --sanitize
++python3 engine/tools/test_capture.py XSDK OUT --sanitize
++python3 engine/tools/test_dma_producer.py UPSTREAM OUT --sanitize
++python3 engine/tools/link_battle.py UPSTREAM CC XSDK OUT --float-mode native-ps2 --platform --root Game_Main
++python3 engine/tools/audit_engine_refs.py OUT AUDIT_OUT
++```
++
++O teste de arquivos requer a ISO USA validada. Binários e recursos do jogo não
++fazem parte do pacote distribuído. extras/port-0.31.patch contém as alterações
++textuais desde 0.30, incluindo o Makefile; aplicação de teste passou.
+--- /dev/null
++++ b/TESTE-XBOX-0.31.md
+@@ -0,0 +1,20 @@
++# Diagnóstico 0.31
++
++default.xex continua sendo um diagnóstico. Não executa Game_Main nem Battle_Main.
++Não houve teste em console ou emulador nesta entrega.
++
++Abra a captura gráfica original GS: sua inicialização agora chama Dma_InitBuffers
++e envia o pacote u64 de boot pelo Dma_SendGif limitado. O log existente
++`native Port_Gs ... DBuff clear probe rc=0` passa a incluir esse percurso.
++Saia, abra novamente e preserve default.log e uma imagem do resultado.
++rc=0 verifica o contrato, não confirma a correção dos pixels.
++
++Ao escolher uma ISO USA, o diagnóstico de plataforma imprime também
++`raw ISO open/read/seek/search USA ELF probe rc=0`. Ele abre o ELF do PS2,
++confere os primeiros bytes e fecha; não executa esse código.
++Em seguida continuam os probes ADXF e do registro de recursos.
++
++Para um erro, registre a linha inteira e o contexto anterior/posterior.
++Não avance para o boot original: a relocação dos dados e do overlay continua
++pendente. Os testes de host foram feitos com transportes NT/GPU simulados;
++não validam GPU real, luta completa nem desempenho.
+--- a/engine/README.md
++++ b/engine/README.md
+@@ -1,3 +1,16 @@
++# Atualização 0.31 — ISO e DMA da inicialização
++
++Cinco chamadas de arquivo e duas de DMA implementadas e verificadas.
++384/384 unidades PowerPC, zero conflitos ABI. Vínculo com Game_Main e
++Battle_Main: 228 → 221 referências pendentes (133 combate + 88 adicionais).
++ISO real: ELF/overlay conferiram por SHA-256; testes de memória e captura
++passaram com ASan/UBSan e transportes NT/GPU simulados.
++**O pedido de vínculo completo ainda não está atendido. A luta não roda.**
++O default.xex é o diagnóstico 0.31. Game_Main e Battle_Main continuam ausentes.
++Consulte RELATORIO-0.31.md, inclusive o bloqueio do overlay MIPS, e TESTE-XBOX-0.31.md.
++
++--- Histórico ---
++
+ # Atualização 0.30 — chamadas GS e auditoria do boot
+ 
+ Quatro chamadas gráficas reais adaptadas e ligadas ao novo XEX de diagnóstico.
+--- /dev/null
++++ b/engine/combat/gfx.c
+@@ -0,0 +1,289 @@
++#include "common.h"
++#ifdef PORT_BIGENDIAN
++#include "dr_dma_engine.h"
++#endif
++#include "sys/gfx.h"
++#include "sys/debug.h"
++#include "sys/file.h"
++#include "sys/save.h"
++
++/*
++ * Graphics core (0x101D40..0x102458): GS set-up, frame begin/end, default draw state.
++ * The ordering table for sorted primitives that follows it is src/sys/gfx_ot.c.
++ *
++ * What a renderer on another platform needs to know
++ * -------------------------------------------------
++ * Frame buffers (Gfx_InitDrawEnv, verified by the matching code):
++ *   - Two 512x448 PSMCT32 colour buffers at GS pages 0x00 (A) and 0x70 (B), buffer width 8 (x64 pixels),
++ *     and one PSMZ24 depth buffer at page 0xE0 shared by both. Bigger Z is nearer: the clear writes
++ *     Z = 0, the libgraph draw env is created with ztest 3 (GREATER) and Gfx_PutDefaultEnv sets TEST to
++ *     0x50000 (depth test on, GEQUAL).
++ *   - Primitive coordinates are offset by XYOFFSET (1792, 1824) = (2048 - 256, 2048 - 224), so the screen is
++ *     x 1792..2303, y 1824..2271 in GS units/16. Dma_AddFillRect and friends add these themselves.
++ *   - The mode is NTSC interlaced, field mode (sceGsResetGraph(0, 1, 2, 0)): all 448 lines are stored and
++ *     the GS shows alternate lines each field. There is no half-pixel field offset anywhere in this code;
++ *     the same full-height picture is simply displayed for however many fields a frame lasts.
++ *   - Display (Gfx_SetDisplayRegs): both read circuits show the same buffer with MAGH = 5 (512 -> 2560 VCK
++ *     units, i.e. the 512-pixel picture is stretched to the full 640-wide area), DW = 2560, DH = 448.
++ *     DX = 636 + 4 * screenX, DY = 50 + 2 * screenY for circuit 2 and one line lower for circuit 1; PMODE
++ *     blends the two circuits 50/50 (ALP 0x7F), which is a vertical flicker filter. With blend == 0 ALP is
++ *     0xFF (circuit 1 only); Gfx_EndFrame always passes 1. A port can ignore the filter and should apply
++ *     screenX/screenY as a picture offset of (screenX, screenY) pixels at most (4 VCK = 0.8 buffer pixel).
++ *
++ * Buffer selection: everything keys off bit 0 of gGfx.frame, the count of ended frames.
++ *   - Display lists built while the counter is c draw into page (c odd ? 0x00 : 0x70) (Gfx_PutDefaultEnv,
++ *     Gfx_ClearScreen, Ot_AddEnv, Dma users elsewhere).
++ *   - Gfx_SetDisplayRegs shows that same page while the counter is c. The main loops call Gfx_EndFrame and
++ *     only then Dma_Flush, so the list built during c is drawn while c + 1 is on screen: ordinary double
++ *     buffering, with the picture appearing one frame after it was built.
++ *
++ * Gfx_BeginFrame, in order: Dbg_BeginFrame (empty), 0x248F38 (rebuilds the 12-entry battle object table when
++ * the battle is up), Fade_UpdateAll (advances the 3 screen fades).
++ *
++ * Gfx_EndFrame(vsyncs), in order:
++ *   1. Fade_DrawScreen: queues the fade rectangles of slots 0 and 1 on top of everything.
++ *   2. 0x23D160(vsyncs): frame counters at gp 0x2FEBC4/0x2FEBC8 (with vsyncs == 1 the first only counts every
++ *      other call, i.e. it counts 1/30 s units).
++ *   3. 0x267DC0, 0x268208: per-frame services (two-entry state polled through 0x267B90; not looked into).
++ *   4. Dbg_ProfColor / Dbg_EndFrame (debug, empty), 0x121DE0 (identity matrix check + 0x120B48).
++ *   5. sceGsSyncPath(0, 0): waits until the GS finished the list sent by the previous frame's Dma_Flush.
++ *   6. Vsync_Wait(vsyncs): waits until `vsyncs` vertical blanks passed since the last frame (1 = 60 fps,
++ *      2 = 30 fps) and resets the counter.
++ *   7. gGfx.frame++, gGfx.field ^= 1.
++ *   8. sceGsSwapDBuff(&gGfx.db, frame): writes disp[frame & 1] and sends draw env + clear of buffer
++ *      (frame odd ? B : A), i.e. the buffer the list about to be flushed draws into: it is cleared to
++ *      black with alpha 0 and Z 0 here, before that list runs.
++ *   9. Gfx_SetDisplayRegs(field, 1): overrides the display registers (shows the other buffer, see above).
++ *  10. sceGsSyncPath(0, 0): waits for the clear.
++ * The caller then calls Dma_Flush, which sends the frame's list and swaps the two list buffers.
++ *
++ * Draw "passes": Gfx_MarkPass(pass) is an empty function in the retail build (a profiler/debug marker that
++ * sits next to the Dbg_ProfMark calls of Battle_Draw); it sets nothing up. Battle_Draw's sequence is
++ * MarkPass(1) stage, MarkPass(3) 0x247720, MarkPass(2) 0x10FF40, MarkPass(0), MarkPass(4),
++ * Gfx_AddDefaultEnv, 0x12CCD0(1), Ot_Draw, MarkPass(0). The real state changes are:
++ *   - Gfx_AddDefaultEnv / Gfx_PutDefaultEnv: full-screen scissor and offset, FRAME = current buffer,
++ *     Z test GEQUAL with Z writes on, no alpha test, FBA off, source-alpha blending (ALPHA 0x44), texture
++ *     clamp on both axes, bilinear filtering, colour clamp on, PRIM attributes from the PRIM register,
++ *     TEXA TA1 = 0x80 (16-bit texels with the alpha bit set read as alpha 0x80).
++ *   - Ot_Draw (gfx_ot.c): the depth-sorted translucent primitives, Z test on but Z writes off.
++ */
++
++/* libc / Sony kernel */
++extern void *memset(void *dst, s32 c, u32 size);
++extern void FlushCache(s32 mode);
++
++/* Other modules (local declarations). */
++extern void Dbg_ProfColor(void *prof, u32 rgba);
++extern u8 gBattleProf[];
++extern void BtlObj_RebuildTable(void);
++extern void Fade_UpdateAll(void);
++extern void Fade_DrawScreen(void);
++extern void FontIcon_Tick(s32 vsyncs);
++extern void PadWatch_Update(void);
++extern void PadWatch_Draw(void);
++extern void Vu0_CheckState(void);
++
++/* GS privileged (display) registers. */
++#define GS_PMODE ((volatile u64 *)0x12000000)
++#define GS_DISPFB1 ((volatile u64 *)0x12000070)
++#define GS_DISPLAY1 ((volatile u64 *)0x12000080)
++#define GS_DISPFB2 ((volatile u64 *)0x12000090)
++#define GS_DISPLAY2 ((volatile u64 *)0x120000A0)
++#define GS_EXTWRITE ((volatile u64 *)0x120000D0)
++
++/* Switches the GS to interlaced NTSC field mode and builds the 512x448 double buffer in gGfx. */
++void Gfx_InitDrawEnv(void) {
++    sceGsResetGraph(0, 1, 2, 0);
++    sceGsSetDefDBuff(&gGfx.db, 0, GFX_WIDTH, GFX_HEIGHT, 3, GS_PSMZ24, 1);
++    gGfx.db.clear0.xyz2a = GS_SET_XYZ(GFX_OFX, GFX_OFY, 0);
++    gGfx.db.clear0.xyz2b = GS_SET_XYZ(GFX_OFX + (GFX_WIDTH << 4), GFX_OFY + (GFX_HEIGHT << 4), 0);
++    gGfx.db.clear0.rgbaq = GFX_CLEAR_RGBAQ;
++    gGfx.db.draw0.xyoffset1 = GS_SET_XYOFFSET(GFX_OFX, GFX_OFY);
++    gGfx.db.draw0.scissor1 = GS_SET_SCISSOR(0, GFX_WIDTH - 1, 0, GFX_HEIGHT - 1);
++    gGfx.db.draw0.zbuf1 = GS_SET_ZBUF(GFX_ZBP, GS_PSMZ24, 0);
++    gGfx.db.clear1.xyz2a = GS_SET_XYZ(GFX_OFX, GFX_OFY, 0);
++    gGfx.db.clear1.xyz2b = GS_SET_XYZ(GFX_OFX + (GFX_WIDTH << 4), GFX_OFY + (GFX_HEIGHT << 4), 0);
++    gGfx.db.clear1.rgbaq = GFX_CLEAR_RGBAQ;
++    gGfx.db.disp[0].dispfb = GFX_DISPFB_A;
++    gGfx.db.draw0.frame1 = GS_SET_FRAME(GFX_FBP_A, GFX_FBW, 0, 0);
++    gGfx.db.disp[1].dispfb = GFX_DISPFB_B;
++    gGfx.db.draw1.frame1 = GS_SET_FRAME(GFX_FBP_B, GFX_FBW, 0, 0);
++    gGfx.db.draw1.xyoffset1 = GS_SET_XYOFFSET(GFX_OFX, GFX_OFY);
++    gGfx.db.draw1.scissor1 = GS_SET_SCISSOR(0, GFX_WIDTH - 1, 0, GFX_HEIGHT - 1);
++    gGfx.db.draw1.zbuf1 = GS_SET_ZBUF(GFX_ZBP, GS_PSMZ24, 0);
++    FlushCache(0);
++}
++
++/* Waits for a vertical blank and records which field it started (1 when the GS reports field 0). */
++void Gfx_SyncField(void) {
++    gGfx.field = sceGsSyncV(0) == 0;
++}
++
++/*
++ * Programs the display: both read circuits show the current colour buffer, circuit 1 one scanline lower
++ * than circuit 2, and `blend` mixes them 50/50 (flicker filter) instead of showing circuit 1 alone.
++ * The picture position comes from the save data's screen offsets. `field` is not used.
++ */
++void Gfx_SetDisplayRegs(s32 field, s32 blend) {
++    SaveData *save = gSaveData;
++    s32 odd = gGfx.frame & 1;
++    s32 dy = save->screenY * 2;
++    s32 dx = save->screenX * 4 + 0x27C;
++    u64 size = 0x1BF9FF02000000; /* 2560 x 448 display area, horizontal magnification 5 (512 pixels wide) */
++    u64 display2 = dx | ((u64)(dy + 0x32) << 12) | size;
++    u64 display1 = dx | ((u64)(dy + 0x33) << 12) | size;
++
++    *GS_PMODE = (blend & 1) ? 0x7F23 : 0xFF23;
++    *GS_DISPFB2 = !odd ? GFX_DISPFB_B : GFX_DISPFB_A;
++    *GS_DISPLAY2 = display2;
++    *GS_DISPFB1 = !odd ? GFX_DISPFB_B : GFX_DISPFB_A;
++    *GS_DISPLAY1 = display1;
++    *GS_EXTWRITE = 0;
++}
++
++/* Resets the GS and the VIF/GIF paths, clears both frame buffers and sets up gGfx. Called once at boot. */
++void Gfx_Init(void) {
++    sceGsDBuff db;
++    u64 pkt[12] = {
++        GIF_TAG(5, 1, 1), GIF_REG_AD,
++        0, GS_PABE,    /* no per-pixel alpha blending switch */
++        0, GS_SCANMSK, /* draw every line */
++        0, GS_DTHE,    /* no dithering */
++        0, GS_CLAMP_1,
++        0, GS_CLAMP_2,
++    };
++
++    memset(&gGfx, 0, sizeof(gGfx));
++    sceGsResetPath();
++    sceGsResetGraph(0, 1, 2, 1);
++#ifdef PORT_BIGENDIAN
++    if(dr_dma_engine_send_u64(pkt,6)!=0)return;
++#else
++    Dma_SendGif((u32)pkt, 6);
++#endif
++    sceGsResetGraph(0, 1, 2, 1);
++    sceGsSetDefDBuff(&db, 0, 640, GFX_HEIGHT, 2, GS_PSMZ24, 1);
++    FlushCache(0);
++    sceGsSyncV(0);
++    sceGsPutDrawEnv(db.giftag0);
++    sceGsSyncPath(0, 0);
++    sceGsPutDrawEnv(db.giftag1);
++    sceGsSyncPath(0, 0);
++    Gfx_SyncField();
++    Gfx_InitDrawEnv();
++}
++
++/* Start of a frame: debug hook, rebuilds the battle object table, advances the screen fades. */
++void Gfx_BeginFrame(void) {
++    Dbg_BeginFrame();
++    BtlObj_RebuildTable();
++    Fade_UpdateAll();
++}
++
++/*
++ * End of a frame: queues the screen fade, runs the end-of-frame services, waits for the GS to finish the
++ * previous display list and for `vsyncs` vertical blanks, then swaps the buffers and reprograms the display.
++ */
++void Gfx_EndFrame(s32 vsyncs) {
++    Fade_DrawScreen();
++#ifdef PORT
++    /* The PC exit question uses the game's animated memory-card dialog above the current screen. */
++    extern void PortQuit_Draw(int vsyncs);
++    PortQuit_Draw(vsyncs); /* (the blanks this frame lasts: a fight's frame is two) */
++#endif
++    FontIcon_Tick(vsyncs);
++    PadWatch_Update();
++    PadWatch_Draw();
++    Dbg_ProfColor(gBattleProf, 0x80404040);
++    Dbg_EndFrame();
++    Vu0_CheckState();
++    sceGsSyncPath(0, 0);
++    Vsync_Wait(vsyncs);
++    gGfx.frame++;
++    gGfx.field = gGfx.field == 0;
++    sceGsSwapDBuff(&gGfx.db, gGfx.frame);
++    Gfx_SetDisplayRegs(gGfx.field, 1);
++    sceGsSyncPath(0, 0);
++}
++
++/* Always 1. */
++s32 Gfx_Stub102118(void) {
++    return 1;
++}
++
++/* Queues a full-screen rectangle of colour `rgba` on the current buffer, with depth writes off and `fbmsk` as write mask. */
++void Gfx_ClearScreen(s32 fbmsk, u32 rgba) {
++    Dma_AddFrame(GFX_FRAME_FBP(), GFX_FBW, fbmsk);
++    Dma_AddScissor(0, GFX_WIDTH - 1, 0, GFX_HEIGHT - 1);
++    Dma_AddZbuf(GFX_ZBP, 1);
++    Dma_AddFillRect(GFX_OFX >> 4, GFX_OFY >> 4, GFX_WIDTH, GFX_HEIGHT, rgba);
++    Dma_AddZbuf(GFX_ZBP, 0);
++    Dma_AddFrame(GFX_FRAME_FBP(), GFX_FBW, 0);
++}
++
++/* Queues the default drawing state (Gfx_PutDefaultEnv) as one packet. */
++void Gfx_AddDefaultEnv(void) {
++    GsQword *p = (GsQword *)Dma_BeginDirect();
++
++    Gfx_PutDefaultEnv(&p);
++    Dma_EndDirect((u64 *)p);
++}
++
++/* Writes the 13 quadwords that put GS context 1 back to the default full-screen drawing state. */
++void Gfx_PutDefaultEnv(GsQword **pp) {
++    (*pp)->d[0] = GIF_TAG(12, 1, 1);
++    (*pp)->d[1] = GIF_REG_AD;
++    (*pp)++;
++    (*pp)->d[0] = 0x8000000000; /* TA1 = 0x80 */
++    (*pp)->d[1] = GS_TEXA;
++    (*pp)++;
++    (*pp)->d[0] = GS_SET_XYOFFSET(GFX_OFX, GFX_OFY);
++    (*pp)->d[1] = GS_XYOFFSET_1;
++    (*pp)++;
++    (*pp)->d[0] = GS_SET_SCISSOR(0, GFX_WIDTH - 1, 0, GFX_HEIGHT - 1);
++    (*pp)->d[1] = GS_SCISSOR_1;
++    (*pp)++;
++    (*pp)->d[0] = GFX_FRAME_REG();
++    (*pp)->d[1] = GS_FRAME_1;
++    (*pp)++;
++    (*pp)->d[0] = 0x50000; /* depth test on, pass when Z >= buffer; no alpha test */
++    (*pp)->d[1] = GS_TEST_1;
++    (*pp)++;
++    (*pp)->d[0] = 0;
++    (*pp)->d[1] = GS_FBA_1;
++    (*pp)++;
++    (*pp)->d[0] = GS_SET_ZBUF(GFX_ZBP, GS_PSMZ24, 0);
++    (*pp)->d[1] = GS_ZBUF_1;
++    (*pp)++;
++    (*pp)->d[0] = 0x44; /* (Cs - Cd) * As + Cd */
++    (*pp)->d[1] = GS_ALPHA_1;
++    (*pp)++;
++    (*pp)->d[0] = GS_SET_CLAMP(1, 1, 0, 0, 0, 0);
++    (*pp)->d[1] = GS_CLAMP_1;
++    (*pp)++;
++    (*pp)->d[0] = 1;
++    (*pp)->d[1] = GS_PRMODECONT;
++    (*pp)++;
++    (*pp)->d[0] = 1;
++    (*pp)->d[1] = GS_COLCLAMP;
++    (*pp)++;
++    (*pp)->d[0] = 0x60; /* bilinear magnify and minify, no mipmaps */
++    (*pp)->d[1] = GS_TEX1_1;
++    (*pp)++;
++}
++
++/* Empty in the retail build. */
++void Gfx_Stub102438(void) {
++}
++
++/* Empty in the retail build. */
++void Gfx_Stub102440(void) {
++}
++
++/* Empty in the retail build: the battle draw code calls it with a pass number between its Dbg_ProfMark calls. */
++void Gfx_MarkPass(s32 pass) {
++}
++
++/* Empty in the retail build. */
++void Gfx_Stub102450(void) {
++}
+--- /dev/null
++++ b/engine/graphics/dr_dma_engine.c
+@@ -0,0 +1,50 @@
++/* SPDX-License-Identifier: AGPL-3.0-or-later */
++#include "dr_dma_engine.h"
++#include "dr_dma_producer.h"
++#include "dr_gs_native.h"
++#include <stdlib.h>
++#include <string.h>
++static int error,owned;
++static DrGsSpan gif;
++static int fail(int e) {if(e && !error)error=e;return error;}
++int dr_dma_engine_error(void) {return error?error:dr_dma_producer_error();}
++static int submit(void *opaque,const DrGsSpan *spans,size_t n,uint32_t address) {
++    (void)opaque;int e=dr_gs_native_bind(spans,n);
++    if(e)return e;
++    e=dr_gs_native_vif1(address,1);dr_gs_native_unbind();return e;
++}
++int dr_dma_engine_init(void) {
++    if(error)return error;
++    int e=dr_gs_native_error();if(e)return fail(e);
++    if(dr_dma_producer_is_open())return fail(owned?dr_dma_producer_error():DR_DMA_STATE);
++    e=dr_dma_producer_open_mapped(submit,NULL);if(!e)owned=1;return fail(e);
++}
++void Dma_InitBuffers(void) {(void)dr_dma_engine_init();}
++int dr_dma_engine_close(void) {
++    if(gif.bytes)return DR_DMA_STATE;
++    int e=owned?dr_dma_producer_close():0;
++    if(!e) {owned=0;error=0;}return e;
++}
++void Dma_SendGif(uint32_t address,uint32_t qwc) {
++    if(error)return;
++    /* The sole original caller is Gfx_Init's u64 array. It is adapted to the
++     * typed wrapper below; arbitrary address casts never become native reads. */
++    if(!gif.bytes || address!=gif.address || qwc<1 || (uint64_t)qwc*16!=gif.size) {
++        fail(DR_DMA_INVALID);return;
++    }
++    int e=dr_gs_native_bind(&gif,1);if(e){fail(e);return;}
++    e=dr_gs_native_gif(address,qwc,0);dr_gs_native_unbind();fail(e);
++}
++int dr_dma_engine_send_u64(const void *words,uint32_t qwc) {
++    if(error)return error;
++    if(!words || !qwc || qwc>65536 || gif.bytes)return fail(DR_DMA_INVALID);
++    int e=dr_gs_native_error();if(e)return fail(e);
++    size_t size=(size_t)qwc*16;uint8_t *bytes=malloc(size);
++    if(!bytes)return fail(DR_DMA_MEMORY);
++    for(size_t i=0;i<size;i+=8) {
++        uint64_t word;memcpy(&word,(const uint8_t *)words+i,8);
++        for(unsigned j=0;j<8;j++)bytes[i+j]=(uint8_t)(word>>(j*8));
++    }
++    gif=(DrGsSpan){0x45000000,bytes,size};Dma_SendGif(gif.address,qwc);
++    memset(&gif,0,sizeof(gif));free(bytes);return error;
++}
+--- /dev/null
++++ b/engine/graphics/dr_dma_engine.h
+@@ -0,0 +1,15 @@
++/* SPDX-License-Identifier: AGPL-3.0-or-later */
++#ifndef DR_DMA_ENGINE_H
++#define DR_DMA_ENGINE_H
++#include <stdint.h>
++/* Requires an already opened shared GS session. Does not initialize GPU,
++ * window or PS2 globals. One owner/thread; no guessed engine pointers. */
++void Dma_InitBuffers(void);
++void Dma_SendGif(uint32_t address,uint32_t qwc);
++int dr_dma_engine_init(void);
++int dr_dma_engine_close(void);
++int dr_dma_engine_error(void);
++/* The boot producer in gfx.c writes u64 words. Serialize explicitly before
++ * passing a bounded virtual address through the original Dma_SendGif ABI. */
++int dr_dma_engine_send_u64(const void *words,uint32_t qwc);
++#endif
+--- a/engine/graphics/dr_dma_producer.c
++++ b/engine/graphics/dr_dma_producer.c
+@@ -89,6 +89,7 @@
+     free(dma.owner[2]);free(dma.owner[1]);free(dma.owner[0]);memset(&dma,0,sizeof(dma));return 0;
+ }
+ int dr_dma_producer_error(void) {return dma.error;}
++int dr_dma_producer_is_open(void) {return dma.submit || dma.mapped_submit;}
+ int dr_dma_producer_view(DrGsSpan *span)
+ {
+     if(!span)return DR_DMA_INVALID;
+--- a/engine/graphics/dr_dma_producer.h
++++ b/engine/graphics/dr_dma_producer.h
+@@ -19,6 +19,7 @@
+ int dr_dma_producer_open(DrDmaSubmit,void *);
+ int dr_dma_producer_close(void);
+ int dr_dma_producer_error(void);
++int dr_dma_producer_is_open(void);
+ int dr_dma_producer_view(DrGsSpan *); /* read-only queued bytes, before FINISH/END */
+ /* Explicit input types. Canonical data already contains complete LE DMA
+  * quadwords. Native numeric u32 arrays are serialized word by word. Neither
+--- a/engine/platform/platform/xb_disc.c
++++ b/engine/platform/platform/xb_disc.c
+@@ -14,6 +14,8 @@
+ static HANDLE sImage;
+ static dr_disc sDisc;
+ static int sMounted;
++static uint64_t sGeneration;
++uint64_t XbDisc_Generation(void) {return sGeneration;}
+ 
+ static int image_read(void *ctx, uint64_t offset, void *data, size_t n) {
+     HANDLE h = *(HANDLE *)ctx;
+@@ -108,6 +110,7 @@
+ }
+ 
+ void XbDisc_Unmount(void) {
++    ++sGeneration;
+     if (sMounted) {
+         NtClose(sImage);
+     }
+--- a/engine/platform/platform/xb_disc.h
++++ b/engine/platform/platform/xb_disc.h
+@@ -12,6 +12,7 @@
+ int XbDisc_Mount(const char *path);
+ void XbDisc_Unmount(void);
+ const dr_disc *XbDisc_Get(void); /* NULL when nothing is mounted */
++uint64_t XbDisc_Generation(void); /* changes on unmount/remount; invalidates open ISO tokens */
+ 
+ /* A game file by the PC port's relative name: "pzs3us1/00042.bin" (partition 1, index 42) or "disc/DATA/NAME.EXT".
+    0 = found. */
+--- /dev/null
++++ b/engine/platform/platform/xb_iso_file.c
+@@ -0,0 +1,109 @@
++/* SPDX-License-Identifier: MIT
++ * Sony read-only byte-file operations, using the real bounded ISO9660 reader.
++ * sceCdlFILE layout: ps2dev/ps2sdk common/include/libcdvd-common.h (public).
++ * Its date field is explicitly unavailable (zero); game Disc_Identify only
++ * checks the return value. This is not a general libcdvd implementation.
++ * No host paths, write flags, PS2 overlays or executable conversions here.
++ */
++#include "xb_iso_file.h"
++#include "xb_disc.h"
++#include <limits.h>
++#include <stdlib.h>
++#include <string.h>
++#include <strings.h>
++/* Keep the public ABI calls visible in the diagnostic's ELF as well as in
++ * engine links; its probe must exercise these entry points, not inline copies. */
++#if defined(__GNUC__)
++#define XB_ISO_ENTRY __attribute__((noinline))
++#else
++#define XB_ISO_ENTRY
++#endif
++enum { SLOTS=32, CHUNK=65536 };
++static struct {dr_span span;uint64_t mount;uint32_t generation;int32_t pos;int used;} slots[SLOTS];
++static uint32_t next_generation;
++static int path_of(const char *name,char path[256]) {
++    if(!name) return -1;
++    if(!strncasecmp(name,"cdrom0:",7))name+=7;
++    else if(!strncasecmp(name,"cdrom:",6))name+=6;
++    while(*name=='/' || *name=='\\')name++;
++    size_t n=0;
++    for(;*name && *name!=';';name++) {
++        if(n==255 || *name==':')return -1;
++        path[n++]=*name=='\\'?'/':*name;
++    }
++    if(*name==';') {name++;if(*name!='1' || name[1])return -1;}
++    path[n]=0;return n?0:-1;
++}
++static int locate(const char *name,dr_span *span,char path[256]) {
++    const dr_disc *disc=XbDisc_Get();
++    if(!disc || path_of(name,path) || dr_find(disc,path,span)!=DR_OK ||
++       span->directory || span->size>INT32_MAX)return -1;
++    return 0;
++}
++static int index_of(int32_t fd) {
++    if(fd<32)return -1;
++    unsigned i=(unsigned)fd%SLOTS,g=(unsigned)fd/SLOTS;
++    if(!slots[i].used || slots[i].generation!=g)return -1;
++    if(!XbDisc_Get() || slots[i].mount!=XbDisc_Generation()) {slots[i].used=0;return -1;}
++    return (int)i;
++}
++void XbIsoFiles_CloseAll(void) {for(unsigned i=0;i<SLOTS;i++)slots[i].used=0;}
++XB_ISO_ENTRY int32_t sceOpen(char *name,int32_t flags) {
++    char path[256];dr_span span;
++    if(flags!=1 || locate(name,&span,path))return -1;
++    uint64_t mount=XbDisc_Generation();
++    for(unsigned i=0;i<SLOTS;i++) {
++        if(slots[i].used && slots[i].mount!=mount)slots[i].used=0;
++        if(!slots[i].used) {
++            if(next_generation==(uint32_t)INT32_MAX/SLOTS)return -1;
++            slots[i].generation=++next_generation;slots[i].span=span;
++            slots[i].mount=mount;slots[i].pos=0;slots[i].used=1;
++            return (int32_t)(slots[i].generation*SLOTS+i);
++        }
++    }
++    return -1;
++}
++XB_ISO_ENTRY int32_t sceClose(int32_t fd) {
++    int i=index_of(fd);if(i<0)return -1;slots[i].used=0;return 0;
++}
++XB_ISO_ENTRY int32_t sceLseek(int32_t fd,int32_t offset,int32_t whence) {
++    int i=index_of(fd);if(i<0 || whence<0 || whence>2)return -1;
++    int64_t base=whence==0?0:whence==1?slots[i].pos:(int64_t)slots[i].span.size;
++    int64_t next=base+offset;if(next<0 || next>INT32_MAX)return -1;
++    slots[i].pos=(int32_t)next;return (int32_t)next;
++}
++XB_ISO_ENTRY int32_t sceRead(int32_t fd,void *buf,int32_t size) {
++    int i=index_of(fd);if(i<0 || size<0 || (!buf && size))return -1;
++    if(!size || (uint64_t)slots[i].pos>=slots[i].span.size)return 0;
++    size_t want=(size_t)size;uint64_t left=slots[i].span.size-(uint32_t)slots[i].pos;
++    if(want>left)want=(size_t)left;
++    uint8_t *scratch=malloc(want<CHUNK?want:CHUNK);if(!scratch)return -1;
++    size_t done=0;
++    while(done<want) {
++        size_t part=want-done;if(part>CHUNK)part=CHUNK;
++        if(XbDisc_ReadSpan(&slots[i].span,(uint32_t)slots[i].pos,scratch,part)!=DR_OK)break;
++        memcpy((uint8_t *)buf+done,scratch,part);done+=part;slots[i].pos+=(int32_t)part;
++    }
++    free(scratch);return done?(int32_t)done:-1;
++}
++XB_ISO_ENTRY int32_t sceCdSearchFile(void *file,char *name) {
++    char path[256];dr_span span;
++    if(!file || locate(name,&span,path) || span.offset%2048 || span.offset/2048>UINT32_MAX)return 0;
++    uint8_t result[32]={0};uint32_t lsn=(uint32_t)(span.offset/2048),size=(uint32_t)span.size;
++    memcpy(result,&lsn,4);memcpy(result+4,&size,4);
++    const char *base=strrchr(path,'/');base=base?base+1:path;
++    size_t n=strlen(base);if(n>16)n=16;memcpy(result+8,base,n);
++    memcpy(file,result,sizeof(result));return 1;
++}
++int XbIsoFiles_Probe(void) {
++    uint8_t info[32],header[20];uint32_t size;
++    char name[]="cdrom0:\\SLUS_216.78;1";
++    if(sceCdSearchFile(info,name)!=1)return -1;
++    memcpy(&size,info+4,4);
++    int fd=sceOpen(name,1);if(fd<0)return -1;
++    int ok=size>=52 && sceLseek(fd,0,2)==(int32_t)size &&
++        sceLseek(fd,0,0)==0 && sceRead(fd,header,20)==20 &&
++        !memcmp(header,"\x7f" "ELF\x01\x01\x01",7) &&
++        header[16]==2 && header[17]==0 && header[18]==8 && header[19]==0;
++    int closed=sceClose(fd);return ok && !closed?0:-1;
++}
+--- /dev/null
++++ b/engine/platform/platform/xb_iso_file.h
+@@ -0,0 +1,15 @@
++/* SPDX-License-Identifier: MIT */
++#ifndef XB_ISO_FILE_H
++#define XB_ISO_FILE_H
++#include <stdint.h>
++/* Single-owner, read-only Sony file calls over the currently mounted ISO.
++ * Tokens are not host file descriptors. Reads return raw disc bytes. */
++int32_t sceOpen(char *name,int32_t flags);
++int32_t sceClose(int32_t fd);
++int32_t sceLseek(int32_t fd,int32_t offset,int32_t whence);
++int32_t sceRead(int32_t fd,void *buf,int32_t size);
++int32_t sceCdSearchFile(void *file,char *name);
++/* Frees all tokens without touching the mount, for orderly platform teardown. */
++void XbIsoFiles_CloseAll(void);
++int XbIsoFiles_Probe(void); /* bounded USA boot-ELF identity/read/seek probe, never loads it */
++#endif
+--- a/engine/platform/platform/xb_platform.c
++++ b/engine/platform/platform/xb_platform.c
+@@ -6,6 +6,7 @@
+ #include "xb_platform.h"
+ #include "xb_file.h"
+ #include "xb_demo_resources.h"
++#include "xb_iso_file.h"
+ #include "xsdk/log.h"
+ void XbPlatform_Install(void) {
+     XbRes_Install();
+@@ -15,6 +16,8 @@
+ int XbPlatform_ProbeFiles(const char *iso) {
+     uint8_t sector[2048];int i,rc=XbDisc_Mount(iso);
+     if(rc)return rc;
++    rc=XbIsoFiles_Probe();
++    xsdk_log_write("platform: raw ISO open/read/seek/search USA ELF probe rc=%d; no executable loaded",rc);
+     for(i=0;i<3 && !rc;i++) {
+         char name[24];void *h;
+         (void)snprintf(name,sizeof(name),"PZS3US%d.AFS",i);
+@@ -26,7 +29,7 @@
+         (void)ADXF_Close(h);
+         XbRes_Forget(sector,sizeof(sector));
+     }
+-    XbRes_Report();XbDisc_Unmount();
++    XbRes_Report();XbIsoFiles_CloseAll();XbDisc_Unmount();
+     xsdk_log_write("platform: ADXF first-file sector probes rc=%d; not a full battle resource inventory",rc);
+     return rc;
+ }
+--- a/engine/tests/test_capture.c
++++ b/engine/tests/test_capture.c
+@@ -5,8 +5,15 @@
+ #include "gs_internal.h"
+ #include "dr_capture_demo.h"
+ #include "dr_gs_sdk.h"
++#include "dr_dma_engine.h"
++#include "dr_gs_native.h"
++#include "dr_dma_producer.h"
+ extern int sceGsSetDefDBuff(void *,int,int,int,int,int,int);
+ extern int sceGsSwapDBuff(void *,int);
++static int foreign_submit(void *ctx,const DrGsSpan *span,uint32_t addr)
++{(void)ctx;(void)span;(void)addr;assert(0);return DR_DMA_INVALID;}
++static int foreign_gif(void *ctx,const unsigned char *bytes,uint32_t n)
++{(void)ctx;(void)bytes;(void)n;assert(0);return DR_STREAM_COMMAND;}
+ static void le64(uint8_t *p,uint64_t v) {for(unsigned i=0;i<8;i++)p[i]=(uint8_t)(v>>(8*i));}
+ static void upload(unsigned psm,unsigned bp,unsigned bw,unsigned width,unsigned height,const uint8_t *pixels,unsigned count)
+ {
+@@ -169,7 +176,30 @@
+     assert(sceGsExecStoreImage(descriptor,output)!=0 && output[0]==1 && output[1]==2 && output[2]==3);
+     wait_result=STATUS_SUCCESS;assert(!dr_capture_demo_close());
+     assert(sceGsSyncPath(0,0)!=0);
++    assert(!dr_capture_demo_open(1280,720));
++    Dma_AddTexFlush();int used=Dma_GetUsedSize();assert(used>0);
++    Dma_InitBuffers();assert(!dr_dma_engine_error() && Dma_GetUsedSize()==used);
++    uint64_t words[4]={0x1000000000008001ull,14,0x44,0x42};
++    uint8_t unaligned[33];memcpy(unaligned+1,words,sizeof(words));
++    assert(!dr_dma_engine_send_u64(unaligned+1,2) && gGs.alpha[0]==0x44);
++    assert(Dma_GetUsedSize()==used);Dma_Flush();assert(!dr_dma_producer_error());
++    Dma_SendGif(0xdead0000,2);assert(dr_dma_engine_error()==DR_DMA_INVALID);
++    Dma_InitBuffers();assert(dr_dma_engine_error()==DR_DMA_INVALID);
++    assert(!dr_capture_demo_close());
++    for(unsigned bad=0;bad<3;bad++) {
++        assert(!dr_capture_demo_open(1280,720));
++        assert(dr_dma_engine_send_u64(bad==0?NULL:words,bad==1?0:bad==2?65537:2)==DR_DMA_INVALID);
++        assert(!dr_capture_demo_close());
++    }
++    assert(dr_dma_engine_init()!=0 && !dr_dma_producer_is_open());
++    assert(!dr_dma_engine_close());
++    assert(!dr_gs_native_open(foreign_gif,NULL));
++    assert(!dr_dma_producer_open(foreign_submit,NULL));
++    Dma_AddTexFlush();used=Dma_GetUsedSize();
++    assert(dr_dma_engine_init()==DR_DMA_STATE && Dma_GetUsedSize()==used);
++    assert(!dr_dma_engine_close() && dr_dma_producer_is_open() && Dma_GetUsedSize()==used);
++    assert(!dr_dma_producer_close() && !dr_gs_native_close());
+     for(unsigned i=0;i<4096;i++) assert(!images[i].live);
+     assert(!gpu_opens && !gpu_closes && !present_opens && !present_closes && !presents);
+-    puts("PASS: shared native Port_Gs VIF/MPG/UNPACK/MSCAL/XGKICK, GIF and DBuff clear probe; full gs_core/gs_draw/GsBackend compiled; unaligned LE GIF, CT32/CT16/T8/T4 uploads, original capture draw/replay, unmerged self-target consumers and raw-alpha source binding, canonical RGBA, borrowed lifecycle, nine open/close cycles, original outline/CLUT consumers, frozen IDs and wrong-owner preflight, three native VU programs, indexed preflight, shadow-run stencil clear, filter/clamp capture states, DATE/FBA marker capture; unknown VU rejected; GS sync and independent RGB readback descriptors, exact targets and crop rows, untouched output on failure, fence timeout; GPU APIs MOCKED, no hardware pixels");
+-}
++    puts("PASS: shared native Port_Gs VIF/MPG/UNPACK/MSCAL/XGKICK, GIF and DBuff clear probe; full gs_core/gs_draw/GsBackend compiled; unaligned LE GIF, CT32/CT16/T8/T4 uploads, original capture draw/replay, unmerged self-target consumers and raw-alpha source binding, canonical RGBA, borrowed lifecycle, nine open/close cycles, original outline/CLUT consumers, frozen IDs and wrong-owner preflight, three native VU programs, indexed preflight, shadow-run stencil clear, filter/clamp capture states, DATE/FBA marker capture; unknown VU rejected; GS sync and independent RGB readback descriptors, exact targets and crop rows, untouched output on failure, fence timeout; native DMA buffer init is idempotent, typed/unaligned boot GIF submission and bounded address rejection; GPU APIs MOCKED, no hardware pixels");
++}
+--- /dev/null
++++ b/engine/tests/test_xb_iso_file.c
+@@ -0,0 +1,85 @@
++/* SPDX-License-Identifier: MIT
++ * Actual xb_disc/ISO/file adapters; only NT file transport replaced by host IO.
++ */
++#define _FILE_OFFSET_BITS 64
++#define _POSIX_C_SOURCE 200809L
++#include "xb_iso_file.h"
++#include "xb_disc.h"
++#include "xsdk/kernel.h"
++#include <assert.h>
++#include <stdio.h>
++#include <stdarg.h>
++#include <string.h>
++#include <stdlib.h>
++static const char *image_path;static FILE *image;static int fail_read;
++void xsdk_log_write(const char *f,...){assert(f);}
++NTSTATUS NtCreateFile(HANDLE *h,uint32_t access,const OBJECT_ATTRIBUTES *a,IO_STATUS_BLOCK *io,
++    const uint64_t *size,uint32_t flags,uint32_t share,uint32_t disp,uint32_t options) {
++    (void)access;(void)size;(void)flags;(void)share;(void)disp;(void)options;
++    assert(a && a->name && io && !image);
++    if(strcmp(a->name->pointer,"game:\\test.iso"))return STATUS_INVALID_PARAMETER;
++    image=fopen(image_path,"rb");if(!image)return STATUS_INVALID_PARAMETER;
++    *h=1;io->status=STATUS_SUCCESS;io->information=0;return STATUS_SUCCESS;
++}
++NTSTATUS NtClose(HANDLE h){assert(h==1 && image);fclose(image);image=NULL;return STATUS_SUCCESS;}
++NTSTATUS NtQueryInformationFile(HANDLE h,IO_STATUS_BLOCK *io,void *out,uint32_t n,uint32_t type) {
++    assert(h==1 && image && n==sizeof(FILE_NETWORK_OPEN_INFORMATION) && type==FILE_NETWORK_OPEN_INFORMATION_CLASS);
++    FILE_NETWORK_OPEN_INFORMATION *info=out;memset(out,0,n);
++    assert(!fseeko(image,0,SEEK_END));info->end_of_file=(uint64_t)ftello(image);
++    io->information=n;return STATUS_SUCCESS;
++}
++NTSTATUS NtReadFile(HANDLE h,HANDLE event,void *apc,void *ctx,IO_STATUS_BLOCK *io,void *out,uint32_t n,const uint64_t *at) {
++    assert(h==1 && image && !event && !apc && !ctx && at);
++    if(fail_read){memset(out,0xcc,n);io->information=0;return STATUS_INVALID_PARAMETER;}
++    if(fseeko(image,(off_t)*at,SEEK_SET))return STATUS_INVALID_PARAMETER;
++    io->information=(uint32_t)fread(out,1,n,image);return STATUS_SUCCESS;
++}
++static void copy_file(char *name,const char *dest) {
++    int fd=sceOpen(name,1);assert(fd>=32);FILE *f=fopen(dest,"wb");assert(f);
++    uint8_t buf[65536];int n;
++    while((n=sceRead(fd,buf,sizeof(buf)))>0)assert(fwrite(buf,1,(size_t)n,f)==(size_t)n);
++    assert(n==0 && !sceClose(fd));fclose(f);
++}
++int main(int argc,char **argv) {
++    assert(argc==4);image_path=argv[1];
++    assert(sceOpen("SYSTEM.CNF",1)==-1 && !sceCdSearchFile((char[32]){0},"SYSTEM.CNF"));
++    assert(!XbDisc_Mount("game:/test.iso") && !XbIsoFiles_Probe());
++    uint8_t info[66];memset(info,0xa5,sizeof(info));
++    assert(sceCdSearchFile(info+1,"cdrom0:\\SLUS_216.78;1")==1);
++    uint32_t lsn,size;memcpy(&lsn,info+1,4);memcpy(&size,info+5,4);
++    assert(lsn==308 && size==2115684 && !memcmp(info+9,"SLUS_216.78",11));
++    assert(info[0]==0xa5);for(unsigned i=33;i<sizeof(info);i++)assert(info[i]==0xa5);
++    for(unsigned i=25;i<33;i++)assert(!info[i]); /* date explicitly unavailable */
++    assert(!sceCdSearchFile(info,"absent.bin") && !sceCdSearchFile(NULL,"SYSTEM.CNF"));
++    assert(sceOpen(NULL,1)==-1 && sceOpen("SYSTEM.CNF",2)==-1);
++    assert(sceOpen("cdrom0:/../SYSTEM.CNF",1)==-1 && sceOpen("game:/SYSTEM.CNF",1)==-1);
++    assert(sceOpen("SYSTEM.CNF;2",1)==-1 && sceOpen("BIN",1)==-1);
++    char longpath[300];memset(longpath,'x',299);longpath[299]=0;assert(sceOpen(longpath,1)==-1);
++    int fd=sceOpen("cdrom0:/system.cnf;1",1);assert(fd>=32);
++    uint8_t data[66];memset(data,0xa5,sizeof(data));
++    assert(sceLseek(fd,0,2)==57 && sceLseek(fd,0,0)==0);
++    assert(sceRead(fd,NULL,0)==0 && sceRead(fd,NULL,1)==-1 && sceRead(fd,data,-1)==-1);
++    assert(sceLseek(fd,-1,0)==-1 && sceLseek(fd,0,3)==-1 && sceLseek(fd,0,1)==0);
++    fail_read=1;assert(sceRead(fd,data,20)==-1 && sceLseek(fd,0,1)==0);
++    for(unsigned i=0;i<sizeof(data);i++)assert(data[i]==0xa5);
++    fail_read=0;
++    assert(sceRead(fd,data,sizeof(data))==57 && !memcmp(data,"BOOT2",5));
++    for(unsigned i=57;i<sizeof(data);i++)assert(data[i]==0xa5);
++    assert(sceRead(fd,data,1)==0 && sceLseek(fd,-1,2)==56 && sceRead(fd,data,5)==1);
++    assert(sceLseek(fd,10,2)==67 && sceRead(fd,data,1)==0);
++    assert(!sceClose(fd) && sceClose(fd)==-1 && sceRead(fd,data,1)==-1);
++    int newer=sceOpen("SYSTEM.CNF",1);assert(newer!=fd && !sceClose(newer));
++    int handles[32];for(unsigned i=0;i<32;i++){handles[i]=sceOpen("SYSTEM.CNF",1);assert(handles[i]>=32);}
++    assert(sceOpen("SYSTEM.CNF",1)==-1);
++    for(unsigned i=0;i<32;i++)assert(!sceClose(handles[i]));
++    fd=sceOpen("SYSTEM.CNF",1);uint64_t generation=XbDisc_Generation();
++    assert(!XbDisc_Mount("game:/test.iso") && XbDisc_Generation()!=generation);
++    assert(sceRead(fd,data,1)==-1);
++    newer=sceOpen("SYSTEM.CNF",1);assert(newer!=fd && !sceClose(newer));
++    fd=sceOpen("SYSTEM.CNF",1);XbIsoFiles_CloseAll();assert(sceRead(fd,data,1)==-1);
++    copy_file("cdrom0:\\SLUS_216.78;1",argv[2]);copy_file("cdrom0:\\BIN\\DBZP.BIN;1",argv[3]);
++    fd=sceOpen("SYSTEM.CNF",1);XbDisc_Unmount();assert(sceRead(fd,data,1)==-1);
++    assert(XbDisc_Mount("game:/absent.iso")!=0 && !XbDisc_Get());
++    assert(!image);
++    puts("PASS: real ISO through actual xb_disc/dr_disc/Sony byte-file adapter; NT transport mocked; bounds, EOF, short reads, seeks, errors, descriptors, stale mounts and exact ELF/overlay extraction; no game execution");
++}
+--- a/engine/tools/link_battle.py
++++ b/engine/tools/link_battle.py
+@@ -54,7 +54,7 @@
+               '-I'+str(project/'src'),'-I'+str(project/'engine/platform/platform'),'-I'+str(sdk/'include')]
+     def compile_one(f):
+         rel=f.relative_to(repo).as_posix() if f.is_relative_to(repo) else f.relative_to(project).as_posix()
+-        local={'src/battle/battle.c':'engine/combat/battle.c','src/sys/bpe.c':'engine/combat/bpe.c','src/sys/heap.c':'engine/combat/heap.c'}
++        local={'src/battle/battle.c':'engine/combat/battle.c','src/sys/bpe.c':'engine/combat/bpe.c','src/sys/heap.c':'engine/combat/heap.c','src/sys/gfx.c':'engine/combat/gfx.c'}
+         input_file=project/local[rel] if rel in local and (project/local[rel]).exists() else f
+         input_bytes=input_file.read_bytes()
+         lowered=False
+--- a/engine/tools/test_capture.py
++++ b/engine/tools/test_capture.py
+@@ -8,7 +8,7 @@
+ sdk,out=(Path(p).resolve() for p in sys.argv[1:3]);out.mkdir(parents=True,exist_ok=True)
+ files=[engine/'tests/test_capture.c']
+ files += [engine/'capture/port/src/gs'/s for s in ['gs_draw.c','gs_core.c','gs_sony.c']]
+-files += [engine/'graphics'/s for s in ['dr_gs_backend.c','dr_gs_replay.c','dr_xenos.c','dr_targets.c','dr_gs_texture.c','dr_graphics_demo.c','dr_gs_stream.c','dr_gs_native.c','dr_dma_producer.c']]
++files += [engine/'graphics'/s for s in ['dr_gs_backend.c','dr_gs_replay.c','dr_xenos.c','dr_targets.c','dr_gs_texture.c','dr_graphics_demo.c','dr_gs_stream.c','dr_gs_native.c','dr_dma_producer.c','dr_dma_engine.c']]
+ files += [root/'src'/s for s in ['dr_capture_demo.c','dr_capture_platform.c','dr_vu1.c']]
+ cmd=['gcc','-std=gnu17','-O2','-Wall','-Wextra','-Werror','-DDR_XBOX360','-ffp-contract=off','-ffunction-sections','-fdata-sections','-Wl,--gc-sections']
+ cmd += ['-I'+str(p) for p in [engine/'graphics',engine/'capture/port/src/gs',sdk/'include',root/'src']]
+--- /dev/null
++++ b/engine/tools/test_iso_files.py
+@@ -0,0 +1,19 @@
++#!/usr/bin/env python3
++# SPDX-License-Identifier: MIT
++"""Real USA ISO through actual platform code; NT IO replaced by host stdio."""
++import argparse,subprocess,os,json,hashlib
++from pathlib import Path
++p=argparse.ArgumentParser(description=__doc__)
++p.add_argument('xsdk',type=Path);p.add_argument('iso',type=Path);p.add_argument('output',type=Path)
++p.add_argument('--sanitize',action='store_true');a=p.parse_args()
++e=Path(__file__).resolve().parents[1];out=a.output.resolve();out.mkdir(parents=True,exist_ok=True)
++cmd=['gcc','-std=gnu17','-O1','-g','-Wall','-Wextra','-Werror','-ffunction-sections','-fdata-sections','-Wl,--gc-sections']
++if a.sanitize:cmd+=['-fsanitize=address,undefined','-fno-omit-frame-pointer']
++cmd+=['-I'+str(d.resolve()) for d in [e/'platform/platform',e.parent/'src',a.xsdk/'include']]
++cmd+=list(map(str,[e/'tests/test_xb_iso_file.c',e/'platform/platform/xb_iso_file.c',e/'platform/platform/xb_disc.c',e.parent/'src/dr_disc.c']))
++exe=out/'iso-files';subprocess.run(cmd+['-o',str(exe)],check=True)
++run=subprocess.run([str(exe),str(a.iso.resolve()),str(out/'SLUS_216.78'),str(out/'DBZP.BIN')],capture_output=True,text=True,env=dict(os.environ,ASAN_OPTIONS='detect_leaks=0'))
++(out/'iso-files.txt').write_text(run.stdout+run.stderr);print(run.stdout+run.stderr,end='');run.check_returncode()
++expected={'SLUS_216.78':'811188ba9b416500d921cd4d9514df0cbf42f3a41a99cf5aac5a3da37171bf99','DBZP.BIN':'30f61f9c78c3859e5dd4fcfd8df6753b0f2d2c64beb924b92da5b2eaaa5e09cc'}
++for name,digest in expected.items():assert hashlib.sha256((out/name).read_bytes()).hexdigest()==digest
++(out/'iso-files.json').write_text(json.dumps({'result':'PASS','extracted_sha256':expected,'matches_previous_independent_extraction':True,'Sony_search_date':'unavailable, zero','sanitizers':'ASan/UBSan' if a.sanitize else 'off','NT_IO':'mocked','actual_modules':['xb_iso_file.c','xb_disc.c','dr_disc.c'],'PowerPC_execution':False,'game_executed':False},indent=2)+'\n')
+--- a/src/dr_capture_demo.c
++++ b/src/dr_capture_demo.c
+@@ -6,6 +6,7 @@
+ #include "dr_gs_backend.h"
+ #include "dr_gs_native.h"
+ #include "dr_dma_producer.h"
++#include "dr_dma_engine.h"
+ #include "dr_gs_sdk.h"
+ #include "gs_internal.h"
+ #include "xsdk/log.h"
+@@ -19,13 +20,6 @@
+ static int stream_error;
+ static int stream_gif(void *opaque,const unsigned char *bytes,uint32_t count)
+ {(void)opaque;Gs_Gif(bytes,count);return 0;}
+-static int producer_submit(void *opaque,const DrGsSpan *spans,size_t count,uint32_t address)
+-{
+-    (void)opaque;int e=dr_gs_native_bind(spans,count);
+-    if(e)return e;
+-    e=dr_gs_native_vif1(address,1);
+-    dr_gs_native_unbind();return e;
+-}
+ static void le64(uint8_t *p,uint64_t v) {for(unsigned i=0;i<8;i++)p[i]=(uint8_t)(v>>(i*8));}
+ static void le32(uint8_t *p,uint32_t v) {for(unsigned i=0;i<4;i++)p[i]=(uint8_t)(v>>(i*8));}
+ /* Synthetic VU upload and XGKICK through the very Port_GsVif1Chain entry
+@@ -60,6 +54,9 @@
+         dr_gs_native_unbind();
+     }
+     if(!e) {
++        const uint64_t init_gif[12]={0x1000000000008005ull,14,0,0x49,0,0x22,0,0x45,0,8,0,9};
++        e=dr_dma_engine_send_u64(init_gif,6);
++        if(e)return e;
+         uint64_t db[0x230/8];
+         e=sceGsSetDefDBuff(db,0,512,448,3,0x31,1);
+         if(!e)e=sceGsSwapDBuff(db,0);
+@@ -119,8 +116,8 @@
+     if(!GsGpu_Init()) return -2;
+     stream_error=dr_gs_native_open(stream_gif,NULL);
+     if(stream_error) {GsDraw_XenosClose();return stream_error;}
+-    stream_error=dr_dma_producer_open_mapped(producer_submit,NULL);
+-    if(stream_error) {dr_gs_native_close();GsDraw_XenosClose();return stream_error;}
++    Dma_InitBuffers();stream_error=dr_dma_engine_error();
++    if(stream_error) {dr_dma_engine_close();dr_gs_native_close();GsDraw_XenosClose();return stream_error;}
+     Dma_ResetBuffers();
+     Gs_XenosCaptureEnable(1);
+     /* Exercise mapped NEXT and its patched return through the real consumer.
+@@ -132,7 +129,7 @@
+     xsdk_log_write("mapped DMA NEXT/return diagnostic rc=%d",stream_error);
+     if(!stream_error)stream_error=native_vif_probe();
+     if(!stream_error)palette();
+-    if(stream_error) {dr_dma_producer_close();dr_gs_native_close();GsDraw_XenosClose();Gs_XenosCaptureEnable(0);return stream_error;}
++    if(stream_error) {dr_dma_engine_close();dr_gs_native_close();GsDraw_XenosClose();Gs_XenosCaptureEnable(0);return stream_error;}
+     gGsMainFbp=0;opened=1;
+     xsdk_log_write("GS capture: adapted native producers/Dma_Flush -> bounded DMA/VIF DIRECT -> actual gs_core/GIF -> gs_draw -> sXenosBackend; synthetic data, no battle");
+     return 0;
+@@ -195,6 +192,6 @@
+ {
+     if(!opened)return 0;
+     int e=GsDraw_XenosClose();if(e)return e;
+-    e=dr_dma_producer_close();if(e)return e;
++    e=dr_dma_engine_close();if(e)return e;
+     dr_gs_native_close();Gs_XenosCaptureEnable(0);opened=0;return 0;
+ }
+--- /dev/null
++++ b/src/dr_dma_engine.h
+@@ -0,0 +1,2 @@
++/* SPDX-License-Identifier: AGPL-3.0-or-later */
++#include "../engine/graphics/dr_dma_engine.h"
+--- a/src/dr_dma_producer.c
++++ b/src/dr_dma_producer.c
+@@ -89,6 +89,7 @@
+     free(dma.owner[2]);free(dma.owner[1]);free(dma.owner[0]);memset(&dma,0,sizeof(dma));return 0;
+ }
+ int dr_dma_producer_error(void) {return dma.error;}
++int dr_dma_producer_is_open(void) {return dma.submit || dma.mapped_submit;}
+ int dr_dma_producer_view(DrGsSpan *span)
+ {
+     if(!span)return DR_DMA_INVALID;
+--- a/src/dr_dma_producer.h
++++ b/src/dr_dma_producer.h
+@@ -19,6 +19,7 @@
+ int dr_dma_producer_open(DrDmaSubmit,void *);
+ int dr_dma_producer_close(void);
+ int dr_dma_producer_error(void);
++int dr_dma_producer_is_open(void);
+ int dr_dma_producer_view(DrGsSpan *); /* read-only queued bytes, before FINISH/END */
+ /* Explicit input types. Canonical data already contains complete LE DMA
+  * quadwords. Native numeric u32 arrays are serialized word by word. Neither
+--- a/src/main.c
++++ b/src/main.c
+@@ -260,7 +260,7 @@
+     XbPlatform_Install();
+     DrLobby lobby;dr_lobby_init(&lobby);int logged_lobby_state=LOBBY_OFF;
+     demo_init(&ui);settings_load();
+-    xsdk_log_write("DragonRage360 demo 0.30: native VIF/VU / platform diagnostics; Battle_Main not linked.");
++    xsdk_log_write("DragonRage360 demo 0.31: native VIF/VU / platform diagnostics; Battle_Main not linked.");
+     xsdk_log_write("%s: BPE decode + animation endian synthetic self-test",dr_resource_selftest()?"PASS":"FAIL");
+     xsdk_log_write("%s: bounded BIN + motion + skeleton synthetic self-test",dr_container_selftest()?"PASS":"FAIL");
+     xsdk_log_write("%s: GS texture address synthetic self-test",dr_gs_texture_selftest()?"PASS":"FAIL");
+@@ -374,7 +374,7 @@
+         if(capture_mode) {
+             int error=dr_capture_demo_draw();
+             if(error) {xsdk_log_write("FAIL: actual capture draw rc=%d",error);if(!dr_capture_demo_close())capture_mode=false;}
+-            xsdk_text_draw(50,44,2,0xffe0e0ff,"CAPTURA ORIGINAL GS · 0.30 EXPERIMENTAL");
++            xsdk_text_draw(50,44,2,0xffe0e0ff,"CAPTURA ORIGINAL GS · 0.31 EXPERIMENTAL");
+             xsdk_text_draw(52,100,1,0xffe0e0ff,"Captura GS / VU / sombras / contorno / tabelas por ID e Z");
+             xsdk_text_draw(52,650,1,0xffe0e0ff,"Dados sintéticos · sem combate · B voltar");
+         } else if(body_mode) {
+@@ -383,7 +383,7 @@
+                 xsdk_log_write("FAIL: real body diagnostic draw rc=%d",error);
+                 if(!dr_body_demo_close())body_mode=false;
+             }
+-            xsdk_text_draw(50,44,2,0xffe0e0ff,"MODELO DA ISO · POSE DE REFERÊNCIA · 0.30");
++            xsdk_text_draw(50,44,2,0xffe0e0ff,"MODELO DA ISO · POSE DE REFERÊNCIA · 0.31");
+             xsdk_text_draw(52,100,1,0xffe0e0ff,"Corpo e materiais reais / programa 0 da VU1");
+             xsdk_text_draw(950,175,1,0xffe0e0ff,"Texturas do pacote");
+             xsdk_text_draw(52,650,1,0xffe0e0ff,"Pose fixa / sem combate · X expressão · B voltar");
+@@ -393,7 +393,7 @@
+                 xsdk_log_write("FAIL: native graphics diagnostic draw, error=%d",error);
+                 dr_graphics_demo_close();graphics_mode=false;
+             }
+-            xsdk_text_draw(50,44,2,0xff101020,"DIAGNÓSTICO GS · DATE/FBA · 0.30");
++            xsdk_text_draw(50,44,2,0xff101020,"DIAGNÓSTICO GS · DATE/FBA · 0.31");
+             xsdk_text_draw(52,100,1,0xff101020,"PSMT8 / paleta / MODULATE / alpha / aditivo");
+             xsdk_text_draw(52,650,1,0xff101020,"Dados sintéticos · Y captura original · B voltar");
+         } else demo_draw(&ui,&paint,tick);
+--- a/tests/check_xex.py
++++ b/tests/check_xex.py
+@@ -31,9 +31,9 @@
+ assert required<=defined, 'body pipeline/native modules absent from link'
+ capture_required={'Dma_Flush','Dma_ResetBuffers','Dma_AddFrame','Dma_AddScissor','Dma_AddXyOffset','Dma_AddZbuf','dr_dma_write_ad','dr_dma_producer_open_mapped','dr_dma_map_chain','Dma_AddNext','dr_gs_stream_init','dr_gs_stream_chain','dr_gs_stream_vif','dr_vu1_vif_control','sXenosBackend','GsGpu_Init','GsGpu_Draw','GsGpu_DrawVu0','GsGpu_DrawVu4','GsGpu_DrawVu6','dr_gs_replay','dr_vu0_vert_container','dr_vu4_vert_container','dr_vu6_vert_container','dr_outline_frag_container','dr_dclut_frag_container','Gs_Gif','Gs_XenosCaptureEnable','GsDraw_XenosSubmit','dr_capture_demo_open','dr_capture_demo_draw'}
+ assert capture_required<=defined, 'actual capture/backend integration absent from link'
+-native_required={'Port_GsMarker','sceGsSyncPath','sceGsSetDefStoreImage','sceGsExecStoreImage','dr_gs_backend_sync','GsDraw_XenosReadFrameExact','sceGsSetDefDBuff','sceGsPutDrawEnv','sceGsSwapDBuff','Port_GsVif1Chain','Port_GsGifChannel','dr_gs_native_open','dr_gs_native_bind','dr_gs_native_vif1','dr_gs_native_gif','dr_gs_native_error','dr_gs_stream_gif_chain'}
++native_required={'Dma_InitBuffers','Dma_SendGif','dr_dma_engine_init','dr_dma_engine_send_u64','Port_GsMarker','sceGsSyncPath','sceGsSetDefStoreImage','sceGsExecStoreImage','dr_gs_backend_sync','GsDraw_XenosReadFrameExact','sceGsSetDefDBuff','sceGsPutDrawEnv','sceGsSwapDBuff','Port_GsVif1Chain','Port_GsGifChannel','dr_gs_native_open','dr_gs_native_bind','dr_gs_native_vif1','dr_gs_native_gif','dr_gs_native_error','dr_gs_stream_gif_chain'}
+ assert native_required<=defined, 'shared native VIF/GIF engine entry points absent'
+-platform_required={'XbPlatform_Install','XbPlatform_ProbeFiles','XbDisc_Mount','ADXF_ReadNw','ADXF_OpenAfs',
++platform_required={'sceOpen','sceClose','sceRead','sceLseek','sceCdSearchFile','XbIsoFiles_Probe','XbDisc_Generation','XbPlatform_Install','XbPlatform_ProbeFiles','XbDisc_Mount','ADXF_ReadNw','ADXF_OpenAfs',
+                    'XbRes_Install','XbRes_Report','XbRes_LoadMap','XbRes_RegisterChecked',
+                    'XbRes_RegisterAnimation','XbRes_RegisterSkeleton','gXbFilePostRead'}
+ assert platform_required<=defined, 'resource read hook/platform integration absent from link'
+@@ -73,6 +73,6 @@
+         'platform_sources_compiled':True,'platform_resource_hook_linked':True,
+         'linked_platform_symbols':sorted(platform_required),'Bpe_Decode_linked':'Bpe_Decode' in defined,
+         'experimental_backend_linked':True,'original_GS_capture_linked':True,'linked_capture_symbols':sorted(capture_required),'registration_patch_provided':True,
+-        'native_VU_shader_path_linked':True,'shadow_stencil_run_path_linked':True,'buffer_consumers_linked':['outline from frozen IDs','depth/ID CLUT with raw alpha MRT','sampled target raw alpha and primitive feedback resolves'],'bounded_DMA_VIF_consumer_linked':True,'combat_DMA_producers_adapted':False,'adapted_DMA_producer_subset_linked':['Frame','Zbuf','Scissor','XYOffset','AD register','Flush','ResetBuffers'],'native_packet_producers_compiled':['Dma_Alloc','Dma_AddData','Dma_AddRef','Dma_BeginDirect','Dma_EndDirect','Dma_AddNext'],'mapped_chain_diagnostic_linked':True,'scope':'0.30 adds ordered effect marker, blocking real GPU sync and exact CT24 RGB frame readback for supported game profile; no hardware execution. 0.27 replaces native legacy DMA/VIF/GIF traversal with bounded canonical mappings and one shared VU session; Port_Gs entry points and synthetic MPG/UNPACK/MSCAL/XGKICK probe linked. No combat boot/presentation integration. 0.25 DMA patch and platform 0.4 integrated: ADXF post-read, converter registry/map/adapters and first-file ISO probes; combat remains outside XEX. Prior 0.24 features: adapted canonical-LE register producers and adapted Dma_Flush/ResetBuffers linked to bounded DMA/VIF/GS capture in synthetic diagnostic; rectangle and other helpers byte-tested against original source; Battle_Main, full combat producers and IA/collisions/animation integration absent; no hardware pixel validation'}
++        'native_VU_shader_path_linked':True,'shadow_stencil_run_path_linked':True,'buffer_consumers_linked':['outline from frozen IDs','depth/ID CLUT with raw alpha MRT','sampled target raw alpha and primitive feedback resolves'],'bounded_DMA_VIF_consumer_linked':True,'combat_DMA_producers_adapted':False,'adapted_DMA_producer_subset_linked':['Frame','Zbuf','Scissor','XYOffset','AD register','Flush','ResetBuffers'],'native_packet_producers_compiled':['Dma_Alloc','Dma_AddData','Dma_AddRef','Dma_BeginDirect','Dma_EndDirect','Dma_AddNext'],'mapped_chain_diagnostic_linked':True,'native_DMA_buffer_initialization_linked':True,'raw_ISO_Sony_byte_file_API_linked':True,'scope':'0.31 adds shared DMA initialization and typed boot GIF plus read-only ISO Sony byte-file API and bounded ELF probe; Game_Main and Battle_Main absent. 0.30 adds ordered effect marker, blocking real GPU sync and exact CT24 RGB frame readback for supported game profile; no hardware execution. 0.27 replaces native legacy DMA/VIF/GIF traversal with bounded canonical mappings and one shared VU session; Port_Gs entry points and synthetic MPG/UNPACK/MSCAL/XGKICK probe linked. No combat boot/presentation integration. 0.25 DMA patch and platform 0.4 integrated: ADXF post-read, converter registry/map/adapters and first-file ISO probes; combat remains outside XEX. Prior 0.24 features: adapted canonical-LE register producers and adapted Dma_Flush/ResetBuffers linked to bounded DMA/VIF/GS capture in synthetic diagnostic; rectangle and other helpers byte-tested against original source; Battle_Main, full combat producers and IA/collisions/animation integration absent; no hardware pixel validation'}
+ (root/'VALIDACAO.json').write_text(json.dumps(report,ensure_ascii=False,indent=2)+'\n')
+ print(json.dumps(report,ensure_ascii=False,indent=2))

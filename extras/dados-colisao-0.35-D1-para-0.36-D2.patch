@@ -1,0 +1,2034 @@
+--- a/LEIA-ME.txt
++++ b/LEIA-ME.txt
+@@ -1,3 +1,7 @@
++ATUALIZAÇÃO 0.36-D2: consulte RELATORIO-0.36-D2.md. O XEX da raiz é o diagnóstico D2, sem luta jogável. Restam 4 faixas/54 bytes no catálogo e o boot/instalação de recursos. Colisão do cenário validada em host, não instalada no combate. Sem teste desta versão no Xbox.
++
++DOCUMENTAÇÃO HISTÓRICA ABAIXO:
++
+ # Atualização de diagnóstico 0.33-HW1
+ 
+ Leia TESTE-AUTOMATICO-HW1.md primeiro. Novo default.xex com teste gráfico
+--- a/Makefile
++++ b/Makefile
+@@ -5,7 +5,7 @@
+ # Retain real native component APIs for static verification in the diagnostic.
+ NATIVE_API_ROOTS := -Wl,--undefined=sceMpegInit -Wl,--undefined=sceMpegCreate -Wl,--undefined=sceMpegDelete -Wl,--undefined=sceMpegReset -Wl,--undefined=sceMpegIsEnd -Wl,--undefined=sceMpegAddCallback -Wl,--undefined=sceMpegAddStrCallback -Wl,--undefined=sceMpegDemuxPss -Wl,--undefined=sceMpegGetPicture -Wl,--undefined=sceGsResetPath -Wl,--undefined=sceGsResetGraph -Wl,--undefined=dr_gs_movie_build -Wl,--undefined=dr_gs_movie_send -Wl,--undefined=XbAdx_Clock -Wl,--undefined=ADXT_Init -Wl,--undefined=ADXT_Create -Wl,--undefined=ADXT_SetReloadSct -Wl,--undefined=ADXT_SetSvrFreq -Wl,--undefined=ADXT_StartAfs -Wl,--undefined=ADXT_StartFname -Wl,--undefined=ADXT_Stop -Wl,--undefined=ADXT_Pause -Wl,--undefined=ADXT_SetOutVol -Wl,--undefined=ADXT_GetOutVol -Wl,--undefined=ADXT_SetOutPan -Wl,--undefined=ADXT_SetOutputMono -Wl,--undefined=ADXT_GetStat -Wl,--undefined=XbOverlay_PrepareBuild -Wl,--undefined=XbOverlay_Load -Wl,--undefined=XbMpeg_Open -Wl,--undefined=XbMpeg_Next -Wl,--undefined=XbMpeg_Close
+ CFLAGS := -mcpu=cell -fno-pic -std=gnu17 -MMD -MP -O2 -g -ffunction-sections -fdata-sections -Wall -Wextra -Werror -I$(XSDK)/include -Isrc -Iengine/graphics -Iengine/capture/port/src/gs -Iengine/platform/platform -DDR_XBOX360
+-OBJECTS := build/dr_gs_movie.o build/dr_dma_engine.o build/dr_gs_native.o build/dr_dma_producer.o build/dr_gs_stream.o build/gs_draw.o build/gs_core.o build/gs_sony.o build/dr_gs_backend.o build/dr_gs_replay.o build/dr_capture_demo.o build/dr_capture_platform.o build/main.o build/demo_ui.o build/dr_disc.o build/bt3_wire.o build/net_check.o build/lobby.o build/dr_anim.o build/dr_bpe.o build/dr_resource_selftest.o build/dr_container.o build/dr_skeleton.o build/dr_xenos.o build/dr_gs_texture.o build/dr_graphics_demo.o build/dr_body_demo.o build/dr_texfile.o build/dr_body_pipeline.o build/dr_body_model.o build/dr_elf.o build/dr_face_vif.o build/dr_targets.o build/dr_vu1.o build/dr_vu1_selftest.o build/save_unlock.o build/save_export.o
++OBJECTS := build/dr_gs_movie.o build/dr_dma_engine.o build/dr_gs_native.o build/dr_dma_producer.o build/dr_gs_stream.o build/gs_draw.o build/gs_core.o build/gs_sony.o build/dr_gs_backend.o build/dr_gs_replay.o build/dr_capture_demo.o build/dr_capture_platform.o build/main.o build/demo_ui.o build/dr_disc.o build/bt3_wire.o build/net_check.o build/lobby.o build/dr_anim.o build/dr_bpe.o build/dr_resource_selftest.o build/dr_container.o build/dr_stage_collision.o build/dr_skeleton.o build/dr_xenos.o build/dr_gs_texture.o build/dr_graphics_demo.o build/dr_body_demo.o build/dr_texfile.o build/dr_body_pipeline.o build/dr_body_model.o build/dr_elf.o build/dr_face_vif.o build/dr_targets.o build/dr_vu1.o build/dr_vu1_selftest.o build/save_unlock.o build/save_export.o
+ .PHONY: all clean host-test
+ PLATFORM_OBJECTS := $(patsubst engine/platform/platform/%.c,build/%.o,$(wildcard engine/platform/platform/*.c))
+ OBJECTS += $(PLATFORM_OBJECTS)
+@@ -48,6 +48,8 @@
+ build/dr_vu1.o: CFLAGS += -ffp-contract=off
+ 
+ build/dr_body_pipeline.o: CFLAGS += -ffp-contract=off
++
++build/dr_stage_collision.o: CFLAGS += -mcheck-fpr-alignment
+ 
+ # Additional compile checks; actual GS capture/backend now also enter the title link.
+ # Combat simulation and full PS2 platform layers remain absent.
+--- a/PENDENCIAS.md
++++ b/PENDENCIAS.md
+@@ -1,3 +1,7 @@
++ATUALIZAÇÃO 0.36-D2: consulte RELATORIO-0.36-D2.md. O XEX da raiz é o diagnóstico D2, sem luta jogável. Restam 4 faixas/54 bytes no catálogo e o boot/instalação de recursos. Colisão do cenário validada em host, não instalada no combate. Sem teste desta versão no Xbox.
++
++DOCUMENTAÇÃO HISTÓRICA ABAIXO:
++
+ # Atualização de diagnóstico 0.33-HW1
+ 
+ Leia TESTE-AUTOMATICO-HW1.md primeiro. Novo default.xex com teste gráfico
+--- a/README.md
++++ b/README.md
+@@ -1,3 +1,17 @@
++# DragonRage360 0.36-D2 — revisão dos dados e colisão do cenário
++
++Novo `default.xex` recompilado e verificado estaticamente. **Ainda é diagnóstico; não inicia uma luta e não foi executado no Xbox/Xenia.**
++
++- Faixas sem tipo: 168 → 4, com 54 bytes restantes.
++- Os 23 trechos suprimidos foram revisados como preenchimento de alinhamento antes dos símbolos.
++- Leitor nativo de colisão do cenário 0: 100 zonas e 13.583 ocorrências de triângulos conferidas com dados reais e leitura independente.
++- Catálogo: 2.736 operações; 1.779 slots de ponteiro conferidos no vínculo final. `Battle_Main` continua protegido antes de acessar o estado.
++
++O startup `typed-data` agora também registra a colisão no `default.log`. Faltam os recursos vivos e o boot da luta; o leitor não instala o cenário no motor. Leia [RELATORIO-0.36-D2.md](RELATORIO-0.36-D2.md). Fontes atuais na raiz; patch incremental em `extras/`, para quem parte exatamente da 0.35-D1. Binário anterior em `diagnostico-anterior-D1/`.
++
++---
++Documentação histórica (contagens e binário da raiz substituídos acima):
++
+ # DragonRage360 0.35-D1 — manifesto tipado PARCIAL
+ 
+ O novo default.xex testa a carga parcial das tabelas pela ISO do usuário.
+--- /dev/null
++++ b/RELATORIO-0.36-D2.md
+@@ -0,0 +1,86 @@
++# DragonRage360 0.36-D2 — dados revisados e colisão do cenário
++
++24/10/2026. Novo XEX de diagnóstico, recompilado para PowerPC e vinculado sem símbolos indefinidos ou conflitos de ABI. **Não inicia uma luta. Esta versão não foi executada no Xbox nem no Xenia.**
++
++## Resultado desta revisão
++
++| Item | 0.35-D1 | 0.36-D2 |
++|---|---:|---:|
++| Faixas sem tipo confirmado | 168 / 5.751 bytes | 4 / 54 bytes |
++| Trechos suprimidos não revisados | 23 / 62 bytes | 0 |
++| Bytes cobertos por tipos ou invariância de zero, neste catálogo | 29.683 | 35.310 |
++| Bytes considerados para carga | 35.434 | 35.364 |
++| Operações do catálogo | 2.157 | 2.736 |
++| Regiões | 33 | 33 |
++| Slots de ponteiro verificados no vínculo final | 1.694 | 1.779 |
++
++As contagens medem somente o catálogo de tabelas selecionadas; não representam uma porcentagem do port ou de todos os recursos do jogo.
++
++`reviewed_types.py` acrescenta 80 descrições limitadas pelos layouts e leitores públicos: menus e submenus de pausa, UTF-16 das fontes, nomes e definições de ícones, tabelas de ícones terminadas em ponteiro nulo, scripts de mira, chaves de mandíbula, constantes matemáticas, cores RGBA, códigos de IA explicitamente lidos como bytes e strings usadas pelas APIs de arquivos/filmes/áudio. Contagens e ponteiros dos menus são percorridos e validados; não se converte qualquer bloco desconhecido em uma matriz de palavras.
++
++Os 23 trechos suprimidos estão antes do primeiro símbolo de seus blocos. `port/tools/gen_data.py:convert` insere `addr & 15` bytes nesse ponto para preservar alinhamento. Eles não pertencem aos objetos originais. O gerador agora comprova essa posição e o módulo 16, registra as exclusões em `alignment_prefixes` e deixa esses bytes nativos intactos. Ponteiros para esse preenchimento são recusados. Isso explica a redução do denominador de bytes considerados; os bytes não foram restaurados como dados do jogo.
++
++O gerador completo foi executado novamente a partir do DWARF do novo vínculo PowerPC. Suas operações coincidiram com a revisão independente do catálogo anterior. `refine_typed_manifest.py` permite repetir essa revisão preservando as ligações simbólicas anteriores; ele não comprova um novo vínculo. O catálogo distribuído vem do gerador completo desta compilação.
++
++## Colisão real do cenário 0
++
++Novo `src/dr_stage_collision.c/.h`, com cópia idêntica em `engine/resource/`. A implementação lê dados little-endian para valores nativos, valida offsets contados em palavras a partir do primeiro membro do pack e fornece triângulos e consultas por caixa fechada em ordem esquerda-direita. Não dereferencia ponteiros MIPS e não modifica o recurso.
++
++Validação do cenário USA, arquivo lógico 369 / AFS índice 368:
++
++- 100 zonas; 151 ocorrências de malha estática ou de objetos destrutíveis;
++- 27.015 registros de nó e 13.583 ocorrências de triângulo nesses percursos;
++- limites lidos: raio 1.200, topo -350, fundo 1.000;
++- os triângulos nativos bateram com uma leitura independente em Python: FNV64 `04645362575aed17`;
++- ASan/UBSan: offsets/contagens inválidos, ciclo, vizinho fora da faixa, vértice inválido, NaN e truncamento recusados; entrada inalterada;
++- sete zonas de borda têm offset zero para a malha estática: o adaptador as mantém ausentes e nunca interpreta o cabeçalho do cenário como malha.
++
++Essas são ocorrências nos percursos, não uma contagem de triângulos únicos do cenário. A visão conserva os valores e as coordenadas originais; não executa a física, nem prepara objetos, animações, renderização ou estado de destruição. Ainda **não instala `gBtlStage` ou substitui os leitores originais no combate**.
++
++O startup `typed-data` no novo XEX também lê esse recurso pela ISO montada e registra o diagnóstico de colisão no `default.log`, incluindo uma consulta à zona 0. Essa etapa ainda precisa de execução no console. Ela não libera o combate.
++
++## Compilação e verificações
++
++- Motor/base: 396 de 396 unidades; motor com catálogo: 397 de 397. Vínculos estritos: zero indefinidos e zero conflitos de ABI. Não foi desativada a verificação do linker e não foram criados stubs para fechar nomes.
++- Upstream: `3ca419c7966b11438e2dc3c9a7e1914f102ed545`.
++- xsdk: `57b02f1e60667e37d22c3aa613d23d2486514ff8`; GCC 15.3.0 / binutils 2.47 / newlib 4.6.0.20260123, com patches do SDK. A biblioteca e as unidades do título foram recompiladas.
++- O leitor novo compilou para PowerPC com `-mcheck-fpr-alignment`.
++- Catálogo final: 33 destinos e todas as 2.736 operações verificados no ELF, incluindo 1.779 slots de ponteiro. 1.473 ligações mudaram de endereço e foram realocadas simbolicamente.
++- O carregador real passou em buffers de teste com os dois programas USA, ASan/UBSan, hash incorreto, ponteiro incorreto, sobreposição, limites, reentrada e recusa de catálogo incompleto. Isso não é execução PowerPC.
++- Os 18 recursos do perfil fixo foram relidos pelos adaptadores reais: 69 partes em cada modelo, 718 animações não vazias convertidas, 110 slots BPE vazios reconhecidos e zero falhas entre as animações não vazias examinadas.
++- Nesta sessão os testes de recursos usaram uma imagem esparsa com intervalos HTTP verificados, não uma ISO completa validada novamente. Cada leitura do transporte de teste foi obrigada a cair em intervalos presentes. Os hashes dos 18 recursos coincidiram com o inventário anterior. Os programas USA foram conferidos por SHA-256.
++- A auditoria das seções manteve os 103 símbolos de biblioteca legada isolados e reproduziu a falha quando eles foram forçados como raízes. A sondagem de `Game_Main` completo continua com 69 dependências. Não houve implementação de menus gerais por meio de retornos vazios.
++- `Battle_Main` está no XEX; a primeira chamada no seu código PowerPC continua sendo `XbTypedData_RequireBattleData`, seguida da saída condicional antes de `Battle_GetWork`. O marcador permanece 2. O diagnóstico não chama `Battle_Main`.
++- Formato XEX2, ABI PowerPC, importações, cabeçalhos e cadeia de hashes verificados estaticamente. GPU, pixels, controle durante luta, áudio de partida e estabilidade não foram testados em hardware.
++
++SHA-256 do **novo default.xex**:
++`8ede255841e24eec476c3e4ad292cc9b05a3b92ab0dfbf5a8b3ed21565e1ba58`
++
++## O que continua bloqueando uma luta
++
++O manifesto mantém `complete=false`. Quatro faixas não foram tipadas por palpite:
++
++| Faixa | Bytes | Revisão necessária |
++|---|---:|---|
++| `D_002EC2C0 + 16` | 16 | Constante adjacente ao vetor declarado; falta provar seu tipo ou que não é consumida. |
++| `D_002FE8D0` | 8 | Área do antigo pool de constantes; falta delimitar os campos realmente necessários. |
++| `D_002FE958` | 22 | Dados que incluem marcadores de heap; falta identificar o leitor e os limites sem converter texto como palavras. |
++| `D_002FEB88` | 8 | Constantes sem declaração/leitor suficiente para autorizar o layout. |
++
++Depois disso ainda é necessário preparar os recursos vivos dos dois lutadores e do cenário: estruturas completas, conversões internas, binders e animações restantes, referências e estados iniciais; instalar o cenário e os objetos no motor; executar o boot mínimo e integrar controle, simulação e apresentação. A inspeção das malhas e o leitor de colisão não substituem essa inicialização. O renderizador original continua dependendo dos recursos e pacotes corretos. Não há partida jogável, validação de desempenho ou online de combate nesta versão.
++
++## Uso e reprodução
++
++O `default.xex` da raiz é 0.36-D2; o 0.35-D1 anterior foi preservado em `diagnostico-anterior-D1`. Os fontes da raiz já estão atualizados. Não aplique o patch incremental sobre eles outra vez.
++
++No Xbox RGH, mantenha `startup_test.txt` com `typed-data` e a ISO do usuário nas pastas reconhecidas pelo launcher. O teste escolhe a primeira ISO encontrada. O esperado é um relatório de carga parcial e de colisão, com combate bloqueado. Guarde o `default.log`. Para o diagnóstico gráfico anterior, use a configuração `startup_test-graphics.txt`. Nada aqui confirma a saída gráfica do motor em luta.
++
++Com toolchain e SDK públicos nas revisões acima:
++
++```sh
++make typed-data-diagnostic ISO=/caminho/jogo.iso XSDK=/caminho/xsdk TOOLCHAIN=/caminho/powerpc-xsdk-elf- UPSTREAM=/caminho/dragonrage-upstream
++```
++
++Se os headers GMP do host não estiverem nos caminhos padrão, passe os diretórios por `PLUGIN_ARGS='--plugin-include /caminho/include --plugin-include /caminho/include/x86_64-linux-gnu'`.
++
++`engine/tools/test_stage_collision.py` recebe um pack do cenário do próprio usuário e um diretório de saída. `test_fixed_resources.py --coverage ...` acrescenta a verificação dos intervalos presentes quando o input local é esparso. Os relatórios e evidências desta compilação ficam em `checkpoint-dados-D2/`. ISO, programas PS2 e recursos extraídos não estão no pacote. O código modificado continua sob as licenças indicadas no projeto.
+--- /dev/null
++++ b/engine/resource/dr_stage_collision.c
+@@ -0,0 +1,126 @@
++/* SPDX-License-Identifier: AGPL-3.0-or-later */
++#include "dr_stage_collision.h"
++#include "dr_container.h"
++#include <math.h>
++#include <string.h>
++#include <limits.h>
++static uint32_t rd(const uint8_t *p){return (uint32_t)p[0]|(uint32_t)p[1]<<8|(uint32_t)p[2]<<16|(uint32_t)p[3]<<24;}
++static float fl(const uint8_t *p){uint32_t u=rd(p);float f;memcpy(&f,&u,4);return f;}
++static int span(const DrStageCollision *v,uint32_t word,size_t n,size_t *at){
++ if((uint64_t)word*4>v->size)return DR_STAGE_BOUNDS;
++ size_t o=(size_t)word*4;if(o>v->size || n>v->size-o)return DR_STAGE_BOUNDS;*at=o;return 0;
++}
++static int array(const DrStageCollision *v,uint32_t word,uint32_t n,size_t stride,size_t *at){
++ if(n>v->size/stride)return DR_STAGE_BOUNDS;
++ return span(v,word,(size_t)n*stride,at);
++}
++static int floats(const uint8_t *p,unsigned n){for(unsigned i=0;i<n;i++)if(!isfinite(fl(p+4*i)))return DR_STAGE_NUMBER;return 0;}
++static int triangle(const DrStageCollision *v,size_t m,uint32_t poly,DrStageTriangle *out){
++ const uint8_t *h=v->base+m;size_t p;if(poly>v->size/32 || span(v,rd(h+16),(size_t)(poly+1)*32,&p))return DR_STAGE_BOUNDS;
++ p+=(size_t)poly*32;const uint8_t *q=v->base+p;
++ if(floats(q+16,4))return DR_STAGE_NUMBER;
++ DrStageTriangle t;t.flags=rd(q);for(unsigned i=0;i<4;i++)t.plane[i]=fl(q+16+4*i);
++ for(unsigned i=0;i<3;i++){
++  uint32_t index=rd(q+4+4*i);size_t a;
++  if(index>v->size/16 || span(v,rd(h+20),(size_t)(index+1)*16,&a))return DR_STAGE_BOUNDS;
++  a+=(size_t)index*16;if(floats(v->base+a,4))return DR_STAGE_NUMBER;
++  for(unsigned j=0;j<4;j++)t.vertex[i][j]=fl(v->base+a+4*j);
++ }
++ if(out)*out=t;
++ return 0;
++}
++static int walk(const DrStageCollision *v,size_t mesh,size_t nodes,uint32_t count,uint32_t index,unsigned depth,uint32_t *budget){
++ if(index>=count || depth>=64 || !*budget)return DR_STAGE_TREE;
++ --*budget;const uint8_t *p=v->base+nodes+(size_t)index*32;
++ if(floats(p,6))return DR_STAGE_NUMBER;
++ for(unsigned i=0;i<3;i++)if(fl(p+4*i)>fl(p+12+4*i))return DR_STAGE_NUMBER;
++ uint32_t left=rd(p+24),right=rd(p+28);
++ if(right==UINT32_MAX){if(left==UINT32_MAX)return 0;return triangle(v,mesh,left,NULL);}
++ int e=walk(v,mesh,nodes,count,left,depth+1,budget);return e?e:walk(v,mesh,nodes,count,right,depth+1,budget);
++}
++static int mesh(DrStageCollision *v,uint32_t word){
++ /* Null static meshes occur in seven stage-0 boundary zones. Keep absent;
++  * never interpret the stage header itself as a collision mesh. */
++ if(!word)return 0;
++ size_t m;if(span(v,word,24,&m))return DR_STAGE_BOUNDS;
++ uint32_t n=rd(v->base+m);if((int32_t)n<=0)return 0;
++ size_t nodes;if(array(v,rd(v->base+m+12),n,32,&nodes))return DR_STAGE_BOUNDS;
++ uint32_t budget=n>UINT32_MAX/2?UINT32_MAX:n*2;
++ int e=walk(v,m,nodes,n,0,0,&budget);if(e)return e;
++ /* Count stored leaves for diagnostics; all reachable leaves were checked. */
++ uint32_t polygons=0;for(uint32_t i=0;i<n;i++)if(rd(v->base+nodes+(size_t)i*32+28)==UINT32_MAX && rd(v->base+nodes+(size_t)i*32+24)!=UINT32_MAX)polygons++;
++ if(v->nodes>UINT32_MAX-n || v->polygons>UINT32_MAX-polygons || v->meshes==UINT32_MAX)return DR_STAGE_BOUNDS;
++ v->nodes+=n;v->polygons+=polygons;v->meshes++;return 0;
++}
++int dr_stage_collision_open(const void *pack,size_t bytes,DrStageCollision *out){
++ if(!out)return DR_STAGE_FORMAT;
++ memset(out,0,sizeof(*out));size_t off,n;if(!pack || bytes>UINT32_MAX || dr_pack_memory_entry(pack,bytes,0,&off,&n,NULL) || n<96)return DR_STAGE_FORMAT;
++ DrStageCollision v={0};v.base=(const uint8_t *)pack+off;v.size=n;
++ v.zones=rd(v.base+56);v.objects=rd(v.base+68);size_t z,b;
++ if(!v.zones || array(&v,rd(v.base+60),v.zones,64,&z) || span(&v,rd(v.base+64),12,&b))return DR_STAGE_BOUNDS;
++ if(z>UINT32_MAX)return DR_STAGE_BOUNDS;
++ v.zone_offset=(uint32_t)z;
++ if(floats(v.base+b,3))return DR_STAGE_NUMBER;
++ v.radius=fl(v.base+b);v.top=fl(v.base+b+4);v.bottom=fl(v.base+b+8);
++ if(v.radius<=0 || v.top>v.bottom)return DR_STAGE_NUMBER;
++ for(uint32_t i=0;i<v.zones;i++){
++  const uint8_t *q=v.base+z+(size_t)i*64;size_t near,recs;uint32_t nn=rd(q+8),nr=rd(q+20);
++  if(array(&v,rd(q+12),nn,4,&near) || array(&v,rd(q+24),nr,16,&recs))return DR_STAGE_BOUNDS;
++  if(floats(q+32,8))return DR_STAGE_NUMBER;
++  for(unsigned j=0;j<3;j++)if(fl(q+48+4*j)<0)return DR_STAGE_NUMBER;
++  for(uint32_t j=0;j<nn;j++)if(rd(v.base+near+(size_t)j*4)>=v.zones)return DR_STAGE_BOUNDS;
++  int e=mesh(&v,rd(q+4));if(e)return e;
++  for(uint32_t j=0;j<nr;j++){
++   const uint8_t *r=v.base+recs+(size_t)j*16;
++   if(rd(r+4)>=v.objects)return DR_STAGE_BOUNDS;
++   e=mesh(&v,rd(r+8));if(e)return e;
++  }
++ }
++ *out=v;return 0;
++}
++int dr_stage_collision_triangle(const DrStageCollision *v,uint32_t zone,int record,uint32_t poly,DrStageTriangle *out){
++ if(!out)return DR_STAGE_FORMAT;
++ memset(out,0,sizeof(*out));
++ if(!v || !v->base || zone>=v->zones || record< -1)return DR_STAGE_BOUNDS;
++ size_t z=v->zone_offset+(size_t)zone*64;if(z>v->size || v->size-z<64)return DR_STAGE_BOUNDS;
++ const uint8_t *q=v->base+z;uint32_t word=rd(q+4);
++ if(record>=0){size_t r;if((uint32_t)record>=rd(q+20) || array(v,rd(q+24),rd(q+20),16,&r))return DR_STAGE_BOUNDS;word=rd(v->base+r+(size_t)record*16+8);}
++ if(!word)return DR_STAGE_BOUNDS;
++ size_t m;if(span(v,word,24,&m))return DR_STAGE_BOUNDS;
++ /* Public requests must identify a polygon actually present in this tree. */
++ uint32_t count=rd(v->base+m);size_t nodes;if(array(v,rd(v->base+m+12),count,32,&nodes))return DR_STAGE_BOUNDS;
++ int found=0;for(uint32_t i=0;i<count;i++){const uint8_t *p=v->base+nodes+(size_t)i*32;if(rd(p+28)==UINT32_MAX && rd(p+24)==poly){found=1;break;}}
++ if(!found || poly==UINT32_MAX)return DR_STAGE_BOUNDS;
++ return triangle(v,m,poly,out);
++}
++
++static int query_node(const DrStageCollision *v,size_t m,size_t nodes,uint32_t count,uint32_t index,
++ unsigned depth,uint32_t *budget,const float min[3],const float max[3],DrStageTriangleFn fn,void *ctx,int *result){
++ if(index>=count || depth>=64 || !*budget)return DR_STAGE_TREE;
++ --*budget;const uint8_t *p=v->base+nodes+(size_t)index*32;
++ for(unsigned i=0;i<3;i++)if(max[i]<fl(p+i*4) || fl(p+12+i*4)<min[i])return 0;
++ uint32_t left=rd(p+24),right=rd(p+28);
++ if(right==UINT32_MAX){
++  if(left==UINT32_MAX)return 0;
++  DrStageTriangle t;int e=triangle(v,m,left,&t);if(e)return e;
++  *result|=fn(ctx,left,&t);return 0;
++ }
++ int e=query_node(v,m,nodes,count,left,depth+1,budget,min,max,fn,ctx,result);
++ return e?e:query_node(v,m,nodes,count,right,depth+1,budget,min,max,fn,ctx,result);
++}
++int dr_stage_collision_query(const DrStageCollision *v,uint32_t zone,int record,
++ const float min[3],const float max[3],DrStageTriangleFn fn,void *ctx,int *result){
++ if(!result)return DR_STAGE_FORMAT;
++ *result=0;
++ if(!min || !max || !fn || !v || !v->base || zone>=v->zones || record< -1)return DR_STAGE_BOUNDS;
++ for(unsigned i=0;i<3;i++)if(!isfinite(min[i]) || !isfinite(max[i]) || min[i]>max[i])return DR_STAGE_NUMBER;
++ size_t z=v->zone_offset+(size_t)zone*64;if(z>v->size || v->size-z<64)return DR_STAGE_BOUNDS;
++ const uint8_t *q=v->base+z;uint32_t word=rd(q+4);
++ if(record>=0){size_t r;if((uint32_t)record>=rd(q+20) || array(v,rd(q+24),rd(q+20),16,&r))return DR_STAGE_BOUNDS;word=rd(v->base+r+(size_t)record*16+8);}
++ if(!word)return 0;
++ size_t m;if(span(v,word,24,&m))return DR_STAGE_BOUNDS;
++ uint32_t n=rd(v->base+m);size_t nodes;if((int32_t)n<=0)return 0;
++ if(array(v,rd(v->base+m+12),n,32,&nodes))return DR_STAGE_BOUNDS;
++ uint32_t budget=n>UINT32_MAX/2?UINT32_MAX:n*2;
++ return query_node(v,m,nodes,n,0,0,&budget,min,max,fn,ctx,result);
++}
+--- /dev/null
++++ b/engine/resource/dr_stage_collision.h
+@@ -0,0 +1,27 @@
++/* SPDX-License-Identifier: AGPL-3.0-or-later */
++#ifndef DR_STAGE_COLLISION_H
++#define DR_STAGE_COLLISION_H
++#include <stddef.h>
++#include <stdint.h>
++/* Immutable canonical-LE stage block; no PS2 pointer is dereferenced. Offsets
++ * are WORDS from entry 0, as gfxm_e_d.c / ColMesh_SetBase specify. This view
++ * does not install gBtlStage or claim that the stage renderer is initialized. */
++typedef struct DrStageCollision {
++ const uint8_t *base;size_t size;
++ uint32_t zones,zone_offset,objects,meshes,nodes,polygons;
++ float radius,top,bottom;
++} DrStageCollision;
++typedef struct DrStageTriangle { uint32_t flags;float vertex[3][4],plane[4]; } DrStageTriangle;
++enum { DR_STAGE_FORMAT=-80,DR_STAGE_BOUNDS=-81,DR_STAGE_TREE=-82,DR_STAGE_NUMBER=-83,DR_STAGE_MEMORY=-84 };
++/* Fully validate static and destructible collision before publishing output.
++ * On failure *out is zero; input remains unchanged. */
++int dr_stage_collision_open(const void *pack,size_t bytes,DrStageCollision *out);
++/* record=-1: static mesh; >=0: destructible record in that zone.
++ * polygon index is the original index, NOT the tree leaf index. */
++int dr_stage_collision_triangle(const DrStageCollision *,uint32_t zone,int record,uint32_t polygon,DrStageTriangle *out);
++/* Closed AABB query, original left-before-right leaf order. callback receives
++ * native float values and original polygon flags. No global traversal state. */
++typedef int (*DrStageTriangleFn)(void *,uint32_t polygon,const DrStageTriangle *);
++int dr_stage_collision_query(const DrStageCollision *,uint32_t zone,int record,
++ const float min[3],const float max[3],DrStageTriangleFn,void *,int *result);
++#endif
+--- a/engine/schema/typed_catalog.generated.c
++++ b/engine/schema/typed_catalog.generated.c
+@@ -1982,6 +1982,7 @@
+ {0,3564,4,1,2,0,0},
+ {0,3568,4,4,1,1686160,((uintptr_t)EftCharSlotMgr_Reset+(intptr_t)(0))},
+ {0,3572,4,1,2,0,0},
++{0,3576,32,1,0,0,0},
+ {0,3608,4,4,1,1687872,((uintptr_t)EftBladeMgr_Update+(intptr_t)(0))},
+ {0,3612,4,4,1,1686752,((uintptr_t)EftBladeMgr_Init+(intptr_t)(0))},
+ {0,3616,4,4,1,1687816,((uintptr_t)EftBladeMgr_Term+(intptr_t)(0))},
+@@ -2063,7 +2064,42 @@
+ {0,3956,4,4,1,1732256,((uintptr_t)EftShock_PostUpdate+(intptr_t)(0))},
+ {0,3960,4,4,1,1732232,((uintptr_t)EftShock_Reset+(intptr_t)(0))},
+ {0,3964,4,4,1,1732264,((uintptr_t)EftShock_Draw+(intptr_t)(0))},
+-{0,3968,672,4,0,0,0},
++{0,3968,676,4,0,0,0},
++{0,4644,4,1,0,0,0},
++{0,4648,4,4,0,0,0},
++{0,4652,4,1,0,0,0},
++{0,4656,4,4,0,0,0},
++{0,4660,4,1,0,0,0},
++{0,4664,4,4,0,0,0},
++{0,4668,4,1,0,0,0},
++{0,4672,4,4,0,0,0},
++{0,4676,4,1,0,0,0},
++{0,4680,4,4,0,0,0},
++{0,4684,4,1,0,0,0},
++{0,4688,4,4,0,0,0},
++{0,4692,4,1,0,0,0},
++{0,4696,4,4,0,0,0},
++{0,4700,4,1,0,0,0},
++{0,4704,4,4,0,0,0},
++{0,4708,4,1,0,0,0},
++{0,4712,4,4,0,0,0},
++{0,4716,4,1,0,0,0},
++{0,4720,4,4,0,0,0},
++{0,4724,4,1,0,0,0},
++{0,4728,4,4,0,0,0},
++{0,4732,4,1,0,0,0},
++{0,4736,4,4,0,0,0},
++{0,4740,4,1,0,0,0},
++{0,4744,4,4,0,0,0},
++{0,4748,4,1,0,0,0},
++{0,4752,4,4,0,0,0},
++{0,4756,4,1,0,0,0},
++{0,4760,4,4,0,0,0},
++{0,4764,4,1,0,0,0},
++{0,4768,4,4,0,0,0},
++{0,4772,4,1,0,0,0},
++{0,4776,4,4,0,0,0},
++{0,4780,4,1,0,0,0},
+ {0,4784,4,4,1,2901536,((uintptr_t)D_002C4620+(intptr_t)(0))},
+ {0,4788,4,4,1,2901600,((uintptr_t)D_002C4660+(intptr_t)(0))},
+ {0,4792,4,4,1,1787048,((uintptr_t)BtlAiSeq_PhaseInit+(intptr_t)(0))},
+@@ -2560,159 +2596,464 @@
+ {0,6756,4,4,1,2070520,((uintptr_t)BtlAct_SuperRushSequenceHandler+(intptr_t)(0))},
+ {0,6760,4,4,1,2070520,((uintptr_t)BtlAct_SuperRushSequenceHandler+(intptr_t)(0))},
+ {0,6764,4,4,1,2070520,((uintptr_t)BtlAct_SuperRushSequenceHandler+(intptr_t)(0))},
++{0,6768,4,2,0,0,0},
++{0,6772,4,4,0,0,0},
++{0,6776,4,4,1,0,0},
++{0,6780,4,4,1,0,0},
++{0,6784,32,4,0,0,0},
++{0,6816,4,2,0,0,0},
++{0,6820,4,4,0,0,0},
++{0,6824,4,4,1,0,0},
++{0,6828,4,4,1,0,0},
++{0,6832,32,4,0,0,0},
++{0,6864,4,2,0,0,0},
++{0,6868,4,4,0,0,0},
++{0,6872,4,4,1,0,0},
++{0,6876,4,4,1,0,0},
++{0,6880,32,4,0,0,0},
+ {0,6912,4,4,1,2903664,((uintptr_t)D_002C4E70+(intptr_t)(0))},
+-{0,6936,32,4,0,0,0},
++{0,6916,8,4,0,0,0},
++{0,6924,4,2,0,0,0},
++{0,6928,40,4,0,0,0},
++{0,6968,4,2,0,0,0},
++{0,6972,4,4,0,0,0},
++{0,6976,4,4,1,0,0},
++{0,6980,4,4,1,0,0},
++{0,6984,32,4,0,0,0},
+ {0,7016,4,4,1,2903864,((uintptr_t)D_002C4F38+(intptr_t)(0))},
++{0,7020,8,4,0,0,0},
++{0,7028,4,2,0,0,0},
++{0,7032,36,4,0,0,0},
++{0,7068,4,1,2,0,0},
++{0,7072,4,2,0,0,0},
++{0,7076,4,4,0,0,0},
++{0,7080,4,4,1,0,0},
++{0,7084,4,4,1,0,0},
++{0,7088,32,4,0,0,0},
+ {0,7120,4,4,1,2903968,((uintptr_t)D_002C4FA0+(intptr_t)(0))},
++{0,7124,8,4,0,0,0},
++{0,7132,4,2,0,0,0},
++{0,7136,36,4,0,0,0},
++{0,7172,4,1,2,0,0},
++{0,7176,4,2,0,0,0},
++{0,7180,4,4,0,0,0},
++{0,7184,4,4,1,0,0},
++{0,7188,4,4,1,0,0},
++{0,7192,32,4,0,0,0},
++{0,7224,4,2,0,0,0},
++{0,7228,4,4,0,0,0},
++{0,7232,4,4,1,0,0},
++{0,7236,4,4,1,0,0},
++{0,7240,32,4,0,0,0},
++{0,7272,4,2,0,0,0},
++{0,7276,4,4,0,0,0},
++{0,7280,4,4,1,0,0},
++{0,7284,4,4,1,0,0},
++{0,7288,32,4,0,0,0},
++{0,7320,4,2,0,0,0},
++{0,7324,4,4,0,0,0},
++{0,7328,4,4,1,0,0},
++{0,7332,4,4,1,0,0},
++{0,7336,32,4,0,0,0},
++{0,7368,4,2,0,0,0},
++{0,7372,4,4,0,0,0},
++{0,7376,4,4,1,0,0},
++{0,7380,4,4,1,0,0},
++{0,7384,32,4,0,0,0},
++{0,7416,4,2,0,0,0},
++{0,7420,4,4,0,0,0},
++{0,7424,4,4,1,0,0},
++{0,7428,4,4,1,0,0},
++{0,7432,32,4,0,0,0},
++{0,7464,4,2,0,0,0},
++{0,7468,4,4,0,0,0},
++{0,7472,4,4,1,0,0},
++{0,7476,4,4,1,0,0},
++{0,7480,32,4,0,0,0},
+ {0,7512,4,4,1,2904072,((uintptr_t)D_002C5008+(intptr_t)(0))},
+-{0,7536,32,4,0,0,0},
++{0,7516,8,4,0,0,0},
++{0,7524,4,2,0,0,0},
++{0,7528,40,4,0,0,0},
++{0,7568,4,2,0,0,0},
++{0,7572,4,4,0,0,0},
++{0,7576,4,4,1,0,0},
++{0,7580,4,4,1,0,0},
++{0,7584,32,4,0,0,0},
++{0,7616,4,2,0,0,0},
++{0,7620,4,4,0,0,0},
++{0,7624,4,4,1,0,0},
++{0,7628,4,4,1,0,0},
++{0,7632,32,4,0,0,0},
++{0,7664,4,2,0,0,0},
++{0,7668,4,4,0,0,0},
+ {0,7672,4,4,1,2903912,((uintptr_t)D_002C4F68+(intptr_t)(0))},
+ {0,7676,4,4,1,2173960,((uintptr_t)PauseMenu_SkillListFunc+(intptr_t)(0))},
++{0,7680,32,4,0,0,0},
++{0,7712,4,2,0,0,0},
++{0,7716,4,4,0,0,0},
+ {0,7720,4,4,1,2903808,((uintptr_t)D_002C4F00+(intptr_t)(0))},
+ {0,7724,4,4,1,2173856,((uintptr_t)PauseMenu_ConfirmFunc+(intptr_t)(0))},
++{0,7728,32,4,0,0,0},
++{0,7760,4,2,0,0,0},
++{0,7764,4,4,0,0,0},
+ {0,7768,4,4,1,2903808,((uintptr_t)D_002C4F00+(intptr_t)(0))},
+ {0,7772,4,4,1,2173856,((uintptr_t)PauseMenu_ConfirmFunc+(intptr_t)(0))},
+-{0,7776,32,1,2,0,0},
++{0,7776,32,4,0,0,0},
+ {0,7808,4,4,1,2904464,((uintptr_t)D_002C5190+(intptr_t)(0))},
+ {0,7812,8,4,0,0,0},
+ {0,7820,4,2,0,0,0},
+ {0,7824,36,4,0,0,0},
+ {0,7860,4,1,2,0,0},
++{0,7864,4,2,0,0,0},
++{0,7868,4,4,0,0,0},
++{0,7872,4,4,1,0,0},
++{0,7876,4,4,1,0,0},
++{0,7880,32,4,0,0,0},
++{0,7912,4,2,0,0,0},
++{0,7916,4,4,0,0,0},
++{0,7920,4,4,1,0,0},
++{0,7924,4,4,1,0,0},
++{0,7928,32,4,0,0,0},
++{0,7960,4,2,0,0,0},
++{0,7964,4,4,0,0,0},
+ {0,7968,4,4,1,2903808,((uintptr_t)D_002C4F00+(intptr_t)(0))},
+ {0,7972,4,4,1,2173856,((uintptr_t)PauseMenu_ConfirmFunc+(intptr_t)(0))},
++{0,7976,32,4,0,0,0},
++{0,8008,4,2,0,0,0},
++{0,8012,4,4,0,0,0},
+ {0,8016,4,4,1,2903808,((uintptr_t)D_002C4F00+(intptr_t)(0))},
+ {0,8020,4,4,1,2173856,((uintptr_t)PauseMenu_ConfirmFunc+(intptr_t)(0))},
++{0,8024,32,4,0,0,0},
++{0,8056,4,2,0,0,0},
++{0,8060,4,4,0,0,0},
+ {0,8064,4,4,1,2903808,((uintptr_t)D_002C4F00+(intptr_t)(0))},
+ {0,8068,4,4,1,2173856,((uintptr_t)PauseMenu_ConfirmFunc+(intptr_t)(0))},
++{0,8072,32,4,0,0,0},
++{0,8104,4,2,0,0,0},
++{0,8108,4,4,0,0,0},
+ {0,8112,4,4,1,2903808,((uintptr_t)D_002C4F00+(intptr_t)(0))},
+ {0,8116,4,4,1,2173856,((uintptr_t)PauseMenu_ConfirmFunc+(intptr_t)(0))},
++{0,8120,32,4,0,0,0},
++{0,8152,4,2,0,0,0},
++{0,8156,4,4,0,0,0},
+ {0,8160,4,4,1,2903808,((uintptr_t)D_002C4F00+(intptr_t)(0))},
+ {0,8164,4,4,1,2173856,((uintptr_t)PauseMenu_ConfirmFunc+(intptr_t)(0))},
+-{0,8168,32,1,2,0,0},
++{0,8168,32,4,0,0,0},
+ {0,8200,4,4,1,2904760,((uintptr_t)D_002C52B8+(intptr_t)(0))},
+ {0,8204,8,4,0,0,0},
+ {0,8212,4,2,0,0,0},
+ {0,8216,36,4,0,0,0},
+ {0,8252,4,1,2,0,0},
++{0,8256,4,2,0,0,0},
++{0,8260,4,4,0,0,0},
++{0,8264,4,4,1,0,0},
++{0,8268,4,4,1,0,0},
++{0,8272,32,4,0,0,0},
++{0,8304,4,2,0,0,0},
++{0,8308,4,4,0,0,0},
++{0,8312,4,4,1,0,0},
++{0,8316,4,4,1,0,0},
++{0,8320,32,4,0,0,0},
++{0,8352,4,2,0,0,0},
++{0,8356,4,4,0,0,0},
++{0,8360,4,4,1,0,0},
++{0,8364,4,4,1,0,0},
++{0,8368,32,4,0,0,0},
++{0,8400,4,2,0,0,0},
++{0,8404,4,4,0,0,0},
+ {0,8408,4,4,1,2903808,((uintptr_t)D_002C4F00+(intptr_t)(0))},
+ {0,8412,4,4,1,2173856,((uintptr_t)PauseMenu_ConfirmFunc+(intptr_t)(0))},
++{0,8416,32,4,0,0,0},
++{0,8448,4,2,0,0,0},
++{0,8452,4,4,0,0,0},
+ {0,8456,4,4,1,2903808,((uintptr_t)D_002C4F00+(intptr_t)(0))},
+ {0,8460,4,4,1,2173856,((uintptr_t)PauseMenu_ConfirmFunc+(intptr_t)(0))},
++{0,8464,32,4,0,0,0},
++{0,8496,4,2,0,0,0},
++{0,8500,4,4,0,0,0},
+ {0,8504,4,4,1,2903808,((uintptr_t)D_002C4F00+(intptr_t)(0))},
+ {0,8508,4,4,1,2173856,((uintptr_t)PauseMenu_ConfirmFunc+(intptr_t)(0))},
+-{0,8512,32,1,2,0,0},
++{0,8512,32,4,0,0,0},
+ {0,8544,4,4,1,2905152,((uintptr_t)D_002C5440+(intptr_t)(0))},
+ {0,8548,8,4,0,0,0},
+ {0,8556,4,2,0,0,0},
+ {0,8560,36,4,0,0,0},
+ {0,8596,4,1,2,0,0},
++{0,8600,4,2,0,0,0},
++{0,8604,4,4,0,0,0},
++{0,8608,4,4,1,0,0},
++{0,8612,4,4,1,0,0},
++{0,8616,32,4,0,0,0},
++{0,8648,4,2,0,0,0},
++{0,8652,4,4,0,0,0},
++{0,8656,4,4,1,0,0},
++{0,8660,4,4,1,0,0},
++{0,8664,32,4,0,0,0},
++{0,8696,4,2,0,0,0},
++{0,8700,4,4,0,0,0},
++{0,8704,4,4,1,0,0},
++{0,8708,4,4,1,0,0},
++{0,8712,32,4,0,0,0},
++{0,8744,4,2,0,0,0},
++{0,8748,4,4,0,0,0},
+ {0,8752,4,4,1,2903808,((uintptr_t)D_002C4F00+(intptr_t)(0))},
+ {0,8756,4,4,1,2173856,((uintptr_t)PauseMenu_ConfirmFunc+(intptr_t)(0))},
++{0,8760,32,4,0,0,0},
++{0,8792,4,2,0,0,0},
++{0,8796,4,4,0,0,0},
+ {0,8800,4,4,1,2903808,((uintptr_t)D_002C4F00+(intptr_t)(0))},
+ {0,8804,4,4,1,2173856,((uintptr_t)PauseMenu_ConfirmFunc+(intptr_t)(0))},
++{0,8808,32,4,0,0,0},
++{0,8840,4,2,0,0,0},
++{0,8844,4,4,0,0,0},
+ {0,8848,4,4,1,2903808,((uintptr_t)D_002C4F00+(intptr_t)(0))},
+ {0,8852,4,4,1,2173856,((uintptr_t)PauseMenu_ConfirmFunc+(intptr_t)(0))},
++{0,8856,32,4,0,0,0},
++{0,8888,4,2,0,0,0},
++{0,8892,4,4,0,0,0},
+ {0,8896,4,4,1,2903808,((uintptr_t)D_002C4F00+(intptr_t)(0))},
+ {0,8900,4,4,1,2173856,((uintptr_t)PauseMenu_ConfirmFunc+(intptr_t)(0))},
+-{0,8904,32,1,2,0,0},
++{0,8904,32,4,0,0,0},
+ {0,8936,4,4,1,2905496,((uintptr_t)D_002C5598+(intptr_t)(0))},
+ {0,8940,8,4,0,0,0},
+ {0,8948,4,2,0,0,0},
+ {0,8952,36,4,0,0,0},
+ {0,8988,4,1,2,0,0},
++{0,8992,4,2,0,0,0},
++{0,8996,4,4,0,0,0},
++{0,9000,4,4,1,0,0},
++{0,9004,4,4,1,0,0},
++{0,9008,32,4,0,0,0},
++{0,9040,4,2,0,0,0},
++{0,9044,4,4,0,0,0},
++{0,9048,4,4,1,0,0},
++{0,9052,4,4,1,0,0},
++{0,9056,32,4,0,0,0},
++{0,9088,4,2,0,0,0},
++{0,9092,4,4,0,0,0},
+ {0,9096,4,4,1,2903808,((uintptr_t)D_002C4F00+(intptr_t)(0))},
+ {0,9100,4,4,1,2173856,((uintptr_t)PauseMenu_ConfirmFunc+(intptr_t)(0))},
+-{0,9104,32,1,2,0,0},
++{0,9104,32,4,0,0,0},
+ {0,9136,4,4,1,2905888,((uintptr_t)D_002C5720+(intptr_t)(0))},
+ {0,9140,8,4,0,0,0},
+ {0,9148,4,2,0,0,0},
+ {0,9152,36,4,0,0,0},
+ {0,9188,4,1,2,0,0},
++{0,9192,4,2,0,0,0},
++{0,9196,4,4,0,0,0},
++{0,9200,4,4,1,0,0},
++{0,9204,4,4,1,0,0},
++{0,9208,32,4,0,0,0},
++{0,9240,4,2,0,0,0},
++{0,9244,4,4,0,0,0},
++{0,9248,4,4,1,0,0},
++{0,9252,4,4,1,0,0},
++{0,9256,32,4,0,0,0},
++{0,9288,4,2,0,0,0},
++{0,9292,4,4,0,0,0},
+ {0,9296,4,4,1,2903808,((uintptr_t)D_002C4F00+(intptr_t)(0))},
+ {0,9300,4,4,1,2173856,((uintptr_t)PauseMenu_ConfirmFunc+(intptr_t)(0))},
+-{0,9304,32,1,2,0,0},
++{0,9304,32,4,0,0,0},
+ {0,9336,4,4,1,2906088,((uintptr_t)D_002C57E8+(intptr_t)(0))},
+ {0,9340,8,4,0,0,0},
+ {0,9348,4,2,0,0,0},
+ {0,9352,36,4,0,0,0},
+ {0,9388,4,1,2,0,0},
++{0,9392,4,2,0,0,0},
++{0,9396,4,4,0,0,0},
++{0,9400,4,4,1,0,0},
++{0,9404,4,4,1,0,0},
++{0,9408,32,4,0,0,0},
++{0,9440,4,2,0,0,0},
++{0,9444,4,4,0,0,0},
++{0,9448,4,4,1,0,0},
++{0,9452,4,4,1,0,0},
++{0,9456,32,4,0,0,0},
++{0,9488,4,2,0,0,0},
++{0,9492,4,4,0,0,0},
+ {0,9496,4,4,1,2903912,((uintptr_t)D_002C4F68+(intptr_t)(0))},
+ {0,9500,4,4,1,2173960,((uintptr_t)PauseMenu_SkillListFunc+(intptr_t)(0))},
++{0,9504,32,4,0,0,0},
++{0,9536,4,2,0,0,0},
++{0,9540,4,4,0,0,0},
+ {0,9544,4,4,1,2903808,((uintptr_t)D_002C4F00+(intptr_t)(0))},
+ {0,9548,4,4,1,2173856,((uintptr_t)PauseMenu_ConfirmFunc+(intptr_t)(0))},
+-{0,9552,32,1,2,0,0},
++{0,9552,32,4,0,0,0},
+ {0,9584,4,4,1,2906288,((uintptr_t)D_002C58B0+(intptr_t)(0))},
+ {0,9588,8,4,0,0,0},
+ {0,9596,4,2,0,0,0},
+ {0,9600,36,4,0,0,0},
+ {0,9636,4,1,2,0,0},
++{0,9640,4,2,0,0,0},
++{0,9644,4,4,0,0,0},
++{0,9648,4,4,1,0,0},
++{0,9652,4,4,1,0,0},
++{0,9656,32,4,0,0,0},
++{0,9688,4,2,0,0,0},
++{0,9692,4,4,0,0,0},
+ {0,9696,4,4,1,2903808,((uintptr_t)D_002C4F00+(intptr_t)(0))},
+ {0,9700,4,4,1,2173856,((uintptr_t)PauseMenu_ConfirmFunc+(intptr_t)(0))},
+-{0,9704,32,1,2,0,0},
++{0,9704,32,4,0,0,0},
+ {0,9736,4,4,1,2906536,((uintptr_t)D_002C59A8+(intptr_t)(0))},
+ {0,9740,8,4,0,0,0},
+ {0,9748,4,2,0,0,0},
+ {0,9752,36,4,0,0,0},
+ {0,9788,4,1,2,0,0},
++{0,9792,4,2,0,0,0},
++{0,9796,4,4,0,0,0},
++{0,9800,4,4,1,0,0},
++{0,9804,4,4,1,0,0},
++{0,9808,32,4,0,0,0},
++{0,9840,4,2,0,0,0},
++{0,9844,4,4,0,0,0},
++{0,9848,4,4,1,0,0},
++{0,9852,4,4,1,0,0},
++{0,9856,32,4,0,0,0},
++{0,9888,4,2,0,0,0},
++{0,9892,4,4,0,0,0},
+ {0,9896,4,4,1,2903912,((uintptr_t)D_002C4F68+(intptr_t)(0))},
+ {0,9900,4,4,1,2173960,((uintptr_t)PauseMenu_SkillListFunc+(intptr_t)(0))},
++{0,9904,32,4,0,0,0},
++{0,9936,4,2,0,0,0},
++{0,9940,4,4,0,0,0},
+ {0,9944,4,4,1,2903808,((uintptr_t)D_002C4F00+(intptr_t)(0))},
+ {0,9948,4,4,1,2173856,((uintptr_t)PauseMenu_ConfirmFunc+(intptr_t)(0))},
+-{0,9952,32,1,2,0,0},
++{0,9952,32,4,0,0,0},
+ {0,9984,4,4,1,2906688,((uintptr_t)D_002C5A40+(intptr_t)(0))},
+ {0,9988,8,4,0,0,0},
+ {0,9996,4,2,0,0,0},
+ {0,10000,36,4,0,0,0},
+ {0,10036,4,1,2,0,0},
++{0,10040,4,2,0,0,0},
++{0,10044,4,4,0,0,0},
++{0,10048,4,4,1,0,0},
++{0,10052,4,4,1,0,0},
++{0,10056,32,4,0,0,0},
++{0,10088,4,2,0,0,0},
++{0,10092,4,4,0,0,0},
++{0,10096,4,4,1,0,0},
++{0,10100,4,4,1,0,0},
++{0,10104,32,4,0,0,0},
++{0,10136,4,2,0,0,0},
++{0,10140,4,4,0,0,0},
+ {0,10144,4,4,1,2903912,((uintptr_t)D_002C4F68+(intptr_t)(0))},
+ {0,10148,4,4,1,2173960,((uintptr_t)PauseMenu_SkillListFunc+(intptr_t)(0))},
++{0,10152,32,4,0,0,0},
++{0,10184,4,2,0,0,0},
++{0,10188,4,4,0,0,0},
+ {0,10192,4,4,1,2903808,((uintptr_t)D_002C4F00+(intptr_t)(0))},
+ {0,10196,4,4,1,2173856,((uintptr_t)PauseMenu_ConfirmFunc+(intptr_t)(0))},
+-{0,10200,32,1,2,0,0},
++{0,10200,32,4,0,0,0},
+ {0,10232,4,4,1,2906936,((uintptr_t)D_002C5B38+(intptr_t)(0))},
+ {0,10236,8,4,0,0,0},
+ {0,10244,4,2,0,0,0},
+ {0,10248,36,4,0,0,0},
+ {0,10284,4,1,2,0,0},
++{0,10288,4,2,0,0,0},
++{0,10292,4,4,0,0,0},
++{0,10296,4,4,1,0,0},
++{0,10300,4,4,1,0,0},
++{0,10304,32,4,0,0,0},
++{0,10336,4,2,0,0,0},
++{0,10340,4,4,0,0,0},
++{0,10344,4,4,1,0,0},
++{0,10348,4,4,1,0,0},
++{0,10352,32,4,0,0,0},
++{0,10384,4,2,0,0,0},
++{0,10388,4,4,0,0,0},
+ {0,10392,4,4,1,2903912,((uintptr_t)D_002C4F68+(intptr_t)(0))},
+ {0,10396,4,4,1,2173960,((uintptr_t)PauseMenu_SkillListFunc+(intptr_t)(0))},
++{0,10400,32,4,0,0,0},
++{0,10432,4,2,0,0,0},
++{0,10436,4,4,0,0,0},
+ {0,10440,4,4,1,2903808,((uintptr_t)D_002C4F00+(intptr_t)(0))},
+ {0,10444,4,4,1,2173856,((uintptr_t)PauseMenu_ConfirmFunc+(intptr_t)(0))},
++{0,10448,32,4,0,0,0},
++{0,10480,4,2,0,0,0},
++{0,10484,4,4,0,0,0},
+ {0,10488,4,4,1,2903808,((uintptr_t)D_002C4F00+(intptr_t)(0))},
+ {0,10492,4,4,1,2173856,((uintptr_t)PauseMenu_ConfirmFunc+(intptr_t)(0))},
+-{0,10496,32,1,2,0,0},
++{0,10496,32,4,0,0,0},
+ {0,10528,4,4,1,2907184,((uintptr_t)D_002C5C30+(intptr_t)(0))},
+ {0,10532,8,4,0,0,0},
+ {0,10540,4,2,0,0,0},
+ {0,10544,36,4,0,0,0},
+ {0,10580,4,1,2,0,0},
++{0,10584,4,2,0,0,0},
++{0,10588,4,4,0,0,0},
++{0,10592,4,4,1,0,0},
++{0,10596,4,4,1,0,0},
++{0,10600,32,4,0,0,0},
++{0,10632,4,2,0,0,0},
++{0,10636,4,4,0,0,0},
++{0,10640,4,4,1,0,0},
++{0,10644,4,4,1,0,0},
++{0,10648,32,4,0,0,0},
++{0,10680,4,2,0,0,0},
++{0,10684,4,4,0,0,0},
+ {0,10688,4,4,1,2903912,((uintptr_t)D_002C4F68+(intptr_t)(0))},
+ {0,10692,4,4,1,2173960,((uintptr_t)PauseMenu_SkillListFunc+(intptr_t)(0))},
++{0,10696,32,4,0,0,0},
++{0,10728,4,2,0,0,0},
++{0,10732,4,4,0,0,0},
+ {0,10736,4,4,1,2904016,((uintptr_t)D_002C4FD0+(intptr_t)(0))},
++{0,10740,4,4,1,0,0},
++{0,10744,32,4,0,0,0},
++{0,10776,4,2,0,0,0},
++{0,10780,4,4,0,0,0},
+ {0,10784,4,4,1,2903808,((uintptr_t)D_002C4F00+(intptr_t)(0))},
+ {0,10788,4,4,1,2173856,((uintptr_t)PauseMenu_ConfirmFunc+(intptr_t)(0))},
+-{0,10792,32,1,2,0,0},
++{0,10792,32,4,0,0,0},
+ {0,10824,4,4,1,2907480,((uintptr_t)D_002C5D58+(intptr_t)(0))},
+ {0,10828,8,4,0,0,0},
+ {0,10836,4,2,0,0,0},
+ {0,10840,36,4,0,0,0},
+ {0,10876,4,1,2,0,0},
++{0,10880,4,2,0,0,0},
++{0,10884,4,4,0,0,0},
++{0,10888,4,4,1,0,0},
++{0,10892,4,4,1,0,0},
++{0,10896,32,4,0,0,0},
++{0,10928,4,2,0,0,0},
++{0,10932,4,4,0,0,0},
++{0,10936,4,4,1,0,0},
++{0,10940,4,4,1,0,0},
++{0,10944,32,4,0,0,0},
++{0,10976,4,2,0,0,0},
++{0,10980,4,4,0,0,0},
+ {0,10984,4,4,1,2903912,((uintptr_t)D_002C4F68+(intptr_t)(0))},
+ {0,10988,4,4,1,2173960,((uintptr_t)PauseMenu_SkillListFunc+(intptr_t)(0))},
++{0,10992,32,4,0,0,0},
++{0,11024,4,2,0,0,0},
++{0,11028,4,4,0,0,0},
+ {0,11032,4,4,1,2904408,((uintptr_t)D_002C5158+(intptr_t)(0))},
+ {0,11036,4,4,1,2174400,((uintptr_t)PauseMenu_CpuLevelFunc+(intptr_t)(0))},
++{0,11040,32,4,0,0,0},
++{0,11072,4,2,0,0,0},
++{0,11076,4,4,0,0,0},
+ {0,11080,4,4,1,2903808,((uintptr_t)D_002C4F00+(intptr_t)(0))},
+ {0,11084,4,4,1,2173856,((uintptr_t)PauseMenu_ConfirmFunc+(intptr_t)(0))},
++{0,11088,32,4,0,0,0},
++{0,11120,4,2,0,0,0},
++{0,11124,4,4,0,0,0},
+ {0,11128,4,4,1,2903808,((uintptr_t)D_002C4F00+(intptr_t)(0))},
+ {0,11132,4,4,1,2173856,((uintptr_t)PauseMenu_ConfirmFunc+(intptr_t)(0))},
++{0,11136,32,4,0,0,0},
++{0,11168,4,2,0,0,0},
++{0,11172,4,4,0,0,0},
+ {0,11176,4,4,1,2903808,((uintptr_t)D_002C4F00+(intptr_t)(0))},
+ {0,11180,4,4,1,2173856,((uintptr_t)PauseMenu_ConfirmFunc+(intptr_t)(0))},
+-{0,11184,32,1,2,0,0},
++{0,11184,32,4,0,0,0},
+ {0,11216,4,4,1,2907776,((uintptr_t)D_002C5E80+(intptr_t)(0))},
+ {0,11220,8,4,0,0,0},
+ {0,11228,4,2,0,0,0},
+ {0,11232,36,4,0,0,0},
+ {0,11268,4,1,2,0,0},
++{0,11272,4,2,0,0,0},
++{0,11276,4,4,0,0,0},
++{0,11280,4,4,1,0,0},
++{0,11284,4,4,1,0,0},
++{0,11288,32,4,0,0,0},
+ {0,11320,4,4,1,2908168,((uintptr_t)D_002C6008+(intptr_t)(0))},
+ {0,11324,8,4,0,0,0},
+ {0,11332,4,2,0,0,0},
+@@ -2921,7 +3262,7 @@
+ {0,12310,10,1,0,0,0},
+ {0,12320,2,2,0,0,0},
+ {0,12322,6,1,0,0,0},
+-{0,12328,8,2,0,0,0},
++{0,12328,40,2,0,0,0},
+ {0,12368,4,4,1,2909240,((uintptr_t)D_002C6438+(intptr_t)(0))},
+ {0,12372,2,2,0,0,0},
+ {0,12374,2,1,2,0,0},
+@@ -2942,66 +3283,311 @@
+ {0,12422,2,1,2,0,0},
+ {0,12424,4,4,1,2347128,((uintptr_t)FontTag_Ub0+(intptr_t)(0))},
+ {0,12428,4,4,0,0,0},
+-{0,13368,3,1,0,0,0},
++{0,12432,8,2,0,0,0},
++{0,12440,4,4,0,0,0},
++{0,12444,8,2,0,0,0},
++{0,12452,4,4,0,0,0},
++{0,12456,8,2,0,0,0},
++{0,12464,4,4,0,0,0},
++{0,12468,8,2,0,0,0},
++{0,12476,4,4,0,0,0},
++{0,12480,8,2,0,0,0},
++{0,12488,4,4,0,0,0},
++{0,12492,8,2,0,0,0},
++{0,12500,4,4,0,0,0},
++{0,12504,8,2,0,0,0},
++{0,12512,4,4,0,0,0},
++{0,12516,8,2,0,0,0},
++{0,12524,4,4,0,0,0},
++{0,12528,8,2,0,0,0},
++{0,12536,4,4,0,0,0},
++{0,12540,8,2,0,0,0},
++{0,12548,4,4,0,0,0},
++{0,12552,8,2,0,0,0},
++{0,12560,4,4,0,0,0},
++{0,12564,8,2,0,0,0},
++{0,12572,4,4,0,0,0},
++{0,12576,8,2,0,0,0},
++{0,12584,4,4,0,0,0},
++{0,12588,8,2,0,0,0},
++{0,12596,4,4,0,0,0},
++{0,12600,8,2,0,0,0},
++{0,12608,4,4,0,0,0},
++{0,12612,8,2,0,0,0},
++{0,12620,4,4,0,0,0},
++{0,12624,8,2,0,0,0},
++{0,12632,4,4,0,0,0},
++{0,12636,8,2,0,0,0},
++{0,12644,4,4,0,0,0},
++{0,12648,8,2,0,0,0},
++{0,12656,4,4,0,0,0},
++{0,12660,8,2,0,0,0},
++{0,12668,4,4,0,0,0},
++{0,12672,8,2,0,0,0},
++{0,12680,4,4,0,0,0},
++{0,12684,8,2,0,0,0},
++{0,12692,4,4,0,0,0},
++{0,12696,8,2,0,0,0},
++{0,12704,4,4,0,0,0},
++{0,12708,8,2,0,0,0},
++{0,12716,4,4,0,0,0},
++{0,12720,8,2,0,0,0},
++{0,12728,4,4,0,0,0},
++{0,12732,8,2,0,0,0},
++{0,12740,4,4,0,0,0},
++{0,12744,8,2,0,0,0},
++{0,12752,4,4,0,0,0},
++{0,12756,8,2,0,0,0},
++{0,12764,4,4,0,0,0},
++{0,12768,8,2,0,0,0},
++{0,12776,4,4,0,0,0},
++{0,12780,8,2,0,0,0},
++{0,12788,4,4,0,0,0},
++{0,12792,8,2,0,0,0},
++{0,12800,4,4,0,0,0},
++{0,12804,8,2,0,0,0},
++{0,12812,4,4,0,0,0},
++{0,12816,8,2,0,0,0},
++{0,12824,4,4,0,0,0},
++{0,12828,8,2,0,0,0},
++{0,12836,4,4,0,0,0},
++{0,12840,8,2,0,0,0},
++{0,12848,4,4,0,0,0},
++{0,12852,8,2,0,0,0},
++{0,12860,4,4,0,0,0},
++{0,12864,8,2,0,0,0},
++{0,12872,4,4,0,0,0},
++{0,12876,8,2,0,0,0},
++{0,12884,4,4,0,0,0},
++{0,12888,8,2,0,0,0},
++{0,12896,4,4,0,0,0},
++{0,12900,8,2,0,0,0},
++{0,12908,4,4,0,0,0},
++{0,12912,8,2,0,0,0},
++{0,12920,4,4,0,0,0},
++{0,12924,8,2,0,0,0},
++{0,12932,4,4,0,0,0},
++{0,12936,8,2,0,0,0},
++{0,12944,4,4,0,0,0},
++{0,12948,8,2,0,0,0},
++{0,12956,4,4,0,0,0},
++{0,12960,8,2,0,0,0},
++{0,12968,4,4,0,0,0},
++{0,12972,8,2,0,0,0},
++{0,12980,4,4,0,0,0},
++{0,12984,8,2,0,0,0},
++{0,12992,4,4,0,0,0},
++{0,12996,8,2,0,0,0},
++{0,13004,4,4,0,0,0},
++{0,13008,8,2,0,0,0},
++{0,13016,4,4,0,0,0},
++{0,13020,8,2,0,0,0},
++{0,13028,4,4,0,0,0},
++{0,13032,8,2,0,0,0},
++{0,13040,4,4,0,0,0},
++{0,13044,8,2,0,0,0},
++{0,13052,4,4,0,0,0},
++{0,13056,8,2,0,0,0},
++{0,13064,4,4,0,0,0},
++{0,13068,8,2,0,0,0},
++{0,13076,4,4,0,0,0},
++{0,13080,8,2,0,0,0},
++{0,13088,4,4,0,0,0},
++{0,13092,8,2,0,0,0},
++{0,13100,4,4,0,0,0},
++{0,13104,8,2,0,0,0},
++{0,13112,4,4,0,0,0},
++{0,13116,8,2,0,0,0},
++{0,13124,4,4,0,0,0},
++{0,13128,8,2,0,0,0},
++{0,13136,4,4,0,0,0},
++{0,13140,8,2,0,0,0},
++{0,13148,4,4,0,0,0},
++{0,13152,8,2,0,0,0},
++{0,13160,4,4,0,0,0},
++{0,13164,8,2,0,0,0},
++{0,13172,4,4,0,0,0},
++{0,13176,8,2,0,0,0},
++{0,13184,4,4,0,0,0},
++{0,13188,8,2,0,0,0},
++{0,13196,4,4,0,0,0},
++{0,13200,8,2,0,0,0},
++{0,13208,4,4,0,0,0},
++{0,13212,8,2,0,0,0},
++{0,13220,4,4,0,0,0},
++{0,13224,8,2,0,0,0},
++{0,13232,4,4,0,0,0},
++{0,13236,8,2,0,0,0},
++{0,13244,4,4,0,0,0},
++{0,13248,8,2,0,0,0},
++{0,13256,4,4,0,0,0},
++{0,13260,8,2,0,0,0},
++{0,13268,4,4,0,0,0},
++{0,13272,8,2,0,0,0},
++{0,13280,4,4,0,0,0},
++{0,13284,8,2,0,0,0},
++{0,13292,4,4,0,0,0},
++{0,13296,8,2,0,0,0},
++{0,13304,4,4,0,0,0},
++{0,13308,8,2,0,0,0},
++{0,13316,4,4,0,0,0},
++{0,13320,8,2,0,0,0},
++{0,13328,4,4,0,0,0},
++{0,13332,8,2,0,0,0},
++{0,13340,4,4,0,0,0},
++{0,13344,8,2,0,0,0},
++{0,13352,4,4,0,0,0},
++{0,13356,8,2,0,0,0},
++{0,13364,4,4,0,0,0},
++{0,13368,4,1,0,0,0},
+ {0,13372,2,2,0,0,0},
+-{0,13374,6,1,0,0,0},
++{0,13374,10,1,0,0,0},
++{0,13384,2,2,0,0,0},
++{0,13386,10,1,0,0,0},
++{0,13396,2,2,0,0,0},
++{0,13398,10,1,0,0,0},
++{0,13408,2,2,0,0,0},
++{0,13410,10,1,0,0,0},
++{0,13420,2,2,0,0,0},
++{0,13422,10,1,0,0,0},
++{0,13432,2,2,0,0,0},
++{0,13434,10,1,0,0,0},
++{0,13444,2,2,0,0,0},
++{0,13446,10,1,0,0,0},
++{0,13456,2,2,0,0,0},
++{0,13458,10,1,0,0,0},
++{0,13468,2,2,0,0,0},
++{0,13470,10,1,0,0,0},
++{0,13480,2,2,0,0,0},
++{0,13482,10,1,0,0,0},
++{0,13492,2,2,0,0,0},
++{0,13494,10,1,0,0,0},
++{0,13504,2,2,0,0,0},
++{0,13506,10,1,0,0,0},
++{0,13516,2,2,0,0,0},
++{0,13518,10,1,0,0,0},
++{0,13528,2,2,0,0,0},
++{0,13530,10,1,0,0,0},
++{0,13540,2,2,0,0,0},
++{0,13542,10,1,0,0,0},
++{0,13552,2,2,0,0,0},
++{0,13554,10,1,0,0,0},
++{0,13564,2,2,0,0,0},
++{0,13566,10,1,0,0,0},
++{0,13576,2,2,0,0,0},
++{0,13578,10,1,0,0,0},
++{0,13588,2,2,0,0,0},
++{0,13590,10,1,0,0,0},
++{0,13600,2,2,0,0,0},
++{0,13602,10,1,0,0,0},
++{0,13612,2,2,0,0,0},
++{0,13614,10,1,0,0,0},
++{0,13624,2,2,0,0,0},
++{0,13626,10,1,0,0,0},
++{0,13636,2,2,0,0,0},
++{0,13638,10,1,0,0,0},
++{0,13648,2,2,0,0,0},
++{0,13650,10,1,0,0,0},
++{0,13660,2,2,0,0,0},
++{0,13662,10,1,0,0,0},
++{0,13672,2,2,0,0,0},
++{0,13674,10,1,0,0,0},
++{0,13684,2,2,0,0,0},
++{0,13686,10,1,0,0,0},
++{0,13696,2,2,0,0,0},
++{0,13698,6,1,0,0,0},
+ {0,13704,4,4,1,2909328,((uintptr_t)D_002C6490+(intptr_t)(0))},
+ {0,13708,4,4,1,2910264,((uintptr_t)D_002C6838+(intptr_t)(0))},
++{0,13712,4,4,0,0,0},
+ {0,13716,4,4,1,2909340,((uintptr_t)D_002C649C+(intptr_t)(0))},
+ {0,13720,4,4,1,2910276,((uintptr_t)D_002C6844+(intptr_t)(0))},
++{0,13724,4,4,0,0,0},
+ {0,13728,4,4,1,2909352,((uintptr_t)D_002C64A8+(intptr_t)(0))},
+ {0,13732,4,4,1,2910288,((uintptr_t)D_002C6850+(intptr_t)(0))},
++{0,13736,4,4,0,0,0},
+ {0,13740,4,4,1,2909364,((uintptr_t)D_002C64B4+(intptr_t)(0))},
+ {0,13744,4,4,1,2910300,((uintptr_t)D_002C685C+(intptr_t)(0))},
++{0,13748,4,4,0,0,0},
+ {0,13752,4,4,1,2909376,((uintptr_t)D_002C64C0+(intptr_t)(0))},
+ {0,13756,4,4,1,2910312,((uintptr_t)D_002C6868+(intptr_t)(0))},
++{0,13760,4,4,0,0,0},
+ {0,13764,4,4,1,2909388,((uintptr_t)D_002C64CC+(intptr_t)(0))},
+ {0,13768,4,4,1,2910324,((uintptr_t)D_002C6874+(intptr_t)(0))},
++{0,13772,4,4,0,0,0},
+ {0,13776,4,4,1,2909400,((uintptr_t)D_002C64D8+(intptr_t)(0))},
+ {0,13780,4,4,1,2910336,((uintptr_t)D_002C6880+(intptr_t)(0))},
++{0,13784,4,4,0,0,0},
+ {0,13788,4,4,1,2909412,((uintptr_t)D_002C64E4+(intptr_t)(0))},
+ {0,13792,4,4,1,2910348,((uintptr_t)D_002C688C+(intptr_t)(0))},
++{0,13796,4,4,0,0,0},
+ {0,13800,4,4,1,2909424,((uintptr_t)D_002C64F0+(intptr_t)(0))},
+ {0,13804,4,4,1,2910360,((uintptr_t)D_002C6898+(intptr_t)(0))},
++{0,13808,4,4,0,0,0},
+ {0,13812,4,4,1,2909436,((uintptr_t)D_002C64FC+(intptr_t)(0))},
+ {0,13816,4,4,1,2910372,((uintptr_t)D_002C68A4+(intptr_t)(0))},
++{0,13820,4,4,0,0,0},
+ {0,13824,4,4,1,2909460,((uintptr_t)D_002C6514+(intptr_t)(0))},
+ {0,13828,4,4,1,2910384,((uintptr_t)D_002C68B0+(intptr_t)(0))},
++{0,13832,4,4,0,0,0},
+ {0,13836,4,4,1,2909472,((uintptr_t)D_002C6520+(intptr_t)(0))},
+ {0,13840,4,4,1,2910396,((uintptr_t)D_002C68BC+(intptr_t)(0))},
++{0,13844,4,4,0,0,0},
+ {0,13848,4,4,1,2909484,((uintptr_t)D_002C652C+(intptr_t)(0))},
+ {0,13852,4,4,1,2910408,((uintptr_t)D_002C68C8+(intptr_t)(0))},
++{0,13856,4,4,0,0,0},
+ {0,13860,4,4,1,2909496,((uintptr_t)D_002C6538+(intptr_t)(0))},
+ {0,13864,4,4,1,2910420,((uintptr_t)D_002C68D4+(intptr_t)(0))},
++{0,13868,4,4,0,0,0},
+ {0,13872,4,4,1,2909508,((uintptr_t)D_002C6544+(intptr_t)(0))},
+ {0,13876,4,4,1,2910432,((uintptr_t)D_002C68E0+(intptr_t)(0))},
++{0,13880,4,4,0,0,0},
+ {0,13884,4,4,1,2909520,((uintptr_t)D_002C6550+(intptr_t)(0))},
+ {0,13888,4,4,1,2910444,((uintptr_t)D_002C68EC+(intptr_t)(0))},
++{0,13892,4,4,0,0,0},
+ {0,13896,4,4,1,2909532,((uintptr_t)D_002C655C+(intptr_t)(0))},
+ {0,13900,4,4,1,2910456,((uintptr_t)D_002C68F8+(intptr_t)(0))},
++{0,13904,4,4,0,0,0},
+ {0,13908,4,4,1,2909544,((uintptr_t)D_002C6568+(intptr_t)(0))},
+ {0,13912,4,4,1,2910468,((uintptr_t)D_002C6904+(intptr_t)(0))},
++{0,13916,4,4,0,0,0},
+ {0,13920,4,4,1,2909556,((uintptr_t)D_002C6574+(intptr_t)(0))},
+ {0,13924,4,4,1,2910480,((uintptr_t)D_002C6910+(intptr_t)(0))},
++{0,13928,4,4,0,0,0},
+ {0,13932,4,4,1,2909568,((uintptr_t)D_002C6580+(intptr_t)(0))},
+ {0,13936,4,4,1,2910492,((uintptr_t)D_002C691C+(intptr_t)(0))},
++{0,13940,4,4,0,0,0},
+ {0,13944,4,4,1,2909580,((uintptr_t)D_002C658C+(intptr_t)(0))},
+ {0,13948,4,4,1,2910504,((uintptr_t)D_002C6928+(intptr_t)(0))},
++{0,13952,4,4,0,0,0},
+ {0,13956,4,4,1,2909592,((uintptr_t)D_002C6598+(intptr_t)(0))},
+ {0,13960,4,4,1,2910516,((uintptr_t)D_002C6934+(intptr_t)(0))},
++{0,13964,4,4,0,0,0},
+ {0,13968,4,4,1,2909604,((uintptr_t)D_002C65A4+(intptr_t)(0))},
+ {0,13972,4,4,1,2910528,((uintptr_t)D_002C6940+(intptr_t)(0))},
++{0,13976,4,4,0,0,0},
+ {0,13980,4,4,1,2909616,((uintptr_t)D_002C65B0+(intptr_t)(0))},
+ {0,13984,4,4,1,2910540,((uintptr_t)D_002C694C+(intptr_t)(0))},
++{0,13988,4,4,0,0,0},
+ {0,13992,4,4,1,2909628,((uintptr_t)D_002C65BC+(intptr_t)(0))},
+ {0,13996,4,4,1,2910552,((uintptr_t)D_002C6958+(intptr_t)(0))},
++{0,14000,4,4,0,0,0},
+ {0,14004,4,4,1,2909640,((uintptr_t)D_002C65C8+(intptr_t)(0))},
+ {0,14008,4,4,1,2910564,((uintptr_t)D_002C6964+(intptr_t)(0))},
++{0,14012,4,4,0,0,0},
+ {0,14016,4,4,1,2909652,((uintptr_t)D_002C65D4+(intptr_t)(0))},
+ {0,14020,4,4,1,2910576,((uintptr_t)D_002C6970+(intptr_t)(0))},
++{0,14024,4,4,0,0,0},
+ {0,14028,4,4,1,2909664,((uintptr_t)D_002C65E0+(intptr_t)(0))},
+ {0,14032,4,4,1,2910588,((uintptr_t)D_002C697C+(intptr_t)(0))},
+-{0,14056,48,1,2,0,0},
++{0,14036,4,4,0,0,0},
++{0,14040,4,4,1,0,0},
++{0,14044,12,1,2,0,0},
++{0,14056,4,4,1,0,0},
++{0,14060,12,1,2,0,0},
++{0,14072,4,4,1,0,0},
++{0,14076,12,1,2,0,0},
++{0,14088,4,4,1,0,0},
++{0,14092,12,1,2,0,0},
+ {0,14104,4,4,1,2910600,((uintptr_t)D_002C6988+(intptr_t)(0))},
+ {0,14108,4,4,1,2910952,((uintptr_t)D_002C6AE8+(intptr_t)(0))},
+ {0,14112,4,4,1,2910968,((uintptr_t)D_002C6AF8+(intptr_t)(0))},
+@@ -3009,7 +3595,8 @@
+ {0,14120,8,1,2,0,0},
+ {0,14128,240,4,0,0,0},
+ {0,14368,56,2,0,0,0},
+-{0,14424,448,4,0,0,0},
++{0,14424,512,4,0,0,0},
++{0,14936,8,1,2,0,0},
+ {0,14944,100,4,0,0,0},
+ {0,15044,4,4,1,2470232,((uintptr_t)BtlScriptCmd_Wait+(intptr_t)(0))},
+ {0,15048,4,4,0,0,0},
+@@ -3142,19 +3729,17 @@
+ {0,15584,4,4,1,3093712,((uintptr_t)D_002F34D0+(intptr_t)(0))},
+ {0,15588,4,1,2,0,0},
+ {0,15592,24,4,0,0,0},
+-{2,3,1,1,2,0,0},
+-{2,7,9,1,2,0,0},
+-{2,96,48,4,0,0,0},
+-{2,160,16,4,0,0,0},
++{1,0,40,1,0,0,0},
++{2,8,8,1,2,0,0},
++{2,16,128,4,0,0,0},
++{2,160,32,4,0,0,0},
+ {3,0,56,4,0,0,0},
+ {3,56,8,1,2,0,0},
+-{4,3,1,1,2,0,0},
+-{4,7,1,1,2,0,0},
+-{4,11,5,1,2,0,0},
++{4,12,4,1,2,0,0},
+ {4,16,156,4,0,0,0},
+ {4,172,4,1,2,0,0},
+-{5,2,2,1,2,0,0},
+-{5,6,10,1,2,0,0},
++{5,8,8,1,2,0,0},
++{5,16,112,1,0,0,0},
+ {6,0,32,1,2,0,0},
+ {6,32,4,4,1,0,0},
+ {6,36,4,4,1,0,0},
+@@ -3168,12 +3753,12 @@
+ {6,68,4,4,1,0,0},
+ {6,72,4,4,1,0,0},
+ {6,76,4,4,1,0,0},
+-{7,6,2,1,2,0,0},
+ {7,30,2,2,0,0,0},
+ {7,32,4,4,1,0,0},
+ {7,36,4,1,2,0,0},
+ {7,40,4,4,0,0,0},
+ {7,44,4,1,2,0,0},
++{7,48,24,1,0,0,0},
+ {7,72,8,4,0,0,0},
+ {7,80,4,4,1,0,0},
+ {7,84,4,4,0,0,0},
+@@ -3187,9 +3772,6 @@
+ {7,116,4,4,1,0,0},
+ {7,120,4,4,1,0,0},
+ {7,124,4,4,0,0,0},
+-{8,0,3,1,2,0,0},
+-{8,4,3,1,2,0,0},
+-{8,8,3,1,2,0,0},
+ {8,12,4,4,1,0,0},
+ {8,16,4,4,1,0,0},
+ {8,20,4,4,0,0,0},
+@@ -3202,8 +3784,6 @@
+ {9,20,4,4,1,0,0},
+ {9,24,4,4,1,0,0},
+ {9,28,4,4,1,0,0},
+-{10,0,2,1,2,0,0},
+-{10,4,2,1,2,0,0},
+ {10,8,4,4,1,0,0},
+ {10,12,4,4,1,0,0},
+ {10,16,4,4,1,0,0},
+@@ -3219,7 +3799,6 @@
+ {10,56,4,4,1,0,0},
+ {10,60,4,4,1,0,0},
+ {10,64,4,4,1,0,0},
+-{11,0,4,1,2,0,0},
+ {11,8,4,4,1,0,0},
+ {11,12,4,4,1,0,0},
+ {11,16,4,4,1,0,0},
+@@ -3264,14 +3843,10 @@
+ {12,52,4,4,1,0,0},
+ {12,56,4,4,0,0,0},
+ {12,60,4,1,2,0,0},
+-{13,1,3,1,2,0,0},
+-{13,5,3,1,2,0,0},
+ {13,8,8,4,0,0,0},
+ {13,16,4,4,1,0,0},
+ {13,20,4,4,0,0,0},
+ {13,24,4,4,1,0,0},
+-{14,0,4,1,2,0,0},
+-{14,5,3,1,2,0,0},
+ {14,8,4,4,1,0,0},
+ {14,12,12,4,0,0,0},
+ {14,32,4,4,1,0,0},
+@@ -3301,11 +3876,9 @@
+ {16,4,4,1,2,0,0},
+ {16,8,4,4,1,0,0},
+ {16,12,4,1,2,0,0},
+-{17,2,2,1,2,0,0},
+ {17,4,4,4,1,0,0},
+ {17,8,8,4,0,0,0},
+-{18,1,7,1,2,0,0},
+-{18,9,7,1,2,0,0},
++{18,12,4,1,2,0,0},
+ {18,16,4,4,0,0,0},
+ {18,20,4,1,2,0,0},
+ {18,24,24,4,0,0,0},
+@@ -3320,22 +3893,28 @@
+ {18,92,4,4,1,0,0},
+ {18,96,4,4,0,0,0},
+ {18,100,4,4,1,0,0},
+-{19,0,12,1,2,0,0},
+ {19,12,4,4,1,0,0},
+ {19,16,4,4,1,0,0},
+ {19,20,4,1,2,0,0},
+ {19,24,4,4,0,0,0},
+ {19,28,4,1,2,0,0},
++{19,32,40,1,0,0,0},
+ {19,72,4,4,1,0,0},
+ {19,76,4,1,2,0,0},
+ {20,0,512,4,0,0,0},
++{21,0,112,1,0,0,0},
++{22,0,112,1,0,0,0},
++{23,0,112,1,0,0,0},
++{24,0,24,1,0,0,0},
++{25,8,56,1,0,0,0},
++{26,0,160,1,0,0,0},
++{27,0,56,1,0,0,0},
++{28,8,32,1,0,0,0},
+ {29,0,852,4,0,0,0},
+ {29,852,12,1,2,0,0},
+-{30,0,2,1,2,0,0},
+-{30,5,3,1,2,0,0},
+ {30,8,144,4,0,0,0},
+ {30,152,8,1,2,0,0},
+ {31,0,552,4,0,0,0},
+ {32,0,15568,1,0,0,0},
+ };
+-const XbTypedCatalog gXbTypedMainCatalog={1,0,regions,33,ops,2157,0x2829bbd2ac4b9c98ull};
++const XbTypedCatalog gXbTypedMainCatalog={1,0,regions,33,ops,2736,0xddfcaaeff7bb888bull};
+--- a/engine/tests/test_fixed_resources.c
++++ b/engine/tests/test_fixed_resources.c
+@@ -5,6 +5,7 @@
+ #include "dr_container.h"
+ #include "dr_body_model.h"
+ #include "dr_texfile.h"
++#include "dr_stage_collision.h"
+ static uint32_t u32(const uint8_t *p){return dr_resource_le32(p);}
+ static uint64_t fingerprint(const uint8_t *p,size_t n){uint64_t h=0xcbf29ce484222325ull;for(size_t i=0;i<n;i++)h=(h^p[i])*0x100000001b3ull;return h;}
+ static uint8_t *load(int id,size_t *n){char path[64];snprintf(path,sizeof(path),"pzs3us1/%05d.bin",id-1);dr_span s;assert(!XbDisc_FindFile(path,&s) && s.size && s.size<=8*1024*1024);*n=(size_t)s.size;uint8_t *p=malloc(*n);assert(p && !XbDisc_ReadSpan(&s,0,p,*n));return p;}
+@@ -22,6 +23,7 @@
+   if(rows[r].kind>=2){entries=pack(p,n);}
+   if(rows[r].kind==1){uint8_t *rgba=malloc(4*1024*1024);DrTexFileImage image;assert(rgba);decoded=dr_texfile_decode(p,n,0,rgba,4*1024*1024,&image);free(rgba);assert(!decoded);entries=u32(p);}
+   if(rows[r].kind==2){assert(entries==3 && u32(p+4)>=20 && u32(p+8)>u32(p+4) && u32(p+12)>u32(p+8) && u32(p+16)<=n);}
++  if(rows[r].id==0x171){DrStageCollision collision;assert(!dr_stage_collision_open(p,n,&collision));assert(collision.zones==100 && collision.meshes==151 && collision.nodes==27015 && collision.polygons==13583);}
+   if(rows[r].kind==4){size_t off,bytes,bad;DrBodyPart typed[256];DrBodyModel model;assert(!dr_pack_memory_entry(p,n,2,&off,&bytes,NULL));assert(!dr_body_model_read(p+off,bytes,typed,256,&model,&bad));parts=model.parts;assert(parts && model.chains);}
+   if(rows[r].kind==5){uint8_t *converted=malloc(0xc000);assert(converted);for(unsigned i=0;i<0x19e && i<entries;i++){size_t off,bytes,written;int e=dr_pack_memory_entry(p,n,i,&off,&bytes,NULL);if(e==DR_NOT_FOUND)continue;assert(!e);e=dr_motion_from_memory(p+off,bytes,1,1,converted,0xc000,&written);if(e==DR_LOAD_EMPTY){empty++;continue;}if(e){fprintf(stderr,"animation id=%d entry=%u rc=%d\n",rows[r].id,i,e);if(first_error<0)first_error=(int)i;rejected++;continue;}anims++;}free(converted);}
+   printf("{\"name\":\"%s\",\"file_id\":%d,\"afs_index\":%d,\"bytes\":%zu,\"fnv64\":\"%016llx\",\"entries\":%u,\"typed_body_parts\":%u,\"animations_converted\":%u,\"empty_animation_slots\":%u,\"animation_rejected\":%u,\"first_animation_error_index\":%d,\"resource_conversion_complete\":false}\n",rows[r].name,rows[r].id,rows[r].id-1,n,(unsigned long long)fingerprint(p,n),entries,parts,anims,empty,rejected,first_error);
+--- /dev/null
++++ b/engine/tests/test_stage_collision.c
+@@ -0,0 +1,34 @@
++/* SPDX-License-Identifier: AGPL-3.0-or-later */
++#include "dr_stage_collision.h"
++#include <assert.h>
++#include <stdio.h>
++#include <stdlib.h>
++#include <string.h>
++#include <float.h>
++static uint32_t rd(const uint8_t *p){return (uint32_t)p[0]|(uint32_t)p[1]<<8|(uint32_t)p[2]<<16|(uint32_t)p[3]<<24;}
++static void wr(uint8_t *p,uint32_t v){for(unsigned i=0;i<4;i++)p[i]=(uint8_t)(v>>(i*8));}
++static uint64_t hash=0xcbf29ce484222325ull;static unsigned seen;
++static void word(uint32_t v){for(unsigned i=0;i<4;i++)hash=(hash^(uint8_t)(v>>(i*8)))*0x100000001b3ull;}
++static int collect(void *ctx,uint32_t poly,const DrStageTriangle *t){(void)ctx;word(poly);word(t->flags);for(unsigned i=0;i<3;i++)for(unsigned j=0;j<4;j++){uint32_t bits;memcpy(&bits,&t->vertex[i][j],4);word(bits);}for(unsigned i=0;i<4;i++){uint32_t bits;memcpy(&bits,&t->plane[i],4);word(bits);}seen++;return 1;}
++static void corrupt(uint8_t *pack,size_t n,size_t at,uint32_t value){
++ uint32_t old=rd(pack+at);wr(pack+at,value);DrStageCollision v;memset(&v,0xa5,sizeof(v));assert(dr_stage_collision_open(pack,n,&v)<0);
++ const uint8_t *q=(const uint8_t *)&v;for(size_t i=0;i<sizeof(v);i++)assert(!q[i]);assert(rd(pack+at)==value);wr(pack+at,old);
++}
++int main(int argc,char **argv){assert(argc==2);FILE *f=fopen(argv[1],"rb");assert(f && !fseek(f,0,SEEK_END));long size=ftell(f);assert(size>0 && !fseek(f,0,SEEK_SET));size_t n=(size_t)size;uint8_t *p=malloc(n),*copy=malloc(n);assert(p && copy && fread(p,1,n,f)==n);fclose(f);memcpy(copy,p,n);
++ DrStageCollision v;assert(!dr_stage_collision_open(p,n,&v));assert(v.zones==100 && v.meshes==151 && v.nodes==27015 && v.polygons==13583 && v.radius==1200 && v.top==-350 && v.bottom==1000);
++ const float min[3]={-FLT_MAX,-FLT_MAX,-FLT_MAX},max[3]={FLT_MAX,FLT_MAX,FLT_MAX};
++ for(uint32_t i=0;i<v.zones;i++){
++  const uint8_t *z=v.base+v.zone_offset+(size_t)i*64;unsigned recs=rd(z+20);
++  for(int r=-1;r<(int)recs;r++){int result;assert(!dr_stage_collision_query(&v,i,r,min,max,collect,NULL,&result));assert(result==0 || result==1);}
++ }
++ assert(seen==EXPECTED_TRIANGLES && hash==EXPECTED_HASH);
++ DrStageTriangle t;assert(!dr_stage_collision_triangle(&v,0,-1,0,&t));assert(t.vertex[0][3]==1);
++ assert(dr_stage_collision_triangle(&v,100,-1,0,&t)<0 && dr_stage_collision_triangle(&v,8,-1,0,&t)<0);
++ size_t base=rd(p+4),zone=base+rd(p+base+60)*4,mesh=base+rd(p+zone+4)*4,nodes=base+rd(p+mesh+12)*4,poly=base+rd(p+mesh+16)*4;
++ corrupt(p,n,base+56,UINT32_MAX);corrupt(p,n,mesh+12,UINT32_MAX);
++ corrupt(p,n,nodes+24,0); /* inner root becomes a cycle */
++ corrupt(p,n,base+rd(p+zone+12)*4,100);corrupt(p,n,poly+4,UINT32_MAX);corrupt(p,n,poly+16,0x7fc00000);
++ DrStageCollision bad;assert(dr_stage_collision_open(p,base+64,&bad)<0);assert(!memcmp(copy,p,n));
++ printf("PASS: %u triangle occurrences, independent fingerprint %016llx; 100 zones, static/destructible meshes, native floats, ordered closed AABB traversal; malformed pointers/counts/tree/vertex/NaN/truncation rejected; immutable input; host only\n",seen,(unsigned long long)hash);
++ free(copy);free(p);return 0;
++}
+--- a/engine/tools/build_engine_diagnostic.py
++++ b/engine/tools/build_engine_diagnostic.py
+@@ -45,9 +45,9 @@
+ for name in ['func_002967C0','sceSifCallRpc','XbSfx_Mix','ADXT_Create','_ctype_','gPortDataStripped']:
+     assert name in defined,name
+ subprocess.run(['python3',str(sdk/'tools/elf2xex.py'),'--title-id','0x44523630',
+-                '--title-name','DragonRage360 0.35 D1 Typed Data Diagnostic' if r.get('typed_catalog_linked') else 'DragonRage360 0.34 L1 Diagnostic',str(elf),str(xex)],check=True)
++                '--title-name','DragonRage360 0.36 D2 Typed Data Diagnostic' if r.get('typed_catalog_linked') else 'DragonRage360 0.34 L1 Diagnostic',str(elf),str(xex)],check=True)
+ report={'kind':'native diagnostic with linked combat code; NOT a playable game',
+-        'version':'0.35-D1' if r.get('typed_catalog_linked') else '0.34-L1','Battle_Main_address':hex(defined['Battle_Main'][1]),
++        'version':'0.36-D2' if r.get('typed_catalog_linked') else '0.34-L1','Battle_Main_address':hex(defined['Battle_Main'][1]),
+         'Battle_Main_linked':True,'Game_Main_linked':False,'battle_called':False,
+         'strong_or_weak_undefined':0,'native_game_data_loaded':False,'typed_catalog_linked':bool(r.get('typed_catalog_linked')),'partial_preview_available':bool(r.get('typed_catalog_linked')), 
+         'boot_combat_available':False,'hardware_executed':False,
+--- a/engine/tools/build_typed_manifest.py
++++ b/engine/tools/build_typed_manifest.py
+@@ -7,6 +7,7 @@
+ from pathlib import Path
+ import argparse,concurrent.futures,hashlib,json,re,struct,sys,subprocess
+ import typed_dwarf
++from reviewed_types import describe as reviewed_types
+ from build_overlay_catalog import read_object
+ from native_data_sections import RULES
+ 
+@@ -89,7 +90,8 @@
+         for matches in pool.map(unit,jobs):
+             for name,schema,source in matches:
+                 candidates.setdefault(name,[]).append((schema,source));layouts_seen+=1
+-    ops=[];gaps=[];pointer_errors=[];evidence=[];zeroed_unknown=[]
++    reviewed=reviewed_types(regions,raw)
++    ops=[];gaps=[];pointer_errors=[];evidence=[];zeroed_unknown=[];alignment_prefixes=[]
+     for region in regions:
+         rid=region['id'];limit=region['size'];source=region['source_offset'];which=region['source_file'];cells={};conflicts=set();pointers={}
+         for name,off in region['labels'].items():
+@@ -105,6 +107,30 @@
+                         item=(at,*cell)
+                         if old and old!=item:conflicts.update(range(min(at,old[0]),max(at+width,old[0]+old[1])))
+                         else:cells[j]=item
++        # Reviewed canonical records override incomplete/alias DIEs only inside
++        # the exact field extents proved by the public readers. The schema
++        # builder has validated all counts and pointer graph bounds first.
++        for spec in reviewed:
++            if spec['region']!=rid:continue
++            lo=spec['offset'];hi=lo+spec['size']
++            for pos in list(cells):
++                at,width,typ=cells[pos]
++                if at<hi and lo<at+width:
++                    if at<lo or at+width>hi:raise ValueError('reviewed schema splits a compiler field')
++                    del cells[pos]
++            conflicts.difference_update(range(lo,hi))
++            for off,width,typ in spec['fields']:
++                at=lo+off
++                for j in range(at,at+width):cells[j]=(at,width,typ)
++            evidence.append(spec)
++        # gen_data.convert inserts addr&15 bytes BEFORE its first label.
++        # Those bytes preserve alignment, and are not part of a PS2 object.
++        prefix=min(region['labels'].values())
++        first_address=(0x100000 if which==0 else 0x334c00)+source+prefix
++        if prefix and (prefix!=first_address%16 or prefix>=16):
++            raise ValueError('unproved generated alignment prefix')
++        if prefix:alignment_prefixes.append({'region':rid,'offset':0,'length':prefix,
++            'reason':'gen_data.py convert pre-label addr&15 alignment; preserved, not source data'})
+         def resolve(value):
+             if value==0:return (None,0)
+             choices=reverse.get(value,[])
+@@ -121,6 +147,9 @@
+             return None
+         for at,length,kind,expression in region['runs']:
+             if at+length>limit:raise ValueError('cut crosses a run')
++            if at<prefix:
++                if at+length>prefix:raise ValueError('alignment prefix crosses first label')
++                continue
+             data=raw[which][source+at:source+at+length]
+             if kind=='zero':
+                 if any(data):zeroed_unknown.append({'region':rid,'offset':at,'length':length,'reason':'upstream skeleton suppresses source bytes; needs semantic review'})
+@@ -166,6 +195,13 @@
+         names_before=[name for name,off in rg['labels'].items() if off<=gap['offset']]
+         nearest=max(names_before,key=lambda name:rg['labels'][name]) if names_before else rg['anchor']
+         gap.update(symbol=nearest,symbol_offset=gap['offset']-rg['labels'][nearest],source_address=(0x100000 if rg['source_file']==0 else 0x334c00)+rg['source_offset']+gap['offset'])
++    # Excluded alignment must never hide a live symbolic data pointer.
++    for op in ops:
++        if op['kind']!='pointer':continue
++        for target in regions:
++            base=(0x100000 if target['source_file']==0 else 0x334c00)+target['source_offset']
++            if base<=op['expected']<base+min(target['labels'].values()):
++                raise ValueError('live source pointer into generated alignment prefix')
+     # Compact adjacent equal-width scalar ops; pointers retain distinct checked bindings.
+     compact=[]
+     for op in sorted(ops,key=lambda x:(x['region'],x['offset'])):
+@@ -173,12 +209,12 @@
+             compact[-1]['length']+=op['length']
+         else:compact.append(op.copy())
+     for region in regions:
+-        region['copy_bytes']=sum(n for _,n,k,_ in region['runs'] if k!='zero')
++        region['copy_bytes']=sum(n for at,n,k,_ in region['runs'] if k!='zero' and at>=min(region['labels'].values()))
+         region['typed_bytes']=sum(op['length'] for op in compact if op['region']==region['id'])
+         region['sha256']=hashlib.sha256(raw[region['source_file']][region['source_offset']:region['source_offset']+region['size']]).hexdigest()
+     result={'version':1,'profile':{'fighters':[0,1],'costumes':[0,0],'stage':0,'split_screen':False,'alternate_voice':False},'upstream':report['upstream'],'source_program_sha256':[hashlib.sha256(elf).hexdigest(),hashlib.sha256(raw[1]).hexdigest()],
+         'safe_zero_invariant_bytes':safe_zero_bytes,'layout_evidence':'actual PPC DWARF via binutils readelf; no host sizeof or resource-content type inference',
+-        'complete':not gaps and not pointer_errors and not zeroed_unknown,'suppressed_source_bytes':zeroed_unknown,'regions':regions,'operations':compact,'untyped':gaps,'unresolved_pointer_bindings':pointer_errors,'type_evidence':evidence,'compiled_variable_layouts':layouts_seen,
++        'complete':not gaps and not pointer_errors and not zeroed_unknown,'reviewed_schemas':reviewed,'alignment_prefixes':alignment_prefixes,'suppressed_source_bytes':zeroed_unknown,'regions':regions,'operations':compact,'untyped':gaps,'unresolved_pointer_bindings':pointer_errors,'type_evidence':evidence,'compiled_variable_layouts':layouts_seen,
+         'copied_game_values_in_artifact':False,'battle_boot_ready':False}
+     # Hash exactly the original bytes each op will consume, not whole commercial files.
+     hv=0xcbf29ce484222325
+--- /dev/null
++++ b/engine/tools/refine_typed_manifest.py
+@@ -0,0 +1,110 @@
++#!/usr/bin/env python3
++# SPDX-License-Identifier: AGPL-3.0-or-later
++"""Refine an existing linked catalog with bounded reader-reviewed schemas.
++Keeps the reference link's symbolic bindings. Does not assert a new link or boot.
++The input catalog must come from build_typed_manifest.py; source hashes match.
++"""
++from pathlib import Path
++import argparse,copy,hashlib,json,struct
++from reviewed_types import describe
++
++def sources(disc,expected):
++    elf=(disc/'SLUS_216.78').read_bytes();overlay=(disc/'BIN/DBZP.BIN').read_bytes()
++    if [hashlib.sha256(x).hexdigest() for x in (elf,overlay)]!=expected:raise ValueError('source program revision mismatch')
++    flat=bytearray(0x1ff180);start=struct.unpack_from('<I',elf,32)[0];step,n=struct.unpack_from('<HH',elf,46)
++    for i in range(n):
++        _,kind,flags,a,o,s=struct.unpack_from('<6I',elf,start+i*step)
++        if flags&2 and kind!=8 and 0x100000<=a and a+s<=0x2ff180:flat[a-0x100000:a-0x100000+s]=elf[o:o+s]
++    return [flat,overlay]
++
++def refine(original,raw):
++    m=copy.deepcopy(original);regions=m['regions'];specs=describe(regions,raw);units={};mapping={}
++    def value(rid,at,n):
++        r=regions[rid];start=r['source_offset']+at;return raw[r['source_file']][start:start+n]
++    for o in original['operations']:
++        if o['kind']=='pointer':mapping[o['expected']]={k:o[k] for k in ('target','addend','native_value_in_reference_link')}
++        for at in range(o['offset'],o['offset']+o['length'],o['width']):
++            u=dict(o,offset=at,length=o['width']);units[(o['region'],at)]=u
++    def pointer(v):
++        if v in mapping:return mapping[v]
++        if not v:return {'target':None,'addend':0,'native_value_in_reference_link':0}
++        for r in regions:
++            base=(0x100000 if r['source_file']==0 else 0x334c00)+r['source_offset']
++            if base+min(r['labels'].values())<=v<base+r['size']:
++                return {'target':r['anchor'],'addend':v-base-r['anchor_offset'],'native_value_in_reference_link':r['native_address']+v-base}
++        raise ValueError(f'new pointer lacks native binding: {v:x}')
++    reviewed={}
++    for sp in specs:
++        rid=sp['region'];lo=sp['offset'];hi=lo+sp['size']
++        for key,u in list(units.items()):
++            at=u['offset'];end=at+u['length']
++            if key[0]==rid and at<hi and lo<end:
++                if at<lo or end>hi:raise ValueError('reviewed schema splits typed field')
++                del units[key]
++        for off,w,k in sp['fields']:
++            at=lo+off;u={'region':rid,'offset':at,'length':w,'width':w,'kind':k,'native_value_in_reference_link':0}
++            if k in ('data_pointer','function_pointer'):
++                v=struct.unpack('<I',value(rid,at,4))[0];u.update(kind='pointer',expected=v,**pointer(v))
++            if k=='padding' and any(value(rid,at,w)):raise ValueError('nonzero struct padding')
++            key=(rid,at)
++            if key in reviewed and reviewed[key]!=u:raise ValueError('incompatible reviewed schemas')
++            reviewed[key]=u;units[key]=u
++    prefixes=[]
++    for r in regions:
++        n=min(r['labels'].values());base=(0x100000 if r['source_file']==0 else 0x334c00)+r['source_offset']
++        if n and (n>=16 or n!=(base+n)%16):raise ValueError('unproved alignment prefix')
++        if not n:continue
++        for o in original['operations']:
++            if o['kind']=='pointer' and base<=o['expected']<base+n:raise ValueError('live pointer into excluded prefix')
++        prefixes.append({'region':r['id'],'offset':0,'length':n,'reason':'gen_data.py convert pre-label addr&15 alignment; preserved, not source data'})
++        for key,u in list(units.items()):
++            if key[0]==r['id'] and u['offset']<n:
++                if u['offset']+u['length']>n:raise ValueError('prefix cuts typed field')
++                del units[key]
++        r['copy_bytes']=sum(nbytes for at,nbytes,k,_ in r['runs'] if k!='zero' and at>=n)
++    suppressed=[]
++    for g in m['suppressed_source_bytes']:
++        if g['offset']+g['length']>min(regions[g['region']]['labels'].values()):suppressed.append(g)
++    ops=[]
++    for o in sorted(units.values(),key=lambda x:(x['region'],x['offset'])):
++        if ops and o['kind'] in ('scalar','padding','zero_invariant') and all(o[k]==ops[-1][k] for k in ('region','kind','width')) and ops[-1]['offset']+ops[-1]['length']==o['offset']:ops[-1]['length']+=o['length']
++        else:ops.append(o)
++    covered=[set() for r in regions]
++    for o in ops:
++        r=regions[o['region']];s=o['offset'];end=s+o['length']
++        if s<0 or end>r['size'] or covered[o['region']].intersection(range(s,end)):raise ValueError('operation overlaps or out of bounds')
++        covered[o['region']].update(range(s,end))
++    gaps=[]
++    for g in original['untyped']:
++        rid=g['region'];n=min(regions[rid]['labels'].values());at=g['offset'];end=at+g['length']
++        while at<end:
++            if at<n or at in covered[rid]:at+=1;continue
++            lo=at;at+=1
++            while at<end and at not in covered[rid]:at+=1
++            if not any(value(rid,lo,at-lo)):
++                z={'region':rid,'offset':lo,'length':at-lo,'width':1,'kind':'zero_invariant','native_value_in_reference_link':0};ops.append(z);covered[rid].update(range(lo,at));continue
++            x=dict(g,offset=lo,length=at-lo,symbol_offset=g['symbol_offset']+lo-g['offset'],source_address=g['source_address']+lo-g['offset']);gaps.append(x)
++    ops.sort(key=lambda o:(o['region'],o['offset']))
++    for r in regions:r['typed_bytes']=len(covered[r['id']])
++    h=0xcbf29ce484222325
++    for o in ops:
++        for b in value(o['region'],o['offset'],o['length']):h=((h^b)*0x100000001b3)&0xffffffffffffffff
++    m.update(operations=ops,untyped=gaps,suppressed_source_bytes=suppressed,alignment_prefixes=prefixes,reviewed_schemas=specs,complete=not gaps and not suppressed and not m['unresolved_pointer_bindings'],operation_source_fnv64=f'{h:016x}',safe_zero_invariant_bytes=sum(o['length'] for o in ops if o['kind']=='zero_invariant'),battle_boot_ready=False)
++    m['layout_evidence']+='; bounded reader-reviewed schemas in engine/tools/reviewed_types.py'
++    m['reference_link_reused']=True
++    return m
++
++def emit(m,out):
++    out.mkdir(parents=True,exist_ok=True);(out/'typed-manifest.json').write_text(json.dumps(m,indent=2)+'\n')
++    names={r['anchor'] for r in m['regions']}|{o['target'] for o in m['operations'] if o.get('target')}
++    c=['/* Generated metadata; no game resource bytes. */','#include "xb_typed_data.h"']+['extern unsigned char '+n+'[];' for n in sorted(names)]+['static const XbTypedRegion regions[]={']
++    for r in m['regions']:c.append('{'+r['anchor']+'-'+str(r['anchor_offset'])+','+','.join(str(r[k]) for k in ['size','source_file','source_offset'])+'},')
++    c+=['};','static const XbTypedOp ops[]={']
++    for o in m['operations']:
++        native='((uintptr_t)'+o['target']+'+(intptr_t)('+str(o['addend'])+'))' if o.get('target') else '0';kind=1 if o['kind']=='pointer' else 2 if o['kind'] in ('padding','zero_invariant') else 0
++        c.append('{'+','.join(str(v) for v in [o['region'],o['offset'],o['length'],o['width'],kind,o.get('expected',0)])+','+native+'},')
++    c+=['};',f'const XbTypedCatalog gXbTypedMainCatalog={{1,{int(m["complete"])},regions,{len(m["regions"])},ops,{len(m["operations"])},0x{m["operation_source_fnv64"]}ull}};']
++    (out/'typed_catalog.c').write_text('\n'.join(c)+'\n')
++if __name__=='__main__':
++    p=argparse.ArgumentParser(description=__doc__);p.add_argument('manifest',type=Path);p.add_argument('disc',type=Path);p.add_argument('output',type=Path);a=p.parse_args();m=json.loads(a.manifest.read_text());result=refine(m,sources(a.disc,m['source_program_sha256']));emit(result,a.output)
++    print(json.dumps({'gaps':len(result['untyped']),'untyped_bytes':sum(g['length'] for g in result['untyped']),'suppressed':len(result['suppressed_source_bytes']),'typed_bytes':sum(r['typed_bytes'] for r in result['regions']),'complete':result['complete']}))
+--- /dev/null
++++ b/engine/tools/reviewed_types.py
+@@ -0,0 +1,100 @@
++#!/usr/bin/env python3
++# SPDX-License-Identifier: AGPL-3.0-or-later
++"""Reviewed types for data whose labels have no complete C variable DIE.
++Schemas follow named public readers/headers. No global byte/word heuristics.
++Every dynamic count/pointer is bounded before a schema is accepted.
++"""
++import struct,math
++
++def describe(regions,raw):
++    specs=[];byname={n:(rg,off) for rg in regions for n,off in rg['labels'].items()}
++    def address(name):
++        rg,off=byname[name];assert rg['source_file']==0
++        return 0x100000+rg['source_offset']+off
++    def locate(addr,n):
++        for rg in regions:
++            base=(0x100000 if rg['source_file']==0 else 0x334c00)+rg['source_offset']
++            if base<=addr and addr+n<=base+rg['size']:
++                return rg,addr-base
++        raise ValueError(f'reviewed type outside catalog: {addr:x}+{n:x}')
++    def data(addr,n):
++        rg,off=locate(addr,n);at=rg['source_offset']+off
++        return raw[rg['source_file']][at:at+n]
++    def u32(addr):return struct.unpack('<I',data(addr,4))[0]
++    def schema(addr,size,fields,evidence):
++        rg,off=locate(addr,size)
++        if any(o<0 or o+w>size or w not in (1,2,4,8) for o,w,k in fields):raise ValueError('bad reviewed schema')
++        specs.append({'region':rg['id'],'offset':off,'size':size,'fields':fields,'evidence':evidence})
++    def array(addr,size,width,evidence,kind='scalar'):
++        assert size%width==0
++        schema(addr,size,[(i,width,kind) for i in range(0,size,width)],evidence)
++    def record_array(addr,count,size,fields,evidence):
++        assert 0<count<=4096
++        schema(addr,count*size,[(i*size+o,w,k) for i in range(count) for o,w,k in fields],evidence)
++    S='scalar';P='data_pointer';F='function_pointer'
++    # Header documents these as eight four-byte RGBA colours; consumer keeps u8*.
++    array(address('gEftBladeColor'),32,1,'battle/eft_aa.h EftBlade.color + eft_aa.c EftBlade_Init')
++    aim=[(0,4,S)]+[(j,1,S) for j in range(4,8)]
++    for name,n in [('D_002C4620',8),('D_002C4660',10)]:
++        a=address(name)
++        if any(u32(a+i*8)>6 for i in range(n)):raise ValueError('unknown volley opcode')
++        record_array(a,n,8,aim,'battle/eft_det_a.h EftVolleyAimStep; eft_det_a.c steering script reader')
++    # Traverse actual pause-menu descriptors, not arbitrary label lengths.
++    menu=[(0,4,P),(4,4,S),(8,4,S),(12,2,S),(14,2,S)]+[(j,4,S) for j in range(16,52,4)]
++    item=[(0,2,S),(2,2,S),(4,4,S),(8,4,P),(12,4,F)]+[(j,4,S) for j in range(16,48,4)]
++    queue=[address(n) for n in byname if n.startswith('gPauseMenu') and 'Cursor' not in n and n!='gPauseMenuWhich']
++    seen=set();arrays=set()
++    while queue:
++        a=queue.pop()
++        if a in seen:continue
++        if not 0x2c4e70<=a<0x2c6070:raise ValueError('pause descriptor outside documented span')
++        seen.add(a);ptr,count=u32(a),u32(a+4);scale=struct.unpack('<f',data(a+8,4))[0]
++        if not 0<count<=64 or not math.isfinite(scale) or not 0<scale<=8:raise ValueError('pause descriptor count/scale')
++        if ptr<0x2c4e70 or ptr+count*48>0x2c6070:raise ValueError('pause item array bounds')
++        schema(a,52,menu,'battle/hud_0.h BtlMenu; hud_0_b.c menu reader')
++        if (ptr,count) not in arrays:
++            record_array(ptr,count,48,item,'battle/hud_0.h BtlMenuItem; hud_0_b.c item reader');arrays.add((ptr,count))
++        for i in range(count):
++            child=u32(ptr+i*48+8)
++            if child:queue.append(child)
++    # Font tag names are explicit UTF16 code units, not byte strings.
++    for name in ['D_002C6430','D_002C6438','D_002C6440','D_002C6448']:
++        array(address(name),8,2,'battle/col_c.h FontTagDef.name; col_c.c tag scanner')
++    tag=[(0,4,P),(4,2,S),(6,1,'padding'),(7,1,'padding'),(8,4,F),(12,4,S)]
++    record_array(address('gFontTags'),4,16,tag,'battle/col_c.h FontTagDef')
++    # Tables are bounded by their next documented typed family.
++    a=address('D_002C6490');end=address('D_002C6838');assert (end-a)%12==0
++    name_fields=[(i,2,S) for i in range(0,8,2)]+[(8,4,S)]
++    for i in range((end-a)//12):
++        if u32(a+i*12+8)>4:raise ValueError('font icon name length')
++    record_array(a,(end-a)//12,12,name_fields,'battle/col_c.h FontIconName; col_c_b.c name->chars/len')
++    a=end;end=address('D_002C6988');assert (end-a)%12==0
++    definition=[(i,1,S) for i in range(4)]+[(4,2,S)]+[(i,1,S) for i in range(6,12)]
++    for i in range((end-a)//12):
++        if struct.unpack('<H',data(a+i*12+4,2))[0]>6:raise ValueError('font icon frame count')
++    record_array(a,(end-a)//12,12,definition,'battle/col_c.h FontIconDef; col_c_b.c GetFrame')
++    table=address('gFontIconTables')
++    for port in range(4):
++        a=u32(table+port*4);n=0
++        while True:
++            locate(a+n*12,4)
++            if not u32(a+n*12):
++                schema(a+n*12,4,[(0,4,P)],'FontIconEntry sentinel: col_c_b.c name==NULL');break
++            if n>=64:raise ValueError('unterminated icon table')
++            n+=1
++        if n:record_array(a,n,12,[(0,4,P),(4,4,P),(8,4,S)],'battle/col_c.h FontIconEntry')
++    # Four full jaw keys followed by eight unused zero bytes, checked by loader.
++    record_array(address('D_002C6E18'),4,16,[(i,4,S) for i in range(0,16,4)],'battle/bobj_a.h BobjJawKey; bobj_a.c jawKeys reader')
++    # Explicit math objects; keep original numeric bit patterns.
++    for name,n in [('gVu0SinCoef',4),('D_002EC260',16),('gVu0AxisZW',4)]:
++        array(address(name),n*4,4,'sys/math3d.h Vec4/Mtx44; sys/vu0_* portable coefficient/axis counterparts')
++    # These are byte-indexed AI condition codes, NOT unknown serialized structs.
++    for name,n in [('D_002EDC70',112),('D_002EDCE0',112),('D_002EDD50',112),('D_002EDDC0',24),('D_002EDDD8',56),('D_002EDE10',160),('D_002EDEB0',56),('D_002EDEE8',32)]:
++        array(address(name),n,1,'btl_ai_cond.c explicit u8 code arrays and byte-indexed consumers; btl_ai_think.h')
++    # C-string consumers are explicit: OverlayEntry and file/ADX APIs.
++    strings=[('D_002EB380',24),('D_002EB398',16),('D_002F3490',16),('D_002F34A0',16),('D_002F34B0',16),('gFileDirName',16),('D_002F34D0',16),('D_002F34E0',16),('D_002F34F0',16),('gFileRootDir',8),('gMovieTagIdle',8),('gMovieTagNoData',8),('gMovieTagFull',8),('D_002FF130',8),('D_002FF138',8),('D_002FF140',8),('D_002FF148',8)]
++    for name,n in strings:
++        value=data(address(name),n)
++        if b'\0' not in value:raise ValueError('unterminated reviewed C string '+name)
++        array(address(name),n,1,'main.h OverlayEntry, sys/file.c char directories, sys/movie.c char tags, sys/adx.c channel names')
++    return specs
+--- a/engine/tools/test_fixed_resources.py
++++ b/engine/tools/test_fixed_resources.py
+@@ -6,13 +6,25 @@
+ """
+ from pathlib import Path
+ import argparse,subprocess,json,os
+-p=argparse.ArgumentParser();p.add_argument('xsdk',type=Path);p.add_argument('iso',type=Path);p.add_argument('output',type=Path);p.add_argument('--sanitize',action='store_true');a=p.parse_args();e=Path(__file__).resolve().parents[1];out=a.output.resolve();out.mkdir(parents=True,exist_ok=True)
++p=argparse.ArgumentParser();p.add_argument('xsdk',type=Path);p.add_argument('iso',type=Path);p.add_argument('output',type=Path);p.add_argument('--sanitize',action='store_true');p.add_argument('--coverage',type=Path);a=p.parse_args();e=Path(__file__).resolve().parents[1];out=a.output.resolve();out.mkdir(parents=True,exist_ok=True)
+ cmd=['gcc','-D_GNU_SOURCE','-std=gnu17','-O1','-g','-Wall','-Wextra','-Werror','-I'+str(e/'platform/platform'),'-I'+str(e.parent/'src'),'-idirafter',str(a.xsdk.resolve()/'include')]
+ if a.sanitize:cmd+=['-fsanitize=address,undefined','-fno-omit-frame-pointer']
+-sources=[e/'tests/test_fixed_resources.c',e/'platform/platform/xb_disc.c',e/'platform/platform/xb_iso_file.c',*[e.parent/'src'/(s+'.c') for s in ['dr_disc','dr_container','dr_body_model','dr_face_vif','dr_anim','dr_bpe','dr_skeleton','dr_texfile','dr_gs_texture']]]
++fixture=e/'tests/test_fixed_resources.c'
++if a.coverage:
++ coverage=json.loads(a.coverage.read_text());ranges=coverage['verified_ranges'];assert coverage['logical_size']==a.iso.stat().st_size
++ adapter=(e/'tests/test_xb_iso_file.c').read_text()
++ guard='static int verified_read(uint64_t a,size_t n){static const uint64_t ranges[][2]={'+','.join('{'+str(lo)+','+str(hi)+'}' for lo,hi in ranges)+'};for(size_t i=0;i<sizeof(ranges)/sizeof(*ranges);i++)if(ranges[i][0]<=a && a<=ranges[i][1] && n<=ranges[i][1]-a)return 1;return 0;}\n'
++ needle='    if(fseeko(image,(off_t)*at,SEEK_SET))'
++ assert needle in adapter
++ adapter=adapter.replace(needle,'    assert(verified_read(*at,n));\n'+needle)
++ adapter=adapter.replace('static const char *image_path;',guard+'static const char *image_path;')
++ (out/'test_xb_iso_file.c').write_text(adapter)
++ fixture=out/'test_fixed_resources.c';fixture.write_text((e/'tests/test_fixed_resources.c').read_text())
++
++sources=[fixture,e/'platform/platform/xb_disc.c',e/'platform/platform/xb_iso_file.c',*[e.parent/'src'/(s+'.c') for s in ['dr_disc','dr_container','dr_stage_collision','dr_body_model','dr_face_vif','dr_anim','dr_bpe','dr_skeleton','dr_texfile','dr_gs_texture']]]
+ exe=out/'fixed-resources';subprocess.run(cmd+list(map(str,sources))+['-lm','-o',str(exe)],check=True)
+ r=subprocess.run([str(exe),str(a.iso.resolve())],capture_output=True,text=True,env=dict(os.environ,ASAN_OPTIONS='detect_leaks=0:halt_on_error=1',UBSAN_OPTIONS='halt_on_error=1'))
+ (out/'resources.txt').write_text(r.stdout);(out/'conversion-errors.txt').write_text(r.stderr);r.check_returncode();rows=[json.loads(s) for s in r.stdout.splitlines()];assert len(rows)==18
+ report={'profile':{'fighters':[0,1],'costumes':[0,0],'stage':0,'split_screen':False,'voice_alt':False},'file_id_evidence':'include/battle/battle_work.h + src/battle/battle_load.c, pinned upstream; AFS index = file_id - 1',
+- 'result':'readers validated; partial conversions, NOT combat-ready','resources':rows,'sanitizers':a.sanitize,'PPC_execution':False,'live_battle_resources_initialized':False,'stage_collision_and_physics_typed':False}
++ 'result':'readers validated; partial conversions, NOT combat-ready','resources':rows,'sanitizers':a.sanitize,'PPC_execution':False,'live_battle_resources_initialized':False,'stage_collision_reader_validated':True,'stage_collision_and_physics_installed_in_engine':False,'sparse_input_coverage_checked':bool(a.coverage)}
+ (out/'fixed-resource-manifest.json').write_text(json.dumps(report,indent=2)+'\n');print(json.dumps({'resources':len(rows),'body_parts':[r['typed_body_parts'] for r in rows if r['typed_body_parts']],'animations_converted':sum(r['animations_converted'] for r in rows),'empty_animation_slots':sum(r['empty_animation_slots'] for r in rows),'animations_rejected':sum(r['animation_rejected'] for r in rows),'game_ready':False},indent=2))
+--- /dev/null
++++ b/engine/tools/test_reviewed_types.py
+@@ -0,0 +1,29 @@
++#!/usr/bin/env python3
++# SPDX-License-Identifier: AGPL-3.0-or-later
++"""Reader-schema boundary tests with user-provided USA program bytes."""
++from pathlib import Path
++import argparse,copy,json,struct
++from reviewed_types import describe
++from refine_typed_manifest import sources,refine
++p=argparse.ArgumentParser();p.add_argument('baseline',type=Path);p.add_argument('disc',type=Path);a=p.parse_args();m=json.loads(a.baseline.read_text());raw=sources(a.disc,m['source_program_sha256']);specs=describe(m['regions'],raw)
++assert len(specs)==80
++out=refine(m,raw);assert len(out['untyped'])==4 and sum(g['length'] for g in out['untyped'])==54 and not out['suppressed_source_bytes'] and not out['complete'] and not out['battle_boot_ready']
++for n in ['D_002EDC70','D_002EDCE0','D_002EDD50']:
++ assert any(n in r['labels'] for r in m['regions'])
++# Each of these corruptions must be refused before any schema is emitted.
++menus=[s for s in specs if s['evidence'].startswith('battle/hud_0.h BtlMenu;')];icons=[s for s in specs if 'FontIconName;' in s['evidence']];definitions=[s for s in specs if 'FontIconDef;' in s['evidence']]
++cases=[(menus[0],4,0xffffffff),(menus[0],0,0xfffffffc),(menus[0],8,0x7fc00000),(icons[0],8,5)]
++for spec,off,value in cases:
++ bad=[bytearray(x) for x in raw];r=m['regions'][spec['region']];at=r['source_offset']+spec['offset']+off;struct.pack_into('<I',bad[r['source_file']],at,value)
++ try:describe(m['regions'],bad)
++ except ValueError:pass
++ else:raise AssertionError('schema accepted malformed graph/count/NaN')
++# Non-first-label zero suppressions must remain a real blocker.
++bad=copy.deepcopy(m);r=bad['regions'][0];bad['suppressed_source_bytes'].append({'region':0,'offset':1000,'length':4,'reason':'test'})
++assert len(refine(bad,raw)['suppressed_source_bytes'])==1
++# Prefix proof may not swallow a native pointer to the excluded bytes.
++bad=copy.deepcopy(m);r=next(r for r in bad['regions'] if min(r['labels'].values())>0);pointer=next(o for o in bad['operations'] if o['kind']=='pointer');pointer['expected']=0x100000+r['source_offset']
++try:refine(bad,raw)
++except ValueError:pass
++else:raise AssertionError('live prefix pointer hidden')
++print('PASS: 80 bounded reviewed schemas; 4/54 unknown ranges retained; bad menu graph/count/NaN/icon lengths refused; real suppressions and live prefix pointers remain blockers; boot stays disabled')
+--- /dev/null
++++ b/engine/tools/test_stage_collision.py
+@@ -0,0 +1,40 @@
++#!/usr/bin/env python3
++# SPDX-License-Identifier: AGPL-3.0-or-later
++"""Compare native stage-0 collision reads with an independent LE file walk.
++User supplies the stage pack; only fingerprints/results enter reports.
++"""
++from pathlib import Path
++import argparse,struct,subprocess,os,json
++p=argparse.ArgumentParser();p.add_argument('stage',type=Path);p.add_argument('output',type=Path);a=p.parse_args();out=a.output.resolve();out.mkdir(parents=True,exist_ok=True);engine=Path(__file__).resolve().parents[1];project=engine.parent
++pack=a.stage.read_bytes();n=struct.unpack_from('<I',pack)[0];offsets=struct.unpack_from('<'+str(n+1)+'I',pack,4);b=pack[offsets[0]:offsets[1]]
++def u(at):return struct.unpack_from('<I',b,at)[0]
++state=0xcbf29ce484222325;triangles=0;meshes=0
++
++def add(data):
++ global state
++ for c in data:state=((state^c)*0x100000001b3)&0xffffffffffffffff
++
++def walk(mesh,index,path):
++ global triangles
++ assert index not in path and len(path)<64
++ node=u(mesh+12)*4+index*32;left,right=struct.unpack_from('<II',b,node+24)
++ if right==0xffffffff:
++  if left==0xffffffff:return
++  poly=u(mesh+16)*4+left*32;add(struct.pack('<I',left));add(b[poly:poly+4])
++  for vert in struct.unpack_from('<3I',b,poly+4):
++   v=u(mesh+20)*4+vert*16;assert v+16<=len(b);add(b[v:v+16])
++  add(b[poly+16:poly+32]);triangles+=1
++ else:
++  walk(mesh,left,path+(index,));walk(mesh,right,path+(index,))
++for i in range(u(56)):
++ zone=u(60)*4+i*64
++ words=[u(zone+4)]+[u(u(zone+24)*4+j*16+8) for j in range(u(zone+20))]
++ for word in words:
++  if word and u(word*4):walk(word*4,0,());meshes+=1
++# Compile independent constants only. No model/ISO bytes are embedded.
++source=(engine/'tests/test_stage_collision.c').read_text().replace('EXPECTED_HASH',hex(state)+'ull').replace('EXPECTED_TRIANGLES',str(triangles))
++fixture=out/'fixture.c';fixture.write_text(source);exe=out/'stage-test'
++sources=[fixture,*[project/'src'/(s+'.c') for s in ['dr_stage_collision','dr_container','dr_disc','dr_anim','dr_bpe','dr_skeleton']]]
++subprocess.run(['gcc','-std=gnu17','-O1','-g','-Wall','-Wextra','-Werror','-fsanitize=address,undefined','-fno-omit-frame-pointer','-I'+str(project/'src'),*map(str,sources),'-lm','-o',str(exe)],check=True)
++r=subprocess.run([str(exe),str(a.stage.resolve())],capture_output=True,text=True,env=dict(os.environ,ASAN_OPTIONS='detect_leaks=0:halt_on_error=1',UBSAN_OPTIONS='halt_on_error=1'));(out/'stage-test.txt').write_text(r.stdout+r.stderr);print(r.stdout+r.stderr,end='');r.check_returncode()
++(out/'stage-collision.json').write_text(json.dumps({'result':'PASS','zones':u(56),'mesh_occurrences':meshes,'triangle_occurrences':triangles,'canonical_triangle_fnv64':f'{state:016x}','independent_reference':'Python little-endian file walk vs C native float triangle/AABB accessors','sanitizers':True,'immutable_input':True,'native_engine_installed':False,'Xbox_executed':False},indent=2)+'\n')
+--- a/src/demo_ui.c
++++ b/src/demo_ui.c
+@@ -99,7 +99,7 @@
+     p->rect(52,52,68,68,ORANGE);
+     text(p,66,66,2,0xFF211000,"DR");
+     text(p,144,48,2,WHITE,"DRAGON RAGE");
+-    text(p,146,94,1,GOLD,"XBOX 360  /  DEMO 0.35-D1");
++    text(p,146,94,1,GOLD,"XBOX 360  /  DEMO 0.36-D2");
+     text(p,930,56,1,u->connected?0xFF3DDC84:GOLD,u->connected?"CONTROLE CONECTADO":"CONECTE O CONTROLE");
+     text(p,930,88,1,MUTED,"Interface + leitor de ISO");
+     p->rect(52,154,300,480,PANEL);
+--- /dev/null
++++ b/src/dr_stage_collision.c
+@@ -0,0 +1,126 @@
++/* SPDX-License-Identifier: AGPL-3.0-or-later */
++#include "dr_stage_collision.h"
++#include "dr_container.h"
++#include <math.h>
++#include <string.h>
++#include <limits.h>
++static uint32_t rd(const uint8_t *p){return (uint32_t)p[0]|(uint32_t)p[1]<<8|(uint32_t)p[2]<<16|(uint32_t)p[3]<<24;}
++static float fl(const uint8_t *p){uint32_t u=rd(p);float f;memcpy(&f,&u,4);return f;}
++static int span(const DrStageCollision *v,uint32_t word,size_t n,size_t *at){
++ if((uint64_t)word*4>v->size)return DR_STAGE_BOUNDS;
++ size_t o=(size_t)word*4;if(o>v->size || n>v->size-o)return DR_STAGE_BOUNDS;*at=o;return 0;
++}
++static int array(const DrStageCollision *v,uint32_t word,uint32_t n,size_t stride,size_t *at){
++ if(n>v->size/stride)return DR_STAGE_BOUNDS;
++ return span(v,word,(size_t)n*stride,at);
++}
++static int floats(const uint8_t *p,unsigned n){for(unsigned i=0;i<n;i++)if(!isfinite(fl(p+4*i)))return DR_STAGE_NUMBER;return 0;}
++static int triangle(const DrStageCollision *v,size_t m,uint32_t poly,DrStageTriangle *out){
++ const uint8_t *h=v->base+m;size_t p;if(poly>v->size/32 || span(v,rd(h+16),(size_t)(poly+1)*32,&p))return DR_STAGE_BOUNDS;
++ p+=(size_t)poly*32;const uint8_t *q=v->base+p;
++ if(floats(q+16,4))return DR_STAGE_NUMBER;
++ DrStageTriangle t;t.flags=rd(q);for(unsigned i=0;i<4;i++)t.plane[i]=fl(q+16+4*i);
++ for(unsigned i=0;i<3;i++){
++  uint32_t index=rd(q+4+4*i);size_t a;
++  if(index>v->size/16 || span(v,rd(h+20),(size_t)(index+1)*16,&a))return DR_STAGE_BOUNDS;
++  a+=(size_t)index*16;if(floats(v->base+a,4))return DR_STAGE_NUMBER;
++  for(unsigned j=0;j<4;j++)t.vertex[i][j]=fl(v->base+a+4*j);
++ }
++ if(out)*out=t;
++ return 0;
++}
++static int walk(const DrStageCollision *v,size_t mesh,size_t nodes,uint32_t count,uint32_t index,unsigned depth,uint32_t *budget){
++ if(index>=count || depth>=64 || !*budget)return DR_STAGE_TREE;
++ --*budget;const uint8_t *p=v->base+nodes+(size_t)index*32;
++ if(floats(p,6))return DR_STAGE_NUMBER;
++ for(unsigned i=0;i<3;i++)if(fl(p+4*i)>fl(p+12+4*i))return DR_STAGE_NUMBER;
++ uint32_t left=rd(p+24),right=rd(p+28);
++ if(right==UINT32_MAX){if(left==UINT32_MAX)return 0;return triangle(v,mesh,left,NULL);}
++ int e=walk(v,mesh,nodes,count,left,depth+1,budget);return e?e:walk(v,mesh,nodes,count,right,depth+1,budget);
++}
++static int mesh(DrStageCollision *v,uint32_t word){
++ /* Null static meshes occur in seven stage-0 boundary zones. Keep absent;
++  * never interpret the stage header itself as a collision mesh. */
++ if(!word)return 0;
++ size_t m;if(span(v,word,24,&m))return DR_STAGE_BOUNDS;
++ uint32_t n=rd(v->base+m);if((int32_t)n<=0)return 0;
++ size_t nodes;if(array(v,rd(v->base+m+12),n,32,&nodes))return DR_STAGE_BOUNDS;
++ uint32_t budget=n>UINT32_MAX/2?UINT32_MAX:n*2;
++ int e=walk(v,m,nodes,n,0,0,&budget);if(e)return e;
++ /* Count stored leaves for diagnostics; all reachable leaves were checked. */
++ uint32_t polygons=0;for(uint32_t i=0;i<n;i++)if(rd(v->base+nodes+(size_t)i*32+28)==UINT32_MAX && rd(v->base+nodes+(size_t)i*32+24)!=UINT32_MAX)polygons++;
++ if(v->nodes>UINT32_MAX-n || v->polygons>UINT32_MAX-polygons || v->meshes==UINT32_MAX)return DR_STAGE_BOUNDS;
++ v->nodes+=n;v->polygons+=polygons;v->meshes++;return 0;
++}
++int dr_stage_collision_open(const void *pack,size_t bytes,DrStageCollision *out){
++ if(!out)return DR_STAGE_FORMAT;
++ memset(out,0,sizeof(*out));size_t off,n;if(!pack || bytes>UINT32_MAX || dr_pack_memory_entry(pack,bytes,0,&off,&n,NULL) || n<96)return DR_STAGE_FORMAT;
++ DrStageCollision v={0};v.base=(const uint8_t *)pack+off;v.size=n;
++ v.zones=rd(v.base+56);v.objects=rd(v.base+68);size_t z,b;
++ if(!v.zones || array(&v,rd(v.base+60),v.zones,64,&z) || span(&v,rd(v.base+64),12,&b))return DR_STAGE_BOUNDS;
++ if(z>UINT32_MAX)return DR_STAGE_BOUNDS;
++ v.zone_offset=(uint32_t)z;
++ if(floats(v.base+b,3))return DR_STAGE_NUMBER;
++ v.radius=fl(v.base+b);v.top=fl(v.base+b+4);v.bottom=fl(v.base+b+8);
++ if(v.radius<=0 || v.top>v.bottom)return DR_STAGE_NUMBER;
++ for(uint32_t i=0;i<v.zones;i++){
++  const uint8_t *q=v.base+z+(size_t)i*64;size_t near,recs;uint32_t nn=rd(q+8),nr=rd(q+20);
++  if(array(&v,rd(q+12),nn,4,&near) || array(&v,rd(q+24),nr,16,&recs))return DR_STAGE_BOUNDS;
++  if(floats(q+32,8))return DR_STAGE_NUMBER;
++  for(unsigned j=0;j<3;j++)if(fl(q+48+4*j)<0)return DR_STAGE_NUMBER;
++  for(uint32_t j=0;j<nn;j++)if(rd(v.base+near+(size_t)j*4)>=v.zones)return DR_STAGE_BOUNDS;
++  int e=mesh(&v,rd(q+4));if(e)return e;
++  for(uint32_t j=0;j<nr;j++){
++   const uint8_t *r=v.base+recs+(size_t)j*16;
++   if(rd(r+4)>=v.objects)return DR_STAGE_BOUNDS;
++   e=mesh(&v,rd(r+8));if(e)return e;
++  }
++ }
++ *out=v;return 0;
++}
++int dr_stage_collision_triangle(const DrStageCollision *v,uint32_t zone,int record,uint32_t poly,DrStageTriangle *out){
++ if(!out)return DR_STAGE_FORMAT;
++ memset(out,0,sizeof(*out));
++ if(!v || !v->base || zone>=v->zones || record< -1)return DR_STAGE_BOUNDS;
++ size_t z=v->zone_offset+(size_t)zone*64;if(z>v->size || v->size-z<64)return DR_STAGE_BOUNDS;
++ const uint8_t *q=v->base+z;uint32_t word=rd(q+4);
++ if(record>=0){size_t r;if((uint32_t)record>=rd(q+20) || array(v,rd(q+24),rd(q+20),16,&r))return DR_STAGE_BOUNDS;word=rd(v->base+r+(size_t)record*16+8);}
++ if(!word)return DR_STAGE_BOUNDS;
++ size_t m;if(span(v,word,24,&m))return DR_STAGE_BOUNDS;
++ /* Public requests must identify a polygon actually present in this tree. */
++ uint32_t count=rd(v->base+m);size_t nodes;if(array(v,rd(v->base+m+12),count,32,&nodes))return DR_STAGE_BOUNDS;
++ int found=0;for(uint32_t i=0;i<count;i++){const uint8_t *p=v->base+nodes+(size_t)i*32;if(rd(p+28)==UINT32_MAX && rd(p+24)==poly){found=1;break;}}
++ if(!found || poly==UINT32_MAX)return DR_STAGE_BOUNDS;
++ return triangle(v,m,poly,out);
++}
++
++static int query_node(const DrStageCollision *v,size_t m,size_t nodes,uint32_t count,uint32_t index,
++ unsigned depth,uint32_t *budget,const float min[3],const float max[3],DrStageTriangleFn fn,void *ctx,int *result){
++ if(index>=count || depth>=64 || !*budget)return DR_STAGE_TREE;
++ --*budget;const uint8_t *p=v->base+nodes+(size_t)index*32;
++ for(unsigned i=0;i<3;i++)if(max[i]<fl(p+i*4) || fl(p+12+i*4)<min[i])return 0;
++ uint32_t left=rd(p+24),right=rd(p+28);
++ if(right==UINT32_MAX){
++  if(left==UINT32_MAX)return 0;
++  DrStageTriangle t;int e=triangle(v,m,left,&t);if(e)return e;
++  *result|=fn(ctx,left,&t);return 0;
++ }
++ int e=query_node(v,m,nodes,count,left,depth+1,budget,min,max,fn,ctx,result);
++ return e?e:query_node(v,m,nodes,count,right,depth+1,budget,min,max,fn,ctx,result);
++}
++int dr_stage_collision_query(const DrStageCollision *v,uint32_t zone,int record,
++ const float min[3],const float max[3],DrStageTriangleFn fn,void *ctx,int *result){
++ if(!result)return DR_STAGE_FORMAT;
++ *result=0;
++ if(!min || !max || !fn || !v || !v->base || zone>=v->zones || record< -1)return DR_STAGE_BOUNDS;
++ for(unsigned i=0;i<3;i++)if(!isfinite(min[i]) || !isfinite(max[i]) || min[i]>max[i])return DR_STAGE_NUMBER;
++ size_t z=v->zone_offset+(size_t)zone*64;if(z>v->size || v->size-z<64)return DR_STAGE_BOUNDS;
++ const uint8_t *q=v->base+z;uint32_t word=rd(q+4);
++ if(record>=0){size_t r;if((uint32_t)record>=rd(q+20) || array(v,rd(q+24),rd(q+20),16,&r))return DR_STAGE_BOUNDS;word=rd(v->base+r+(size_t)record*16+8);}
++ if(!word)return 0;
++ size_t m;if(span(v,word,24,&m))return DR_STAGE_BOUNDS;
++ uint32_t n=rd(v->base+m);size_t nodes;if((int32_t)n<=0)return 0;
++ if(array(v,rd(v->base+m+12),n,32,&nodes))return DR_STAGE_BOUNDS;
++ uint32_t budget=n>UINT32_MAX/2?UINT32_MAX:n*2;
++ return query_node(v,m,nodes,n,0,0,&budget,min,max,fn,ctx,result);
++}
+--- /dev/null
++++ b/src/dr_stage_collision.h
+@@ -0,0 +1,27 @@
++/* SPDX-License-Identifier: AGPL-3.0-or-later */
++#ifndef DR_STAGE_COLLISION_H
++#define DR_STAGE_COLLISION_H
++#include <stddef.h>
++#include <stdint.h>
++/* Immutable canonical-LE stage block; no PS2 pointer is dereferenced. Offsets
++ * are WORDS from entry 0, as gfxm_e_d.c / ColMesh_SetBase specify. This view
++ * does not install gBtlStage or claim that the stage renderer is initialized. */
++typedef struct DrStageCollision {
++ const uint8_t *base;size_t size;
++ uint32_t zones,zone_offset,objects,meshes,nodes,polygons;
++ float radius,top,bottom;
++} DrStageCollision;
++typedef struct DrStageTriangle { uint32_t flags;float vertex[3][4],plane[4]; } DrStageTriangle;
++enum { DR_STAGE_FORMAT=-80,DR_STAGE_BOUNDS=-81,DR_STAGE_TREE=-82,DR_STAGE_NUMBER=-83,DR_STAGE_MEMORY=-84 };
++/* Fully validate static and destructible collision before publishing output.
++ * On failure *out is zero; input remains unchanged. */
++int dr_stage_collision_open(const void *pack,size_t bytes,DrStageCollision *out);
++/* record=-1: static mesh; >=0: destructible record in that zone.
++ * polygon index is the original index, NOT the tree leaf index. */
++int dr_stage_collision_triangle(const DrStageCollision *,uint32_t zone,int record,uint32_t polygon,DrStageTriangle *out);
++/* Closed AABB query, original left-before-right leaf order. callback receives
++ * native float values and original polygon flags. No global traversal state. */
++typedef int (*DrStageTriangleFn)(void *,uint32_t polygon,const DrStageTriangle *);
++int dr_stage_collision_query(const DrStageCollision *,uint32_t zone,int record,
++ const float min[3],const float max[3],DrStageTriangleFn,void *,int *result);
++#endif
+--- a/src/main.c
++++ b/src/main.c
+@@ -15,6 +15,7 @@
+ #include "xb_platform.h"
+ #ifdef DR_TYPED_CATALOG
+ #include "xb_typed_data.h"
++#include "dr_stage_collision.h"
+ #include "xb_disc.h"
+ #endif
+ #include <arpa/inet.h>
+@@ -222,6 +223,26 @@
+     else snprintf(ui.modal,sizeof(ui.modal),"Animação validada e convertida: %u bytes.\nLeitura ISO / AFS / BIN concluída.\n\nEste teste não desenha o personagem.\nO boot da luta ainda não está pronto.",(unsigned)written);
+ }
+ #ifdef DR_TYPED_CATALOG
++static int stage_count_triangle(void *ctx,uint32_t polygon,const DrStageTriangle *triangle)
++{
++    (void)polygon;(void)triangle;(*(unsigned *)ctx)++;return 1;
++}
++static int test_stage_collision(void)
++{
++    dr_span span;uint8_t *pack=NULL;DrStageCollision view;unsigned triangles=0;
++    int error=XbDisc_FindFile("pzs3us1/00368.bin",&span);
++    if(!error && (!span.size || span.size>8*1024*1024))error=DR_STAGE_BOUNDS;
++    if(!error){pack=malloc((size_t)span.size);if(!pack)error=DR_STAGE_MEMORY;}
++    if(!error)error=XbDisc_ReadSpan(&span,0,pack,(size_t)span.size);
++    if(!error)error=dr_stage_collision_open(pack,(size_t)span.size,&view);
++    if(!error){
++        const float min[3]={-1e10f,-1e10f,-1e10f},max[3]={1e10f,1e10f,1e10f};int result;
++        error=dr_stage_collision_query(&view,0,-1,min,max,stage_count_triangle,&triangles,&result);
++        xsdk_log_write("stage-collision: error=%d zones=%u meshes=%u nodes=%u leaves=%u zone0_triangles=%u bounds=%f,%f,%f; NOT installed in battle",
++            error,view.zones,view.meshes,view.nodes,view.polygons,triangles,(double)view.radius,(double)view.top,(double)view.bottom);
++    }else xsdk_log_write("stage-collision: refused error=%d; NOT installed in battle",error);
++    free(pack);return error;
++}
+ static void test_typed_data(void)
+ {
+     if(ui.selection<0 || ui.selection>=ui.count) {
+@@ -232,9 +253,10 @@
+     xsdk_log_write("%s: typed main-data partial preview error=%d regions=%u ops=%u complete=%u data_stripped=%u; combat BLOCKED",
+         error?"FAIL":"PASS",error,(unsigned)gXbTypedMainCatalog.region_count,
+         (unsigned)gXbTypedMainCatalog.op_count,gXbTypedMainCatalog.complete,(unsigned)gPortDataStripped);
++    int collision_error=error?error:test_stage_collision();
+     if(error)snprintf(ui.modal,sizeof(ui.modal),"Dados recusados: erro %d.\nNenhuma tabela alterada pelo carregador.\nConsulte default.log. Luta bloqueada.",error);
+-    else snprintf(ui.modal,sizeof(ui.modal),"Dados tipados: %u operações aplicadas.\nRegiões: %u · manifesto completo: %u\n\nApenas campos confirmados foram escritos.\nAinda há campos e recursos pendentes.\nO boot da luta permanece bloqueado.",
+-        (unsigned)gXbTypedMainCatalog.op_count,(unsigned)gXbTypedMainCatalog.region_count,gXbTypedMainCatalog.complete);
++    else snprintf(ui.modal,sizeof(ui.modal),"Dados tipados: %u operações aplicadas.\nRegiões: %u · manifesto completo: %u\n\nApenas campos confirmados foram escritos.\nColisão do cenário: erro %d (0 = validada).\nO boot da luta permanece bloqueado.",
++        (unsigned)gXbTypedMainCatalog.op_count,(unsigned)gXbTypedMainCatalog.region_count,gXbTypedMainCatalog.complete,collision_error);
+ }
+ #endif
+ static void settings_load(void)
+@@ -298,10 +320,10 @@
+ #ifdef DR_ENGINE_LINKED
+     extern int Battle_Main(void);
+     extern volatile uint32_t gPortDataStripped;
+-    xsdk_log_write("DragonRage360 0.35-D1: native diagnostic; Battle_Main linked at %p",(void *)(uintptr_t)Battle_Main);
++    xsdk_log_write("DragonRage360 0.36-D2: native diagnostic; Battle_Main linked at %p",(void *)(uintptr_t)Battle_Main);
+     xsdk_log_write("engine: data_stripped=%u; combat boot BLOCKED: typed main-data manifest and battle initialization missing",(unsigned)gPortDataStripped);
+ #else
+-    xsdk_log_write("DragonRage360 0.35-D1: component diagnostic; Battle_Main not linked in this build.");
++    xsdk_log_write("DragonRage360 0.36-D2: component diagnostic; Battle_Main not linked in this build.");
+ #endif
+     xsdk_log_write("%s: BPE decode + animation endian synthetic self-test",dr_resource_selftest()?"PASS":"FAIL");
+     xsdk_log_write("%s: bounded BIN + motion + skeleton synthetic self-test",dr_container_selftest()?"PASS":"FAIL");
+--- a/tests/check_xex.py
++++ b/tests/check_xex.py
+@@ -97,10 +97,10 @@
+         raise AssertionError(name)
+     cat=struct.unpack('>6I',data_at_symbol('gXbTypedMainCatalog',24))
+     assert cat[0]==1 and cat[1]==0 and cat[3]==33 and cat[5]>2000
+-    assert {'XbTypedData_Load','XbTypedData_LoadFromDisc','XbTypedData_RequireBattleData'}<=defined
++    assert {'XbTypedData_Load','XbTypedData_LoadFromDisc','XbTypedData_RequireBattleData','dr_stage_collision_open','dr_stage_collision_query'}<=defined
+     assert data_at_symbol('gPortDataStripped',4)==b'\x00\x00\x00\x02'
+     report.update(typed_main_catalog_linked=True,typed_catalog_complete=False,
+         typed_regions=cat[3],typed_operations=cat[5],partial_data_preview_available=True,
+-        native_game_data_loaded=False,scope='0.35-D1: linked Battle_Main and partial typed main-data catalog; explicit typed-data startup preview commits only validated known fields, with readiness marker 2 retained. No complete data manifest, native fight initialization, original Game_Main or combat execution. No hardware validation.')
++        native_game_data_loaded=False,stage_collision_diagnostic_linked=True,stage_collision_in_battle=False,scope='0.36-D2: linked Battle_Main and partial typed main-data catalog; explicit typed-data startup preview commits only validated known fields, with readiness marker 2 retained. No complete data manifest, native fight initialization, original Game_Main or combat execution. No hardware validation.')
+ report_path.write_text(json.dumps(report,ensure_ascii=False,indent=2)+'\n')
+ print(json.dumps(report,ensure_ascii=False,indent=2))

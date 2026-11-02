@@ -1,0 +1,60 @@
+/* Menu and battle text loaded from a locale JSON in game-text. */
+#ifndef BT3_MENU_TRANSLATION_H
+#define BT3_MENU_TRANSLATION_H
+#include <stddef.h>
+#ifdef __cplusplus
+extern "C" {
+#endif
+
+typedef struct MenuTranslationOption {
+    char locale[16];
+    char name[64];
+    int order; /* smaller numbers appear first; missing order sorts after numbered languages */
+} MenuTranslationOption;
+
+#define PORT_TEXT_QUIT_CONFIRM "quit/confirm"
+/* The start of an online match (gs/net.c): before the other player is there, and once they are ({name}: theirs). */
+#define PORT_TEXT_NET_CONNECTING "net/connecting"
+#define PORT_TEXT_NET_RIVAL "net/rival_here"
+/* ... a quick match's rival, with where the matchmaking service placed them ({region}: one of region/NA, SA, EU, ME,
+   AF, AS, OC), and the round trip once measured ({ms}, a line under it). */
+#define PORT_TEXT_NET_RIVAL_FROM "net/rival_from"
+#define PORT_TEXT_NET_ROUND_TRIP "net/round_trip"
+/* Dragon Net Battle's Join tab found a lobby (gs/ui.cpp): its screen is in Tenkaichi Budokai Online. */
+#define PORT_TEXT_LOBBY_JOINED "net/lobby_joined"
+/* The automatic update (gs/update.c, gs/ui.cpp): the line over the main menu and the online screens ({version}: the
+   new release's number; {percent}: how much is downloaded), and what the game says after it installed one. */
+#define PORT_TEXT_UPDATE_AVAILABLE "update/available"
+#define PORT_TEXT_UPDATE_DOWNLOADING "update/downloading"
+#define PORT_TEXT_UPDATE_READY "update/ready"
+#define PORT_TEXT_UPDATE_DONE "update/done"
+#define PORT_TEXT_UPDATE_ONLINE_OFF "update/online_off"
+
+/* Copies bundled label and port catalogs without replacing local edits, then loads
+   BT3_MENU_LANG or the saved menu_lang setting (English if neither is set). */
+int MenuTranslation_Load(const char *outDir, char *why, size_t whyLen);
+int MenuTranslation_Ensure(void);
+int MenuTranslation_List(const char *outDir, MenuTranslationOption *out, int capacity);
+int MenuTranslation_Available(MenuTranslationOption *out, int capacity);
+int MenuTranslation_ShouldPrompt(const MenuTranslationOption *options, int count);
+int MenuTranslation_BootPending(void);
+void MenuTranslation_SaveChoice(const char *locale);
+const char *MenuTranslation_Locale(void);
+const char *MenuTranslation_Text(const char *id);
+/* Port-owned UI text, decoded from translations/port/<locale>.json; NULL uses the built-in English string. */
+const char *MenuTranslation_PortText(const char *id);
+/* A line of the online menus in the chosen language (ids "tbo/..." of that file, looked up by their English); NULL: as it is. */
+const char *MenuTranslation_Line(const char *original);
+const char *MenuTranslation_Original(const char *id);
+const char *MenuTranslation_Group(const char *id);
+const char *const *MenuTranslation_StageNames(void); /* 36 entries */
+const char *const *MenuTranslation_SongNames(void);  /* 24 entries */
+const char *MenuTranslation_Main(void);              /* first 11 main menu items, separated by | */
+const char *MenuTranslation_Item(void);              /* the PC's twelfth item */
+const char *MenuTranslation_MainOriginal(void);      /* wording painted on the disc */
+const char *MenuTranslation_ItemOriginal(void);
+
+#ifdef __cplusplus
+}
+#endif
+#endif

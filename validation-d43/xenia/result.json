@@ -1,0 +1,48 @@
+{
+  "result": "PASS",
+  "tested_XEX_sha256": "733ae4b5f6c62ab62d01a5059536d177723e266d6680172fb6b19d4d88c9ab42",
+  "renderer": "Xenia Vulkan llvmpipe software; not Xbox performance",
+  "Battle_Init": "PASS",
+  "health": [
+    [
+      "0",
+      "40000",
+      "40000"
+    ],
+    [
+      "1",
+      "40000",
+      "40000"
+    ]
+  ],
+  "completed_steps": 89,
+  "FIGHT_frames": 4,
+  "cancelled_between_frames": true,
+  "natural_KO_verified": false,
+  "begin_frames": 181,
+  "end_frames": 181,
+  "transaction_close_result": 0,
+  "last_logged_model_GPU_draws": 143360,
+  "last_logged_model_fallbacks": 0,
+  "last_logged_command_splits": 64,
+  "NOT_READY": 2,
+  "Game_Main_called": false,
+  "Battle_Main_called": false,
+  "stable_30_fps_on_Xbox_verified": false,
+  "audible_audio_verified": false,
+  "complete_game": false,
+  "harness": {
+    "elapsed_seconds": 330.3350167059998,
+    "frames_seen": [
+      0,
+      32,
+      64
+    ],
+    "process_exit": null,
+    "token": "original-battle-check",
+    "renderer": "llvmpipe; no physical-console performance claim",
+    "host_audio_output": "dummy",
+    "audible_audio_verified": false
+  },
+  "visual_review": "Inspect included captures separately; this parser does not certify pixels or complete gameplay"
+}

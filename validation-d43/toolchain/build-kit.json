@@ -1,0 +1,9 @@
+{
+  "result": "PASS",
+  "bytes": 278969064,
+  "sha256": "1aedc98dd24d86817be3c55c071543347ba717eda4fbde2e86bba7587a7b5a5e",
+  "members": 2042,
+  "GNU_source_hashes_verified": true,
+  "commercial_game_data_included": false,
+  "complete_toolchain": true
+}

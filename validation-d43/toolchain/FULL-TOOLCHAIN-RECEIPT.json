@@ -1,0 +1,14 @@
+{
+  "sdk_commit": "8c58c7a3fb37bb261c5a11a8a1f4fa8a8bfd0d28",
+  "sdk_patch": "engine/platform/xsdk-keep-kernel-lut.patch",
+  "target": "powerpc-xsdk-elf",
+  "compiler_version": "15.3.0",
+  "C_compiler_and_newlib_installed": true,
+  "CXX_stage_complete": true,
+  "scope": "Full GCC C/C++ + binutils + newlib; host debugging sections stripped for checkpoint size; original verified source archives included",
+  "sources": {
+    "binutils-2.47.tar.xz": "154ab23b60070e8f27013c22977f1129425d67d1e8acd6e13010e617811e4cff",
+    "gcc-15.3.0.tar.xz": "fa59c1beef8995f27c4d71c1df227587189315d3e6faff1bb4306e61b0c530eb",
+    "newlib-4.6.0.20260123.tar.gz": "6ff27e3bf022666f43f7802255be680eeff722ac181b1725d21e2e8318604ee3"
+  }
+}

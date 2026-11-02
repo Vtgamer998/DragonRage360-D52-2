@@ -1,0 +1,5 @@
+# Copie para resource-converters.txt somente depois de confirmar os IDs.
+# Formato: animation OU skeleton, primeiro ID, ultimo ID, BPE (0 ou 1).
+# Os IDs sao decimais. Nao registre modelos inteiros como esqueletos.
+# Nenhum ID vem habilitado: os formatos ainda precisam de catalogacao real.
+# Para recursos embutidos em modelos/BIN e necessario um conversor do conteiner.

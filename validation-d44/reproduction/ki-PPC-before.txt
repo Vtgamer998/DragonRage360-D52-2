@@ -1,0 +1,36 @@
+
+/workspace/scratch/679a7ca7bd27/work/DragonRage360/build/baseline/xenia/default.elf:     file format elf32-powerpc
+
+
+Disassembly of section .text:
+
+821882f8 <BtlKiBlast_GetReactOfHit>:
+821882f8:	81 23 00 68 	lwz     r9,104(r3)
+821882fc:	2c 09 00 00 	cmpwi   r9,0
+82188300:	41 82 00 64 	beq     82188364 <BtlKiBlast_GetReactOfHit+0x6c>
+82188304:	94 21 ff a0 	stwu    r1,-96(r1)
+82188308:	7c 08 02 a6 	mflr    r0
+8218830c:	fb e1 00 58 	std     r31,88(r1)
+82188310:	7c 7f 1b 78 	mr      r31,r3
+82188314:	90 01 00 64 	stw     r0,100(r1)
+82188318:	a8 69 00 10 	lha     r3,16(r9)
+8218831c:	4b fd b7 e5 	bl      82163b00 <BtlChar_Get>
+82188320:	81 3f 00 68 	lwz     r9,104(r31)
+82188324:	a3 e9 00 18 	lhz     r31,24(r9)
+82188328:	4b fd b9 01 	bl      82163c28 <BtlChar_GetObj>
+8218832c:	7c 69 1b 78 	mr      r9,r3
+82188330:	7f e5 07 34 	extsh   r5,r31
+82188334:	38 60 00 00 	li      r3,0
+82188338:	81 49 09 24 	lwz     r10,2340(r9)
+8218833c:	1d 25 00 34 	mulli   r9,r5,52
+82188340:	7d 4a 4a 14 	add     r10,r10,r9
+82188344:	88 8a 00 24 	lbz     r4,36(r10)
+82188348:	7c 84 07 74 	extsb   r4,r4
+8218834c:	4b ff f5 b5 	bl      82187900 <BtlKiBlast_MapReact>
+82188350:	80 01 00 64 	lwz     r0,100(r1)
+82188354:	eb e1 00 58 	ld      r31,88(r1)
+82188358:	38 21 00 60 	addi    r1,r1,96
+8218835c:	7c 08 03 a6 	mtlr    r0
+82188360:	4e 80 00 20 	blr
+82188364:	89 29 00 24 	lbz     r9,36(r9)
+82188368:	7f e0 00 08 	trap

@@ -1,0 +1,22 @@
+SAVE RAW USA — CONTEÚDO DESBLOQUEADO
+
+Arquivo: BASLUS-21678DBZT3, 16.384 bytes.
+Gerado pelo módulo save_unlock.c a partir das rotinas públicas decompiladas.
+Não é um save baixado de outra pessoa nem uma imagem completa de memory card.
+
+Inclui bits de desbloqueio para personagens, cenários, músicas e itens,
+progresso das nove listas conforme Save_UnlockAll e 9.999.999 Zeni.
+Não afirma todos os desafios/modos concluídos nem equipamentos maximizados.
+
+O formato, os campos e o checksum foram testados, inclusive por comparação
+com uma execução determinística de Save_SetDefaults, Save_UnlockAll,
+Save_AddMoney e McCard_Checksum do upstream. A rotina original pode marcar
+itens como NOVO aleatoriamente; este arquivo não acrescenta essa marca.
+Ainda não foi carregado dentro de uma luta ou de um jogo real neste ambiente.
+
+Use sempre em uma cópia separada do perfil. Preserve seu save e os arquivos
+icon.sys e dbzsm.ico que pertencem à pasta do seu jogo. Não substitua uma
+imagem inteira .ps2/.mcd por este arquivo RAW. Para importar em emuladores
+ou outros ports, siga o formato de pasta/memory card aceito pelo programa.
+
+O XEX desta entrega ainda não executa lutas e não usa este save em uma partida.
