@@ -5,16 +5,18 @@
 #include <stdint.h>
 #include <netinet/in.h>
 enum { LOBBY_OFF, LOBBY_HOST, LOBBY_SEARCH, LOBBY_JOIN, LOBBY_PAIRED };
+/* D52-2: depth of the input window each side keeps for reordering. Must be a
+ * power of two because frames are mapped to slots with `frame & MASK`. */
+#define D52_INPUT_DEPTH 16u
+#define D52_INPUT_MASK  (D52_INPUT_DEPTH-1u)
 typedef struct {
     int fd, state, host;
     uint32_t nonce, session, last_send, last_seen, started;
     struct sockaddr_in target, peer;
     char message[240];
-/* D52-2: deterministic input / state-hash layer. Everything below is only
- * used while state==LOBBY_PAIRED; the D52-1 fields above are untouched so an
- * old console still pairs with a new one. */
-#define D52_INPUT_DEPTH 16u
-#define D52_INPUT_MASK  (D52_INPUT_DEPTH-1u)
+    /* D52-2: deterministic input / state-hash layer. Everything below is only
+     * used while state==LOBBY_PAIRED; the D52-1 fields above are untouched so
+     * an old console still pairs with a new one. */
     uint32_t tick_now;          /* last now passed to dr_lobby_tick */
     /* transmit window: frames we have queued but the peer may not have */
     uint32_t tx_highest;        /* newest frame handed to us by the game */

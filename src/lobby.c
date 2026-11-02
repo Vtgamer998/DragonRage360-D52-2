@@ -159,8 +159,7 @@ void dr_lobby_tick(DrLobby *l,uint32_t now)
  * the two machines run different frames. Frames are buffered in a 16-deep
  * window, which absorbs reordering, duplicates and short bursts of loss. */
 
-enum { D52_INPUT_DEPTH=16, D52_INPUT_MASK=D52_INPUT_DEPTH-1,
-       D52_INPUT_RTX_MS=120, D52_INPUT_RTX_MAX=6 };
+enum { D52_INPUT_RTX_MS=120, D52_INPUT_RTX_MAX=6 };
 
 static void send_input_packet(DrLobby *l,const struct sockaddr_in *to,
                               uint32_t nonce,uint32_t session,
