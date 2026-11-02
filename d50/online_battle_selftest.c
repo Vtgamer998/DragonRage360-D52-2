@@ -159,6 +159,14 @@ int D52_OnlineBattleSelfTest(void)
                     dr_lobby_state_name(client.state));
             result=-3;goto out;
         }
+        if((rounds%30)==29)
+            D50_Log("D52-2 progress round=%u host_frame=%u client_frame=%u "
+                    "host_tx=%u/%u client_tx=%u/%u",
+                    (unsigned)rounds,
+                    (unsigned)dr_online_battle_frame(&side0),
+                    (unsigned)dr_online_battle_frame(&side1),
+                    (unsigned)host.tx_acked,(unsigned)host.tx_highest,
+                    (unsigned)client.tx_acked,(unsigned)client.tx_highest);
         if(dr_online_battle_frame(&side0)>570000000u) break; /* sanity */
     }
 
@@ -167,6 +175,12 @@ int D52_OnlineBattleSelfTest(void)
         D50_Log("FAIL: D52-2 frame counters diverged host=%u client=%u",
                 (unsigned)dr_online_battle_frame(&side0),
                 (unsigned)dr_online_battle_frame(&side1));
+        D50_Log("     host tx_acked=%u tx_highest=%u rx_frame=%u rx_delivered=%u",
+                (unsigned)host.tx_acked,(unsigned)host.tx_highest,
+                (unsigned)host.rx_frame,(unsigned)host.rx_delivered);
+        D50_Log("     client tx_acked=%u tx_highest=%u rx_frame=%u rx_delivered=%u",
+                (unsigned)client.tx_acked,(unsigned)client.tx_highest,
+                (unsigned)client.rx_frame,(unsigned)client.rx_delivered);
         result=-4;goto out;
     }
     if(dr_online_battle_frame(&side0)<10) {
