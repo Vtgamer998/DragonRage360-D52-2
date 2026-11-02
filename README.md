@@ -1,4 +1,4 @@
-# DragonRage360 · D53-A — Adaptador do motor real (sobre a D52-2)
+# DragonRage360 · D53 — Adaptador do motor real + RNG determinístico (sobre a D52-2)
 
 Esta é a continuação direta da [D52-1](https://github.com/Vtgamer998/DragonRage360)
 (lobby UDP) e da D52-2 (lockstep com hash). A D52-1 **não foi reescrita**: o
@@ -6,13 +6,21 @@ protocolo de pareamento original foi preservado byte a byte, e as camadas
 seguintes foram adicionadas **por cima**, sem alterar um único campo dos
 pacotes de controle.
 
-O objetivo da D52-2 continua valendo, e a D53-A acrescenta a peça que faltava:
+O objetivo da D52-2 continua valendo, e a D53 acrescenta a peça que faltava:
 
 > Dado o mesmo par de entradas no mesmo número de quadro, as duas CPUs
 > devem produzir exatamente o mesmo estado — e esse estado agora pode ser o do
 > **motor real**, não o de uma simulação de substituição.
 
-A D53-A não destrava jogabilidade online no console; ela destrava a *ponte*
+- **D53-A** construiu a ponte: `start`/`update`/`end` ligados a
+  `Battle_Init`/`Battle_StepFrame`/`Battle_Term`, com hash do estado real.
+- **D53-B** fecha o determinismo: o gerador aleatório é **re-semeado no início
+  de cada batalha online** e o hash passa a cobrir **toda a simulação** —
+  lutadores, roster, o segundo RNG do motor, IA, script e o estado do próprio
+  `rand()`. Sem isso, dois hashes iguais sobre `gBattleWork` provavam muito
+  pouco.
+
+A D53 não destrava jogabilidade online no console; ela destrava a *ponte*
 para ela. Ver "Plano da D53" no fim deste arquivo.
 
 ---
@@ -171,6 +179,67 @@ simulação.
 
 ---
 
+### 8. Determinismo de ponta a ponta (D53-B)
+
+Duas coisas faltavam para que hashes iguais significassem sincronia real.
+
+#### 8.1 O gerador aleatório é re-semeado no início de cada batalha
+
+O vendor chama `rand()` **363 vezes em 46 arquivos**, incluindo simulação
+(`btl_char_hit.c`, `btl_seq.c`, `gsc.c`). E os **menus** também desenham com
+`rand()` — e os dois consoles navegam os menus de forma independente. Sem
+re-semeamento, o estado que `Battle_Init` herdaria já seria diferente no lado
+A e no lado B, e o primeiro quadro divergiria.
+
+`src/dr_rand.c` reimplementa o `rand()` do newlib **bit a bit** (LCG
+`state*6364136223846793005+1`, `(state>>32)&RAND_MAX`, estado inicial 1) e
+expõe `dr_rand/dr_srand/dr_rand_state/dr_rand_draws/dr_rand_reset`. No build
+do XEX (`-DDR_PROVIDE_LIBC_RAND`) ele **substitui** `rand()`/`srand()`, para
+que todo desenho do motor caia no estado que o hash lê. Os testes de host
+ficam com o `rand()` da plataforma.
+
+`bt_start()` chama `dr_rand_reset()` **antes de `Battle_Init`**. Isso muda
+apenas o BGM/cosmético sorteado no caminho online; o caminho offline não é
+tocado.
+
+#### 8.2 O hash cobre a simulação inteira
+
+`bt_hash()` passou a misturar, além de `gBattleWork`:
+
+| Bloco | O que entra | Como |
+|---|---|---|
+| Lutadores | pose, ação, membros, gauges, timers, flags — tudo até `objTbl` | faixa de bytes pointer-free (assert de layout) |
+| Roster `gBtlChars` | `count/flags/frame`, o **segundo RNG** (`unk18`/`randState`), timer de palco, estado de clash, pedidos de som | campos por nome |
+| Fila de mudança | os 8 pedidos campo a campo + `write/read/state/loaded/timeStop` | campo a campo, **pulando `cur`** (é ponteiro para dentro da própria fila) |
+| IA e script | `BtlAiMgr_GetFrame/GetType/GetLevel`, `BtlScript_GetStory/IsEventRunning` | getters (os blocos são cheios de ponteiros) |
+| RNG do libc | `dr_rand_state()` | o contador de draws torna visível "um lado chamou `rand()` uma vez a mais" |
+
+Fora do hash, de propósito: `BattleMember.data/.buf`, `gBtlChars->chars/unk8/
+unkC/tbl[]`, `unk38`, `unk278` e `change.cur` — tudo ponteiro ou endereço de
+heap, que numa consola carregada em endereço aleatório diferiria sempre.
+
+#### 8.3 Contrato de layout ABI-agnóstico
+
+Os offsets absolutos do cabeçalho (pose em `0x10`, `objTbl` em `0x15E8`…)
+assumem `u64` de oito bytes — mas `types.h` define `u64` como `unsigned
+long`, que é **quatro bytes no PowerPC de 32 bits** e oito no host LP64. Ou
+seja: os números documentados **não valem em nenhum dos dois ABIs**.
+
+Os `_Static_assert` do adaptador por isso afirmam **relações**, não literais:
+`prevPose` encosta em `pose`, `objTbl` encosta em `padFlagA + 6 palavras`,
+a fila tem o ponteiro logo após os oito pedidos. Essas relações valem nos
+dois ABIs e são exatamente o que a faixa de bytes do hash precisa.
+
+> **Descoberta (reportada, não corrigida — o motor está preservado):** como
+> `u64` tem 4 bytes no alvo, `sizeof(BtlMgrChr)` é `0x1504` e
+> `BtlMgrPose` tem `0x7C`, enquanto `BtlChar_AllocAll` aloca `count * 0x1600`
+> e os comentários documentam `0x1600`/`0xF0`. O acesso é `&chars[i]`
+> (stride `sizeof`), então a alocação maior só desperdiça o rabo de cada
+> slot — não há overflow —, mas os offsets dos comentários estão
+> desatualizados para este `typedef`.
+
+---
+
 ## O que os testes provam — e o que não provam
 
 ```
@@ -206,13 +275,22 @@ PASS: D53-A harness lockstep through the adapter at frame 534, hash 46E05A17, 26
 PASS: D53-A engine adapter lifecycle, determinism and lockstep
 
 PASS: D53-A bt3xbx start calls Battle_Init once and installs the seam
+PASS: D53-B bt3xbx start reseeds the RNG before Battle_Init (draws=2 state=C0B18CCF4E252D17)
 PASS: D53-A bt3xbx synchronized inputs reach the engine (pad0=0004 pad1=1000)
 PASS: D53-A bt3xbx hash moves with the simulation (8BCF72D4)
 PASS: D53-A bt3xbx hash skips BattleMember.data (heap pointers stays out of the comparison)
+PASS: D53-B bt3xbx hash covers fighters, roster, second RNG, AI, script and change queue
+PASS: D53-B bt3xbx hash covers the libc RNG state
+PASS: D53-B bt3xbx hash keeps the change queue's pointer out of the comparison
 PASS: D53-A bt3xbx one Battle_Term per end, pad seam restored, no double release
 PASS: D53-A bt3xbx replaying the same 30 frames reproduces hash 05E13575
 PASS: D53-A bt3xbx different inputs give a different hash (05E13575 vs 8CEA09F5)
 PASS: D53-A bt3xbx bridge call sequence, pad injection, hash semantics and reproducibility
+```
+
+```
+$ make d53-rand-test
+PASS: dr_rand matches newlib's rand() (state 1, LCG 6364136223846793005, RAND_MAX 0x7FFFFFFF), reseeds and resets cleanly
 ```
 
 Compilado com `-Wall -Wextra -Werror -fsanitize=address,undefined` — sem um
@@ -235,28 +313,46 @@ Compilado com `-Wall -Wextra -Werror -fsanitize=address,undefined` — sem um
   `Battle_Term` uma vez; injeta as entradas sincronizadas (o stub lê de volta
   `pad0=0004 pad1=1000`); restaura `gXbPadPoll` no fim; e o hash ignora
   `BattleMember.data`.
+- **D53-B:** o `start` **re-semeia o RNG antes de `Battle_Init`** — o teste
+  envenena o gerador com 3 desenhos e verifica que, após o `start`, o estado
+  é exatamente o do newlib avançado 2 vezes (os 2 desenhos do próprio
+  `Battle_Init` do stub), com as constantes calculadas no teste a partir da
+  fórmula do newlib, não lidas da implementação.
+- **D53-B:** o hash cobre **lutadores, roster, o segundo RNG do motor, IA,
+  script, fila de mudança e o estado do `rand()`** — cada poke move o hash —,
+  e **não** cobre o ponteiro `change.cur` — um endereço não o move.
+- **D53-B:** `dr_rand` reproduz o `rand()` do newlib bit a bit (13 checagens
+  contra as constantes do newlib: estado inicial, fórmula, `RAND_MAX`,
+  `srand`, `reset`, contagem de desenhos).
 
 **Não provado** (e nenhum teste em loopback pode provar):
 
 - Sessão física entre duas consoles (Wi-Fi, roteador, NAT).
 - A pilha de rede do Xbox 360.
 - Que o **motor real** do bt3xbx é determinístico. O teste da ponte usa
-  `d50/bt3xbx_stub.c`, que imita o motor nos dois pontos de que a ponte
-  depende — mas não é a luta. Isso é D53-B, no console.
-- Que o XEX compila e roda. Não há toolchain PowerPC neste ambiente.
+  `d50/bt3xbx_stub.c`, que imita o motor nos pontos de que a ponte
+  depende — mas não é a luta. Isso continua sendo D53-B/B-console: os dois
+  lados reais trocando hashes.
+- Que o XEX compila e roda. A toolchain PowerPC foi construída e todos os
+  arquivos novos (`bt3xbx_adapter.c`, `dr_rand.c`, `main.c` nas duas
+  configurações) compilam com `-Wall -Wextra -Werror` para `powerpc-xsdk-elf`;
+  falta montar o link e testar no console.
 
 ---
 
 ## Limitações conhecidas
 
-1. **`rand()` é o risco nº 1 de determinismo (D53-B).** O código vendor chama
-   `rand()` **363 vezes em 46 arquivos**, incluindo simulação (`btl_char_hit.c`,
-   `btl_seq.c`, `gsc.c`) e não só desenho. `srand()` **nunca é chamado** em
-   lugar nenhum, então ambos os lados partem da semente padrão e são
-   determinísticos **desde que chamem `rand()` o mesmo número de vezes** — o
-   que vale se ambos executam o mesmo binário com as mesmas entradas. Ainda
-   assim, é a primeira coisa a verificar em D53-B. Corrigir exigiria tocar no
-   motor original, que está preservado.
+1. **`rand()` — tratado na D53-B, com uma ressalva.** O vendor chama `rand()`
+   **363 vezes em 46 arquivos**, incluindo simulação (`btl_char_hit.c`,
+   `btl_seq.c`, `gsc.c`) e não só desenho. A D53-B resolve isso por dois
+   lados: `src/dr_rand.c` substitui o `rand()` no build do XEX (LCG fiel ao
+   newlib) e `bt_start()` **re-semeia antes de `Battle_Init`**, porque os
+   **menus** também desenham e os dois consoles navegam de forma
+   independente. O estado do gerador está **dentro do hash**, então um lado
+   que chame `rand()` uma vez a mais diverge no próprio quadro em que isso
+   acontece. O que ainda não foi verificado é a sequência real de 363
+   chamadas **no console** — só dois bins idênticos com as mesmas entradas
+   podem provar isso.
 2. **A ponte foi provada contra um stub, não contra o motor.** `d50/bt3xbx_stub.c`
    implementa os quatro símbolos que o adaptador chama e lê os controles por
    `gXbPadPoll` exatamente como o motor faz. Ele prova a sequência de chamadas
@@ -282,16 +378,18 @@ Compilado com `-Wall -Wextra -Werror -fsanitize=address,undefined` — sem um
 | Etapa | Descrição | Estado |
 |---|---|---|
 | **A** | Adaptador de engine: interface `start`/`update`/`end`, ponte para `Battle_Init`/`Battle_StepFrame`/`Battle_Term`, hash do estado real, dois backends (referência + bt3xbx) | **concluída** |
-| **B** | Ligar `dr_bt3xbx_ops` no `src/main.c` sob `-DDR_HAVE_BT3XBX`, resolver a divisão XDK-vs-xsdk do build, gerar o XEX e testar no console — incluindo verificar o `rand()` | próxima |
+| **B** | Determinismo: re-semeio do RNG antes de `Battle_Init`, `rand()` fiel ao newlib, hash cobrindo roster/lutadores/IA/script/fila/estado do RNG, asserts de layout ABI-agnósticos | **concluída** (host + compilação PowerPC) |
+| **B2** | Ligar `-DDR_HAVE_BT3XBX` ao build do XEX, linkar `bt3xbx_adapter.o` + `dr_rand.o`, gerar `default.xex` e validar no RGH | próxima |
 | **C** | Menus e partidas online | |
-| **D** | Build do XEX e validação de console | |
+| **D** | Sessão física entre duas consoles | |
 
 A etapa A existe para que a troca do substituto pelo engine real seja uma
 mudança de **um ponteiro de função**, não uma refactorização de milhares de
 linhas. Ela cumpriu esse papel: `dr_online_battle_init_with(b, lobby, side,
 &dr_bt3xbx_ops, &estado)` é tudo que falta para rodar a luta real pelo
-lockstep. O que ainda não está provado é que o motor real *seja* determinístico
-— isso só se vê no console, com os dois lados trocando hashes.
+lockstep. A etapa B fechou o que faltava para que hashes iguais significassem
+sincronia. O que ainda não está provado é que o motor real *seja*
+determinístico — isso só se vê no console, com os dois lados trocando hashes.
 
 ---
 
@@ -301,12 +399,16 @@ lockstep. O que ainda não está provado é que o motor real *seja* determiníst
 git clone https://github.com/Vtgamer998/DragonRage360-D52-2.git
 cd DragonRage360-D52-2
 make d52-test        # D52-1 e D52-2 (lobby + lockstep), com sanitizers
-make d53-test        # D53-A: adaptador + ponte para o motor (stub)
+make d53-test        # D53-A/B: adaptador, ponte (stub) e RNG — 36 checagens
+make d53-rand-test   # só o RNG, contra as constantes do newlib
 ```
 
 Requer apenas `gcc` e `make` (Linux). Nenhuma toolchain de Xbox é usada nos
 testes — todo o código de rede roda em loopback sobre UDP real, e a ponte para
-o motor roda contra `d50/bt3xbx_stub.c`.
+o motor roda contra `d50/bt3xbx_stub.c`. A compilação para o alvo
+(`powerpc-xsdk-elf-gcc`, `-Wall -Wextra -Werror`) foi verificada separadamente
+para `src/bt3xbx_adapter.c`, `src/dr_rand.c` e `src/main.c` nas duas
+configurações.
 
 ---
 

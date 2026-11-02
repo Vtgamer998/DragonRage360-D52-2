@@ -28,4 +28,16 @@ void XbStub_LastButtons(uint16_t out[2]);
  * heap pointer is not part of the simulation. */
 void XbStub_SetLoaderPointer(void *p);
 
+/* ---- D53-B: one poke per block of state the hash must cover ------------ *
+ * Every one of them must MOVE the hash (except XbStub_SetChangeCur, which
+ * must not: it is an address). Nothing is restored by the caller: the next
+ * Battle_Init zeroes all of it again. */
+void XbStub_SetFighterAction(int fighter,int32_t action); /* a fighter        */
+void XbStub_SetRosterFrame(int32_t frame);                /* gBtlChars->frame */
+void XbStub_SetFighterRand(uint32_t state);               /* the 2nd RNG      */
+void XbStub_SetAiFrame(int32_t frame);                    /* BtlAiMgr_GetFrame*/
+void XbStub_SetScript(int32_t story,int32_t event_running);/* the battle script*/
+void XbStub_SetChange(int32_t state,int32_t time_stop);   /* change queue     */
+void XbStub_SetChangeCur(void *p);                        /* queue's pointer  */
+
 #endif

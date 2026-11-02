@@ -5,7 +5,7 @@ CC := $(TOOLCHAIN)gcc
 # Retain real native component APIs for static verification in the diagnostic.
 NATIVE_API_ROOTS := -Wl,--undefined=sceMpegInit -Wl,--undefined=sceMpegCreate -Wl,--undefined=sceMpegDelete -Wl,--undefined=sceMpegReset -Wl,--undefined=sceMpegIsEnd -Wl,--undefined=sceMpegAddCallback -Wl,--undefined=sceMpegAddStrCallback -Wl,--undefined=sceMpegDemuxPss -Wl,--undefined=sceMpegGetPicture -Wl,--undefined=sceGsResetPath -Wl,--undefined=sceGsResetGraph -Wl,--undefined=dr_gs_movie_build -Wl,--undefined=dr_gs_movie_send -Wl,--undefined=XbAdx_Clock -Wl,--undefined=ADXT_Init -Wl,--undefined=ADXT_Create -Wl,--undefined=ADXT_SetReloadSct -Wl,--undefined=ADXT_SetSvrFreq -Wl,--undefined=ADXT_StartAfs -Wl,--undefined=ADXT_StartFname -Wl,--undefined=ADXT_Stop -Wl,--undefined=ADXT_Pause -Wl,--undefined=ADXT_SetOutVol -Wl,--undefined=ADXT_GetOutVol -Wl,--undefined=ADXT_SetOutPan -Wl,--undefined=ADXT_SetOutputMono -Wl,--undefined=ADXT_GetStat -Wl,--undefined=XbOverlay_PrepareBuild -Wl,--undefined=XbOverlay_Load -Wl,--undefined=XbMpeg_Open -Wl,--undefined=XbMpeg_Next -Wl,--undefined=XbMpeg_Close
 CFLAGS := -mcpu=cell -fno-pic -std=gnu17 -MMD -MP -O2 -g -ffunction-sections -fdata-sections -Wall -Wextra -Werror -I$(XSDK)/include -Isrc -Iengine/graphics -Iengine/capture/port/src/gs -Iengine/platform/platform -Id50 -DDR_XBOX360
-OBJECTS := build/dr_ot_native.o build/dr_gs_movie.o build/dr_dma_engine.o build/dr_gs_native.o build/dr_dma_producer.o build/dr_gs_stream.o build/gs_draw.o build/gs_core.o build/gs_sony.o build/dr_gs_backend.o build/dr_gs_replay.o build/dr_gs_batch.o build/dr_capture_demo.o build/dr_capture_platform.o build/main.o build/demo_ui.o build/dr_disc.o build/bt3_wire.o build/net_check.o build/lobby.o build/dr_anim.o build/dr_bpe.o build/dr_resource_selftest.o build/dr_container.o build/dr_stage_collision.o build/dr_skeleton.o build/dr_xenos.o build/dr_gs_texture.o build/dr_graphics_demo.o build/dr_body_demo.o build/dr_texfile.o build/dr_body_pipeline.o build/dr_body_model.o build/dr_elf.o build/dr_face_vif.o build/dr_targets.o build/dr_vu1.o build/dr_vu1_selftest.o build/save_unlock.o build/save_export.o build/d50/xsdk_compat.o build/d50/gfx_probe.o build/d50/gfx_present.o build/d50/lobby_selftest.o
+OBJECTS := build/dr_ot_native.o build/dr_gs_movie.o build/dr_dma_engine.o build/dr_gs_native.o build/dr_dma_producer.o build/dr_gs_stream.o build/gs_draw.o build/gs_core.o build/gs_sony.o build/dr_gs_backend.o build/dr_gs_replay.o build/dr_gs_batch.o build/dr_capture_demo.o build/dr_capture_platform.o build/main.o build/demo_ui.o build/dr_disc.o build/bt3_wire.o build/net_check.o build/lobby.o build/dr_anim.o build/dr_bpe.o build/dr_resource_selftest.o build/dr_container.o build/dr_stage_collision.o build/dr_skeleton.o build/dr_xenos.o build/dr_gs_texture.o build/dr_graphics_demo.o build/dr_body_demo.o build/dr_texfile.o build/dr_body_pipeline.o build/dr_body_model.o build/dr_elf.o build/dr_face_vif.o build/dr_targets.o build/dr_vu1.o build/dr_vu1_selftest.o build/save_unlock.o build/save_export.o build/d50/xsdk_compat.o build/d50/gfx_probe.o build/d50/gfx_present.o build/d50/lobby_selftest.o build/dr_rand.o
 .PHONY: all clean host-test
 PLATFORM_SOURCES := $(addprefix engine/platform/platform/,$(shell cat engine/platform/platform-sources.txt))
 PLATFORM_OBJECTS := $(patsubst engine/platform/platform/%.c,build/%.o,$(PLATFORM_SOURCES))
@@ -64,14 +64,24 @@ d53-adapter-test:
 # replaced by d50/bt3xbx_stub.c, which reads the pads through gXbPadPoll exactly
 # as the real engine does, so the call sequence and the pad injection are proven
 # on a PC. The real engine is D53-B, on the console.
+# D53-B adds src/dr_rand.c: the bridge reseeds the generator before Battle_Init
+# and hashes its state, so the stub has to be able to draw.
 .PHONY: d53-bridge-test
 d53-bridge-test:
 	mkdir -p build
-	gcc -std=gnu17 -O2 -Wall -Wextra -Werror -fsanitize=address,undefined -g -DDR_HAVE_BT3XBX -Isrc -Id50 -Ivendor/tenkaichi-original/include -Iengine/platform/platform d50/test_d53_adapter.c d50/engine_adapter_selftest.c d50/bt3xbx_adapter_selftest.c d50/bt3xbx_stub.c d50/xsdk_compat.c src/engine_adapter.c src/reference_adapter.c src/online_battle.c src/lobby.c src/bt3xbx_adapter.c engine/platform/platform/xb_plat_pad.c -o build/test-d53-bridge
+	gcc -std=gnu17 -O2 -Wall -Wextra -Werror -fsanitize=address,undefined -g -DDR_HAVE_BT3XBX -Isrc -Id50 -Ivendor/tenkaichi-original/include -Iengine/platform/platform d50/test_d53_adapter.c d50/engine_adapter_selftest.c d50/bt3xbx_adapter_selftest.c d50/bt3xbx_stub.c d50/xsdk_compat.c src/engine_adapter.c src/reference_adapter.c src/online_battle.c src/lobby.c src/bt3xbx_adapter.c src/dr_rand.c engine/platform/platform/xb_plat_pad.c -o build/test-d53-bridge
 	ASAN_OPTIONS=detect_leaks=0 ./build/test-d53-bridge
-# Both D53-A suites in one go.
+# D53-B: the deterministic random source on its own, against newlib's formula.
+# Host only; DR_PROVIDE_LIBC_RAND stays off so the platform's rand() is left
+# alone (the XEX build is the one that replaces it).
+.PHONY: d53-rand-test
+d53-rand-test:
+	mkdir -p build
+	gcc -std=gnu17 -O2 -Wall -Wextra -Werror -fsanitize=address,undefined -g -Isrc d50/test_d53_rand.c src/dr_rand.c -o build/test-d53-rand
+	ASAN_OPTIONS=detect_leaks=0 ./build/test-d53-rand
+# Both D53 suites in one go.
 .PHONY: d53-test
-d53-test: d53-adapter-test d53-bridge-test
+d53-test: d53-adapter-test d53-rand-test d53-bridge-test
 clean:
 	rm -rf build
 .PHONY: disc-test
@@ -95,6 +105,11 @@ lobby-test:
 
 # Reference VU arithmetic must not become fused multiply-add.
 build/dr_vu1.o: CFLAGS += -ffp-contract=off
+
+# D53-B: only in the title build does dr_rand.c take over rand()/srand(), so
+# every draw the engine makes lands in the state the battle hash reads. Host
+# tests build without this and keep the platform's rand() untouched.
+build/dr_rand.o: CFLAGS += -DDR_PROVIDE_LIBC_RAND
 
 build/dr_body_pipeline.o: CFLAGS += -ffp-contract=off
 

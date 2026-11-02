@@ -1,6 +1,11 @@
 /* SPDX-License-Identifier: MIT
- * D53-A: bridge from the engine adapter (src/engine_adapter.h) to the real
- * bt3xbx battle engine.
+ * D53-A/D53-B: bridge from the engine adapter (src/engine_adapter.h) to the
+ * real bt3xbx battle engine.
+ *
+ * D53-B added the two things a lockstep match needs beyond the call sequence:
+ * the battle starts from a fresh random state (see bt_start) and the hash
+ * covers the roster, the fighters, the AI, the script and that random state
+ * (see bt_hash), so a divergence shows up as a mismatch instead of drifting.
  *
  * Nothing here modifies the engine. It only calls the three entry points the
  * engine already exposes and documents in
@@ -41,9 +46,54 @@
 #ifdef DR_HAVE_BT3XBX
 
 #include "battle/battle.h"
+#include "battle/btl_char_mgr.h"   /* the roster gBtlChars and the fighters */
+#include "battle/btl_char_ctl.h"   /* the change queue living inside it */
+#include "battle/btl_ai_mgr.h"     /* the CPU opponent's frame / type / level */
+#include "battle/btl_script.h"     /* the battle script's story and events */
+#include "dr_rand.h"
 #include "xb_pad.h"
+#include <stddef.h>
 #include <stdint.h>
 #include <string.h>
+
+/* ---- layout contract -------------------------------------------------- *
+ * The header documents EVERY byte of a fighter with an offset, so the block
+ * is contiguous (no padding) and the only pointer in it is objTbl at the
+ * very end. Hashing the bytes up to objTbl therefore covers pose, action,
+ * members, gauges, timers and flags without ever reading a pointer.
+ *
+ * The asserts below state RELATIONS, not absolute offsets, on purpose. The
+ * PS2 offsets in the comments (pose at 0x10, objTbl at 0x15E8 ...) assume
+ * u64 is eight bytes, but types.h typedefs u64 as `unsigned long`, which is
+ * FOUR bytes on the 32-bit PowerPC target and eight on the LP64 host. So the
+ * absolute numbers differ between the two ABIs -- and differ from the
+ * comments -- while every relation between neighbouring fields holds in both.
+ * What the hash needs is exactly those relations: that the fields are laid
+ * out back to back and that objTbl is the first pointer. If the header ever
+ * reorders or pads the block, these fail first. */
+_Static_assert(offsetof(BtlMgrChr,pose)==4*sizeof(s32),
+               "the four header words must precede the pose");
+_Static_assert(offsetof(BtlMgrChr,prevPose)==
+                   offsetof(BtlMgrChr,pose)+sizeof(BtlMgrPose),
+               "pose and prevPose must be contiguous");
+/* padFlagA -> unk15D4[5] -> objTbl, back to back with no gap: this is what
+ * keeps the hashed range [0, objTbl) a single contiguous pointer-free block
+ * on both ABIs (it holds on the target and on the LP64 host alike). */
+_Static_assert(offsetof(BtlMgrChr,objTbl)==
+                   offsetof(BtlMgrChr,padFlagA)+6*sizeof(s32),
+               "the scalar tail must run straight into objTbl");
+_Static_assert(sizeof(BtlMgrChr)>=offsetof(BtlMgrChr,objTbl)+3*sizeof(void*),
+               "objTbl must fit inside the fighter");
+_Static_assert(sizeof(BtlMgrPose)%4==0,
+               "the pose block must stay word-aligned for the byte hash");
+/* The change queue is read field by field because its `cur` member points
+ * into the queue itself. Every field before it is a 32-bit word, so the
+ * layout agrees on both ABIs: eight requests, then the pointer. */
+_Static_assert(offsetof(BtlChangeReq,slot)==8*sizeof(s32),
+               "slot must be the ninth word of a request");
+_Static_assert(offsetof(BtlChangeQueue,cur)==BTL_CHANGE_RING*sizeof(BtlChangeReq),
+               "the pointer must follow the eight requests");
+_Static_assert(BTL_CHANGE_RING==8,"change ring size changed");
 
 /* Battle_Init and Battle_Term come from battle.h (s32, = int). Battle_StepFrame
  * is the one entry point that header does not declare, so it is declared here
@@ -87,16 +137,41 @@ static int sync_poll(int index,XbPadState *out)
 }
 
 /* ---- hash of the real simulation state --------------------------------- *
- * FNV-1a over the gameplay fields of gBattleWork. Two rules make this correct
- * on any ABI and on both consoles:
+ * FNV-1a over everything the fight can move, in four blocks:
  *
- *   - fields are read BY NAME, never by a raw byte range: BattleWork contains
- *     BattleMember, whose layout depends on pointer size, so offsetof() on the
- *     host does not match the PowerPC target. Reading m->chara gives the right
- *     offset for whatever ABI this is compiled for.
- *   - BattleMember.data and BattleMember.buf are the loader's heap pointers and
- *     are deliberately skipped: a heap address is not part of the simulation
- *     and would make the hash differ for reasons that mean nothing.
+ *   1. gBattleWork  match setup, rosters, pool, result, events, flags.
+ *   2. the roster   gBtlChars: frame counters, the fighters' own random
+ *                   generator, clash state, sound requests, the character
+ *                   change queue, and every fighter's bytes up to the first
+ *                   pointer.
+ *   3. AI and script  BtlAiMgr frame/type/level, BtlScript story and events:
+ *                   state that lives outside gBattleWork and outside the
+ *                   roster, and that a mismatch here would otherwise hide.
+ *   4. the libc RNG state  dr_rand_state(): the generator the game draws from
+ *                   363 times. Its state is a pure function of how many draws
+ *                   happened, so a divergence in the number of draws shows up
+ *                   here on the very frame it happens.
+ *
+ * Two rules make this correct on any ABI and on both consoles:
+ *
+ *   - fields are read BY NAME, never by a raw byte range of a struct with
+ *     pointers: BattleWork contains BattleMember, whose layout depends on
+ *     pointer size, so offsetof() on the host does not match the PowerPC
+ *     target. Reading m->chara gives the right offset for whatever ABI this
+ *     is compiled for. The one raw range used (a fighter) is safe because
+ *     btl_char_mgr.h documents it as pointer-free up to objTbl, asserted
+ *     above.
+ *   - BattleMember.data and BattleMember.buf are the loader's heap pointers
+ *     and are deliberately skipped, and so are gBtlChars->chars / unk8 / unkC
+ *     / tbl[] and the change queue's `cur`: a heap address is not part of the
+ *     simulation and would make the hash differ for reasons that mean
+ *     nothing. (On the console the image is loaded at a random address, so
+ *     an address would differ between two machines every single time.)
+ *
+ * The byte ranges are hashed in memory order, so a host hash is not the
+ * number the console computes (the two ABIs disagree on byte order). That is
+ * fine: hashes are only ever compared between two builds of the SAME binary,
+ * which is how the two consoles run.
  *
  * Everything else in battle.h is scalar, and BattleResult/BattleEvents/BtlClock
  * have identical sizes on host and target (verified in D53-A). */
@@ -115,6 +190,15 @@ static uint32_t fnv_u64(uint32_t h,uint64_t v)
  * operations on both consoles, and this avoids any float comparison. */
 static uint32_t fnv_f32(uint32_t h,float v)
 { uint32_t bits; memcpy(&bits,&v,sizeof bits); return fnv_u32(h,bits); }
+/* A block of bytes, in memory order. Used only where the block is known to
+ * hold no pointer (see the layout contract above). */
+static uint32_t fnv_bytes(uint32_t h,const void *p,size_t n)
+{
+    const unsigned char *b=(const unsigned char *)p;
+    size_t i;
+    for(i=0;i<n;i++) { h^=b[i]; h*=16777619u; }
+    return h;
+}
 
 static uint32_t mix_member(uint32_t h,const BattleMember *m)
 {
@@ -171,6 +255,101 @@ static uint32_t mix_events(uint32_t h,const BattleEvents *e)
     return h;
 }
 
+/* How many fighters the roster may hold when it is hashed. Battle_Init passes
+ * 2; the cap only keeps a corrupt count from walking off the allocation. */
+#define BT_FIGHTERS_MAX 8
+
+/* The roster (gBtlChars) and every fighter it owns.
+ *
+ * The roster is described by SEVERAL headers at once -- btl_char_mgr.h,
+ * btl_char_get.h, btl_char_flag.h, btl_char_ctl.h ... all talk about the same
+ * block, and the engine's own sources include whichever view they need. This
+ * file uses btl_char_mgr.h for the block and btl_char_ctl.h for the change
+ * queue inside it (the engine does the same across translation units); both
+ * are included here because neither of them declares gBtlChars twice. */
+static uint32_t mix_roster(uint32_t h)
+{
+    const BtlCharMgr *c=gBtlChars;
+    const BtlChangeQueue *q;
+    int i,n;
+    if(!c) return h;                       /* before Battle_Init / after Term */
+    h=fnv_i32(h,c->count);
+    h=fnv_i32(h,c->flags);
+    h=fnv_i32(h,c->frame);                 /* frames simulated since reset */
+    /* 0x18 is the FIGHTERS' random generator: btl_char_get.h names it
+     * randState and BtlChar_Rand advances it (state * 714025 + 4096) % 150889
+     * while time is not stopped. A second RNG, separate from the libc one,
+     * and just as capable of desynchronizing two consoles. 0x1C is the stage
+     * timer (btl_char_get.h) that counts down every frame. */
+    h=fnv_u32(h,c->unk18);
+    h=fnv_i32(h,c->unk1C);
+    h=fnv_u64(h,c->unk130);                /* replay viewer (btl_replay.h) */
+    /* 0x40..0xA0 is the clash state (btl_char_flag.h: clashState, clashA,
+     * clashB, clashC) and 0xA0..0x130 the four positional sound requests and
+     * their count. Both ranges are scalars only -- verified against the view
+     * that names them -- so the bytes can be hashed as they are. */
+    h=fnv_bytes(h,c->unk40,sizeof c->unk40);
+    h=fnv_bytes(h,c->unkA0,sizeof c->unkA0);
+    /* The character change queue at 0x138 (transformations, fusions, member
+     * swaps, extra objects, and the "time stopped" word at +0x274). Read
+     * member by member: `cur` points INTO this queue and must stay out. */
+    q=(const BtlChangeQueue *)(const void *)c->unk138;
+    for(i=0;i<BTL_CHANGE_RING;i++) {
+        const BtlChangeReq *r=&q->req[i];
+        h=fnv_i32(h,r->player);
+        h=fnv_i32(h,r->kind);
+        h=fnv_i32(h,r->chara);
+        h=fnv_i32(h,r->costume);
+        h=fnv_i32(h,r->variant);
+        h=fnv_i32(h,r->animChara);
+        h=fnv_i32(h,r->unk18);
+        h=fnv_i32(h,r->voiceChara);
+        h=fnv_i32(h,r->slot);
+    }
+    h=fnv_i32(h,q->write);
+    h=fnv_i32(h,q->read);
+    h=fnv_i32(h,q->state);
+    h=fnv_i32(h,q->loaded);
+    h=fnv_i32(h,q->unk134);
+    h=fnv_i32(h,q->unk138);
+    h=fnv_i32(h,q->timeStop);
+    /* c->unk38 and c->unk278 are the only two regions no view names, and
+     * c->chars / c->unk8 / c->unkC / c->tbl[] are pointers. All left out on
+     * purpose: nothing is gained by hashing an unnamed word or an address.
+     *
+     * The fighters: the whole documented block up to the first pointer
+     * (objTbl), so pose, action, members, gauges, freeze timers and per
+     * frame flags are all in. The engine allocates count * 0x1600 and
+     * indexes with &chars[i], i.e. with sizeof(BtlMgrChr), so stepping by
+     * sizeof() walks exactly the engine's own stride. The allocation is
+     * larger than the struct in this build (u64 is four bytes here), which
+     * only wastes the tail of each slot; it never reads past it. */
+    n=c->count;
+    if(n<0) n=0;
+    if(n>BT_FIGHTERS_MAX) n=BT_FIGHTERS_MAX;
+    if(!c->chars) return h;
+    for(i=0;i<n;i++) h=fnv_bytes(h,&c->chars[i],offsetof(BtlMgrChr,objTbl));
+    return h;
+}
+
+/* The CPU opponent and the battle script: state that lives in its own blocks
+ * (gBtlAi is a heap block, gBtlScript a static one), reachable only through
+ * getters because those blocks are full of pointers. BtlAiMgr_GetFrame is the
+ * number of frames the AI has run, so it also catches "the AI ran a different
+ * number of times", which nothing else in the hash would. */
+static uint32_t mix_ai_script(uint32_t h)
+{
+    int s;
+    h=fnv_i32(h,BtlAiMgr_GetFrame());
+    for(s=0;s<2;s++) {
+        h=fnv_i32(h,BtlAiMgr_GetType(s));
+        h=fnv_i32(h,BtlAiMgr_GetLevel(s));
+    }
+    h=fnv_i32(h,BtlScript_GetStory());
+    h=fnv_i32(h,BtlScript_IsEventRunning());
+    return h;
+}
+
 static uint32_t bt_hash(void *ctx)
 {
     const BattleWork *w;
@@ -215,6 +394,11 @@ static uint32_t bt_hash(void *ctx)
     h=fnv_u64(h,w->flags);
     h=fnv_i32(h,w->running);
     h=fnv_i32(h,w->unk19FC);
+    /* The rest of the simulation: roster and fighters, AI and script, and the
+     * libc generator's state (the count of draws it has served). */
+    h=mix_roster(h);
+    h=mix_ai_script(h);
+    h=fnv_u64(h,dr_rand_state());
     return h;
 }
 
@@ -224,6 +408,17 @@ static int bt_start(void *ctx)
 {
     DrBt3xbxState *s=ctx;
     if(!s || s->running) return -1;
+    /* D53-B: the generator starts every battle from the same state.
+     *
+     * The menus draw with rand() (menu_s_d.c, menu_h_b.c, menu_t_b.c,
+     * menu_k_c.c) and the two consoles navigate them independently, so the
+     * state Battle_Init would inherit is different on each side and the very
+     * first frame would already disagree. Reseeding here, before Battle_Init,
+     * makes both battles begin from newlib's fresh state (1) and puts every
+     * subsequent draw under the hash, where a divergence is visible. It
+     * changes which random BGM/cosmetic the fight picks compared with offline
+     * play, and only for this online path. */
+    dr_rand_reset();
     if(Battle_Init()<0) return -1;     /* engine refused: stay not running */
     s->running=1;
     /* Install the injection seam for the whole match and restore it at end(),

@@ -9,6 +9,9 @@
 #include "lobby.h"
 #include "lobby_selftest.h"
 #include "online_battle.h"
+#ifdef DR_HAVE_BT3XBX
+#include "bt3xbx_adapter.h"
+#endif
 #include "dr_resource.h"
 #include "dr_container.h"
 #include "dr_graphics_demo.h"
@@ -104,6 +107,13 @@ static void release_native_stage(void){
 static DemoUi ui;
 /* D52-2: one lockstep battle instance, bound while the lobby is paired. */
 static DrOnlineBattle online_battle;
+/* D53-B: set when binding the engine backend failed. Battle_Init allocates
+ * every battle subsystem, so a failed one must never be retried blindly on
+ * the next tick: the flag stops the retry until the lobby drops. */
+static int online_bind_failed;
+#ifdef DR_HAVE_BT3XBX
+static DrBt3xbxState bt3xbx_state;
+#endif
 static uint32_t display_width,display_height;
 static bool confirm_seen,back_seen,navigation_seen,first_frame;
 /* D51: 0 off, 1 d51-gfx-probe (640x480), 2 d51-gfx-probe-720 (1280x720). */
@@ -968,11 +978,30 @@ int main(void)
         dr_lobby_tick(&lobby,(uint32_t)now);
         /* D52-2: lockstep online battle once the lobby is paired. The host is
          * player one, the client player two; both consoles number frames from
-         * 1 and only advance when the input for that frame is known. */
-        if(lobby.state == LOBBY_PAIRED && !dr_online_battle_active(&online_battle)) {
-            if(dr_online_battle_init(&online_battle,&lobby,lobby.host?0:1)==1)
-                xsdk_log_write("D52-2: online battle ready role=%s side=%d",
-                               lobby.host?"host":"client",lobby.host?0:1);
+         * 1 and only advance when the input for that frame is known.
+         * D53-B: with DR_HAVE_BT3XBX the bound backend is the REAL bt3xbx
+         * engine (start = Battle_Init, update = Battle_StepFrame, end =
+         * Battle_Term, hash over gBattleWork); every other build keeps the
+         * reference adapter, which is what the host tests exercise. */
+        if(lobby.state == LOBBY_PAIRED && !dr_online_battle_active(&online_battle)
+           && !online_bind_failed) {
+            int bound;
+#ifdef DR_HAVE_BT3XBX
+            bound=dr_online_battle_init_with(&online_battle,&lobby,lobby.host?0:1,
+                                             &dr_bt3xbx_ops,&bt3xbx_state);
+#else
+            bound=dr_online_battle_init(&online_battle,&lobby,lobby.host?0:1);
+#endif
+            if(bound==1) {
+                xsdk_log_write("D53: online battle ready role=%s side=%d backend=%s",
+                               lobby.host?"host":"client",lobby.host?0:1,
+                               dr_online_battle_backend(&online_battle));
+            } else if(bound<0) {
+                /* Never retry: Battle_Init allocates the whole battle. */
+                online_bind_failed=1;
+                xsdk_log_write("D53: engine backend refused to start: %s",
+                               dr_engine_error(&online_battle.engine));
+            }
         }
         if(dr_online_battle_active(&online_battle)) {
             uint32_t local_input=demo_pad_to_input(buttons);
@@ -984,7 +1013,9 @@ int main(void)
                                "rollback not implemented yet",
                                (unsigned)frame,(unsigned)local_hash,
                                (unsigned)remote_hash);
-            /* TODO: feed remote_input to the real bt3xbx Battle_Main. */
+            /* The remote input reaches the engine through the adapter: the
+             * harness calls dr_engine_update(in0,in1) once both inputs for the
+             * frame are known, and the backend injects them via gXbPadPoll. */
         }
         if(dr_online_battle_active(&online_battle) && lobby.state != LOBBY_PAIRED) {
             xsdk_log_write("D52-2: online battle stopped after %u frame(s), "
@@ -993,6 +1024,9 @@ int main(void)
                            (unsigned)dr_online_battle_matched(&online_battle));
             dr_online_battle_shutdown(&online_battle);
         }
+        /* The pairing is gone, so a backend that refused to start may be tried
+         * again the next time a peer connects. */
+        if(lobby.state != LOBBY_PAIRED) online_bind_failed=0;
         snprintf(ui.network,sizeof(ui.network),"%s",lobby.message);
         ui.lobby_role=lobby.state==LOBBY_OFF?0:(lobby.host?1:2);
         ui.players=lobby_player_count(&lobby);

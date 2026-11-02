@@ -24,6 +24,7 @@
 #include "bt3xbx_stub.h"
 #include "engine_adapter.h"
 #include "bt3xbx_adapter.h"
+#include "dr_rand.h"
 #include "xsdk_compat.h"
 #include "xb_pad.h"
 #include <string.h>
@@ -86,6 +87,12 @@ int D53_Bt3xbxAdapterSelfTest(void)
           "bind of the bt3xbx backend must succeed");
     CHECK(strcmp(dr_engine_backend_name(&a),"bt3xbx")==0,-2,
           "the backend must name itself bt3xbx");
+    /* D53-B: leave the generator in a state no battle may inherit. The menus
+     * draw with rand() and the two consoles navigate them independently, so
+     * start must reseed BEFORE Battle_Init. */
+    dr_srand(0xDEADBEEFu);
+    (void)dr_rand();(void)dr_rand();(void)dr_rand();
+    CHECK(dr_rand_draws()==3u,-90,"the poison must be counted");
     CHECK(dr_engine_start(&a)==0,-3,"start must succeed");
     CHECK(XbStub_InitCalls()==1,-4,"start must call Battle_Init exactly once");
     CHECK(dr_engine_phase(&a)==DR_ENGINE_RUNNING,-5,"start must be RUNNING");
@@ -94,7 +101,25 @@ int D53_Bt3xbxAdapterSelfTest(void)
     CHECK(dr_engine_start(&a)!=0,-7,"a second start must fail");
     CHECK(XbStub_InitCalls()==1,-8,
           "a refused second start must not call Battle_Init again");
+    /* The stub draws twice inside Battle_Init, so the generator must now be
+     * exactly "newlib's initial state (1) advanced twice": the reseed wiped
+     * the poison (draw count back to 0) and the two draws landed on it. The
+     * expected state is computed here from newlib's own constants instead of
+     * being taken from the implementation under test. */
+    {
+        uint64_t st=1;
+        st=st*6364136223846793005ULL+1ULL;
+        st=st*6364136223846793005ULL+1ULL;
+        CHECK(dr_rand_draws()==2u,-91,
+              "start must reseed the generator before Battle_Init");
+        CHECK(dr_rand_state()==st,-92,
+              "the battle must begin from newlib's fresh state, twice drawn");
+    }
     D50_Log("PASS: D53-A bt3xbx start calls Battle_Init once and installs the seam");
+    D50_Log("PASS: D53-B bt3xbx start reseeds the RNG before Battle_Init "
+            "(draws=%u state=%08X%08X)",
+            (unsigned)dr_rand_draws(),
+            (unsigned)(dr_rand_state()>>32),(unsigned)dr_rand_state());
 
     /* ---- the injected pads reach the engine --------------------------- *
      * Frame 1: pad 0 holds "left", pad 1 holds "A". The stub reads them back
@@ -143,6 +168,72 @@ int D53_Bt3xbxAdapterSelfTest(void)
     }
     D50_Log("PASS: D53-A bt3xbx hash skips BattleMember.data (heap pointers "
             "stays out of the comparison)");
+
+    /* ---- D53-B: the hash covers the WHOLE simulation ------------------ *
+     * Two equal hashes over gBattleWork prove nothing about what lives
+     * outside it. Each poke below targets one block the D53-B hash added, and
+     * each must move the hash; the last one targets the change queue's `cur`
+     * member, an address, and must NOT move it. */
+    {
+        uint32_t h;
+        h=dr_engine_hash(&a);
+        XbStub_SetFighterAction(0,0x5150);
+        CHECK(dr_engine_hash(&a)!=h,-100,
+              "a fighter's own bytes must be part of the hash");
+        h=dr_engine_hash(&a);
+        XbStub_SetFighterAction(1,0x5151);
+        CHECK(dr_engine_hash(&a)!=h,-101,
+              "the second fighter must be part of the hash too");
+        h=dr_engine_hash(&a);
+        XbStub_SetRosterFrame(0x2222);
+        CHECK(dr_engine_hash(&a)!=h,-102,
+              "the roster's frame counter must be part of the hash");
+        h=dr_engine_hash(&a);
+        XbStub_SetFighterRand(0x3333u);
+        CHECK(dr_engine_hash(&a)!=h,-103,
+              "the fighters' own random state must be part of the hash");
+        h=dr_engine_hash(&a);
+        XbStub_SetAiFrame(0x4444);
+        CHECK(dr_engine_hash(&a)!=h,-104,
+              "the AI's frame counter must be part of the hash");
+        h=dr_engine_hash(&a);
+        XbStub_SetScript(3,1);
+        CHECK(dr_engine_hash(&a)!=h,-105,
+              "the battle script's state must be part of the hash");
+        h=dr_engine_hash(&a);
+        XbStub_SetChange(4,1);         /* BTL_CHANGE_LOADED, time stopped */
+        CHECK(dr_engine_hash(&a)!=h,-106,
+              "the character change queue must be part of the hash");
+        D50_Log("PASS: D53-B bt3xbx hash covers fighters, roster, second RNG, "
+                "AI, script and change queue");
+
+        /* The libc generator's state: it moves whenever a draw happens, so a
+         * single extra draw must change the hash -- that is what turns "the
+         * two consoles called rand() a different number of times" into a
+         * mismatch on the frame it happens. */
+        h=dr_engine_hash(&a);
+        (void)dr_rand();
+        CHECK(dr_engine_hash(&a)!=h,-107,
+              "the libc RNG state must be part of the hash");
+        h=dr_engine_hash(&a);
+        dr_rand_reset();
+        CHECK(dr_engine_hash(&a)!=h,-108,
+              "reseeded RNG state must hash differently again");
+        D50_Log("PASS: D53-B bt3xbx hash covers the libc RNG state");
+
+        /* The change queue's `cur` points into the queue itself. It is an
+         * address, and on the console the image sits at a random one, so it
+         * must stay out of the comparison. */
+        h=dr_engine_hash(&a);
+        XbStub_SetChangeCur((void *)(uintptr_t)0xC0FFEEu);
+        CHECK(dr_engine_hash(&a)==h,-109,
+              "the change queue's pointer must not be hashed");
+        XbStub_SetChangeCur(0);
+        CHECK(dr_engine_hash(&a)==h,-110,
+              "clearing that pointer must not move the hash either");
+        D50_Log("PASS: D53-B bt3xbx hash keeps the change queue's pointer out "
+                "of the comparison");
+    }
 
     /* ---- battle over, then a single clean end ------------------------- */
     while(!a.finished) {
