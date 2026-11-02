@@ -170,6 +170,34 @@ int D52_OnlineBattleSelfTest(void)
         if(dr_online_battle_frame(&side0)>570000000u) break; /* sanity */
     }
 
+    /* Convergence phase: in lockstep the two sides may legitimately sit one
+     * frame apart while a datagram is in flight, so stop racing ahead and let
+     * retransmission drain. This is also what proves a dropped frame recovers
+     * instead of stalling forever. */
+    {
+        int extra;
+        for(extra=0;extra<200 &&
+            dr_online_battle_frame(&side0)!=dr_online_battle_frame(&side1);extra++) {
+            uint32_t r0=0,r1=0;
+            dr_lobby_tick(&host,clock);dr_lobby_tick(&client,clock);
+            settle();
+            clock+=10;
+            (void)dr_online_battle_update(&side0,
+                                          pattern_a(dr_online_battle_frame(&side0)),&r0);
+            (void)dr_online_battle_update(&side1,
+                                          pattern_b(dr_online_battle_frame(&side1)),&r1);
+        }
+        if(dr_online_battle_frame(&side0)!=dr_online_battle_frame(&side1)) {
+            D50_Log("FAIL: D52-2 sides did not converge after %d extra rounds "
+                    "(host=%u client=%u)",extra,
+                    (unsigned)dr_online_battle_frame(&side0),
+                    (unsigned)dr_online_battle_frame(&side1));
+            result=-9;goto out;
+        }
+        D50_Log("PASS: D52-2 converged after %d extra rounds at frame %u",
+                extra,(unsigned)dr_online_battle_frame(&side0));
+    }
+
     /* Both sides must have simulated the same number of frames. */
     if(dr_online_battle_frame(&side0)!=dr_online_battle_frame(&side1)) {
         D50_Log("FAIL: D52-2 frame counters diverged host=%u client=%u",
