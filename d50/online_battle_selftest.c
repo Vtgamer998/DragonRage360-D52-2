@@ -1,8 +1,13 @@
 /* SPDX-License-Identifier: AGPL-3.0-or-later
- * D52-2: loopback online battle self-test. It drives the real DrLobby
- * state machine and the online battle module over UDP on 127.0.0.1,
- * but it does not prove a two-console session, Wi-Fi, the router or
- * the Xbox 360 network stack.
+ * D52-2: loopback online battle self-test.
+ *
+ * It drives two real DrLobby instances and two real lockstep harness
+ * instances over UDP on 127.0.0.1. It proves that both sides agree on frame
+ * numbers and on the state hash while inputs are delayed, reordered and
+ * duplicated.
+ *
+ * It does NOT prove a two-console session, Wi-Fi, a router, the Xbox 360
+ * network stack, or that the real bt3xbx battle loop is deterministic.
  */
 #include "online_battle_selftest.h"
 #include "lobby.h"
@@ -13,92 +18,174 @@
 #include <sys/socket.h>
 #include <unistd.h>
 
-#define D52_SELFTEST_ROUNDS 200
-#define D52_SELFTEST_STEP_MS 10
-#define D52_SELFTEST_PAUSE_MS 1
+#define D52_ROUNDS 160
 
 /* Give the local stack a moment to queue a datagram between two ticks. */
 static void settle(void)
 {
     struct pollfd idle={.fd=-1,.events=0,.revents=0};
-    (void)poll(&idle,1,D52_SELFTEST_PAUSE_MS);
+    (void)poll(&idle,1,1);
 }
+
 static uint16_t bound_port(const DrLobby *l)
 {
     struct sockaddr_in address; socklen_t size=sizeof address;
     if(l->fd<0 || getsockname(l->fd,(struct sockaddr *)&address,&size)) return 0;
     return ntohs(address.sin_port);
 }
+
+/* D52-1 pairing, unchanged: the D52-2 layer must not disturb it. */
 static int pair_loopback(DrLobby *host,DrLobby *client,uint32_t *clock)
 {
-    if(dr_lobby_start(host,1,NULL,0,*clock,*clock)) return -1;
-    uint16_t port=bound_port(host);
+    uint16_t port;
+    if(!dr_lobby_start(host,1,NULL,0,*clock,0x11111111u)) return -1;
+    port=bound_port(host);
     if(!port) return -2;
-    char target[16]="127.0.0.1";
-    if(dr_lobby_start(client,0,target,port,*clock,*clock^0xA5A5A5A5u)) return -3;
-    for(int round=0;round<D52_SELFTEST_ROUNDS;round++) {
+    if(!dr_lobby_start(client,0,"127.0.0.1",port,*clock,0x22222222u)) return -3;
+    for(int round=0;round<200;round++) {
+        *clock+=10;
+        dr_lobby_tick(client,*clock);settle();
+        dr_lobby_tick(host,*clock);settle();
         if(host->state==LOBBY_PAIRED && client->state==LOBBY_PAIRED) return 0;
-        dr_lobby_tick(host,*clock);
-        dr_lobby_tick(client,*clock);
-        settle();
-        *clock+=D52_SELFTEST_STEP_MS;
     }
     return -4;
 }
+
+/* Deterministic input patterns, one per side, so the run is repeatable. */
+static uint32_t pattern_a(uint32_t frame)
+{
+    uint32_t in=0;
+    if((frame/3u)%2u) in|=1u<<0;          /* left  */
+    else              in|=1u<<1;          /* right */
+    if((frame/5u)%2u) in|=1u<<4;          /* A     */
+    return in;
+}
+static uint32_t pattern_b(uint32_t frame)
+{
+    uint32_t in=0;
+    if((frame/2u)%2u) in|=1u<<2;          /* up    */
+    else              in|=1u<<3;          /* down  */
+    if((frame/7u)%2u) in|=1u<<1;          /* right */
+    return in;
+}
+
 int D52_OnlineBattleSelfTest(void)
 {
-    int result=0;
+    static DrLobby host,client;
+    static DrOnlineBattle side0,side1;
     uint32_t clock=1000;
-    DrLobby host,client;
-    dr_lobby_init(&host);
-    dr_lobby_init(&client);
+    int result=0;
+    uint32_t rounds=0;
+
+    dr_lobby_init(&host);dr_lobby_init(&client);
+
+    D50_Log("D52-2 selftest: loopback only; two-console session still needs a physical test");
+
     if(pair_loopback(&host,&client,&clock)) {
-        xsdk_log_write("FAIL: D52-2 loopback lobby pairing failed");
-        result=-1;
-        goto out;
+        D50_Log("FAIL: D52-2 lobby pairing host=%s(%d) client=%s(%d)",
+                dr_lobby_state_name(host.state),host.state,
+                dr_lobby_state_name(client.state),client.state);
+        result=-1;goto out;
     }
-    xsdk_log_write("PASS: D52-2 loopback lobby paired");
+    D50_Log("PASS: D52-2 lobby paired with the unmodified D52-1 handshake");
 
-    /* Initialize online battles for both sides */
-    if(dr_online_battle_init(&host) || dr_online_battle_init(&client)) {
-        xsdk_log_write("FAIL: D52-2 online battle init failed");
-        result=-2;
-        goto out;
+    if(dr_online_battle_init(&side0,&host,0)!=1 ||
+       dr_online_battle_init(&side1,&client,1)!=1) {
+        D50_Log("FAIL: D52-2 online battle init");
+        result=-2;goto out;
     }
-    xsdk_log_write("PASS: D52-2 online battle initialized");
+    D50_Log("PASS: D52-2 lockstep harness bound host=side0 client=side1");
 
-    /* Run synchronized input exchange for a few rounds */
-    uint32_t host_input=0x10000001, client_input=0x20000002;
-    for(int round=0;round<D52_SELFTEST_ROUNDS;round++) {
-        uint32_t remote_host_input=0, remote_client_input=0;
-        int host_update=dr_online_battle_update(host_input,&remote_host_input);
-        int client_update=dr_online_battle_update(client_input,&remote_client_input);
-        if(host_update<0 || client_update<0) {
-            xsdk_log_write("FAIL: D52-2 desync detected at round %d",round);
-            result=-3;
-            goto out;
+    /* Run the lockstep loop. Every 9th round one side is held back, which
+     * queues its datagrams and makes them arrive out of order relative to the
+     * other side's frame advance. */
+    for(rounds=0;rounds<D52_ROUNDS;rounds++) {
+        uint32_t host_remote=0,client_remote=0;
+        int hold_host=((rounds%9)==3);
+        int hold_client=((rounds%9)==6);
+
+        if(!hold_host) {
+            dr_lobby_tick(&host,clock);
+            (void)dr_online_battle_update(&side0,
+                                          pattern_a(dr_online_battle_frame(&side0)),
+                                          &host_remote);
         }
-        /* Vary inputs a little */
-        host_input=(host_input<<1)|((host_input>>31)&1);
-        client_input=(client_input<<2)|((client_input>>30)&3);
+        if(!hold_client) {
+            dr_lobby_tick(&client,clock);
+            (void)dr_online_battle_update(&side1,
+                                          pattern_b(dr_online_battle_frame(&side1)),
+                                          &client_remote);
+        }
         settle();
-        clock+=D52_SELFTEST_STEP_MS;
-        dr_lobby_tick(&host,clock);
-        dr_lobby_tick(&client,clock);
+        clock+=10;
+
+        /* A second pass drains anything that arrived late. */
+        dr_lobby_tick(&host,clock);dr_lobby_tick(&client,clock);
         settle();
-        clock+=D52_SELFTEST_STEP_MS;
+        clock+=10;
+        (void)dr_online_battle_update(&side0,
+                                      pattern_a(dr_online_battle_frame(&side0)),
+                                      &host_remote);
+        (void)dr_online_battle_update(&side1,
+                                      pattern_b(dr_online_battle_frame(&side1)),
+                                      &client_remote);
+
+        if(host.state!=LOBBY_PAIRED || client.state!=LOBBY_PAIRED) {
+            D50_Log("FAIL: D52-2 lobby dropped at round %u host=%s client=%s",
+                    (unsigned)rounds,dr_lobby_state_name(host.state),
+                    dr_lobby_state_name(client.state));
+            result=-3;goto out;
+        }
+        if(dr_online_battle_frame(&side0)>570000000u) break; /* sanity */
     }
-    uint32_t host_hash=dr_online_battle_get_state_hash();
-    uint32_t client_hash=dr_online_battle_get_state_hash();
-    if(host_hash!=client_hash) {
-        xsdk_log_write("FAIL: D52-2 final state hash mismatch: host=%08X client=%08X",host_hash,client_hash);
-        result=-4;
-        goto out;
+
+    /* Both sides must have simulated the same number of frames. */
+    if(dr_online_battle_frame(&side0)!=dr_online_battle_frame(&side1)) {
+        D50_Log("FAIL: D52-2 frame counters diverged host=%u client=%u",
+                (unsigned)dr_online_battle_frame(&side0),
+                (unsigned)dr_online_battle_frame(&side1));
+        result=-4;goto out;
     }
-    xsdk_log_write("PASS: D52-2 final state hash matches: %08X",host_hash);
+    if(dr_online_battle_frame(&side0)<10) {
+        D50_Log("FAIL: D52-2 only %u frame(s) simulated",
+                (unsigned)dr_online_battle_frame(&side0));
+        result=-5;goto out;
+    }
+    D50_Log("PASS: D52-2 both sides at frame %u",
+            (unsigned)dr_online_battle_frame(&side0));
+
+    /* And the same state hash. */
+    if(dr_online_battle_get_state_hash(&side0)!=dr_online_battle_get_state_hash(&side1)) {
+        D50_Log("FAIL: D52-2 state hash mismatch host=%08X client=%08X",
+                (unsigned)dr_online_battle_get_state_hash(&side0),
+                (unsigned)dr_online_battle_get_state_hash(&side1));
+        result=-6;goto out;
+    }
+    D50_Log("PASS: D52-2 state hash matches: %08X",
+            (unsigned)dr_online_battle_get_state_hash(&side0));
+
+    /* No hash may have been flagged as a desync, and each side must actually
+     * have compared the peer's hashes (otherwise the test proves nothing). */
+    if(dr_online_battle_desync(&side0,NULL,NULL,NULL) ||
+       dr_online_battle_desync(&side1,NULL,NULL,NULL)) {
+        uint32_t frame=0,local=0,remote=0;
+        (void)dr_online_battle_desync(&side0,&frame,&local,&remote);
+        D50_Log("FAIL: D52-2 desync frame=%u local=%08X remote=%08X",
+                (unsigned)frame,(unsigned)local,(unsigned)remote);
+        result=-7;goto out;
+    }
+    if(dr_online_battle_matched(&side0)==0 || dr_online_battle_matched(&side1)==0) {
+        D50_Log("FAIL: D52-2 no peer hash compared host=%u client=%u",
+                (unsigned)dr_online_battle_matched(&side0),
+                (unsigned)dr_online_battle_matched(&side1));
+        result=-8;goto out;
+    }
+    D50_Log("PASS: D52-2 %u peer hashes verified per side, no desync",
+            (unsigned)dr_online_battle_matched(&side0));
 
 out:
-    dr_online_battle_shutdown();
+    dr_online_battle_shutdown(&side0);
+    dr_online_battle_shutdown(&side1);
     dr_lobby_stop(&host);
     dr_lobby_stop(&client);
     return result;

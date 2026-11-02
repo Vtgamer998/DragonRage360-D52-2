@@ -102,6 +102,8 @@ static void release_native_stage(void){
 #include "xsdk/texture.h"
 
 static DemoUi ui;
+/* D52-2: one lockstep battle instance, bound while the lobby is paired. */
+static DrOnlineBattle online_battle;
 static uint32_t display_width,display_height;
 static bool confirm_seen,back_seen,navigation_seen,first_frame;
 /* D51: 0 off, 1 d51-gfx-probe (640x480), 2 d51-gfx-probe-720 (1280x720). */
@@ -720,6 +722,21 @@ static int lobby_player_count(const DrLobby *l)
     if(l->state==LOBBY_OFF) return 0;
     return l->state==LOBBY_PAIRED?2:1;
 }
+/* Map the demo's pad bits onto the D52-2 input word. The demo already folds
+ * the left stick into DEMO_UP/DOWN/LEFT/RIGHT, so one word carries both. */
+static uint32_t demo_pad_to_input(uint16_t b)
+{
+    uint32_t i=0;
+    if(b&DEMO_LEFT)  i|=1u<<0;
+    if(b&DEMO_RIGHT) i|=1u<<1;
+    if(b&DEMO_UP)    i|=1u<<2;
+    if(b&DEMO_DOWN)  i|=1u<<3;
+    if(b&DEMO_A)     i|=1u<<4;
+    if(b&DEMO_B)     i|=1u<<5;
+    if(b&DEMO_X)     i|=1u<<6;
+    if(b&DEMO_Y)     i|=1u<<7;
+    return i;
+}
 static const char *lobby_event_name(int previous,int current,const char *message)
 {
     if(current==LOBBY_PAIRED) return "connected";
@@ -949,25 +966,32 @@ int main(void)
             }
         }
         dr_lobby_tick(&lobby,(uint32_t)now);
-        /* D52-2: online battle update when lobby paired */
-        if(lobby.state == LOBBY_PAIRED && !dr_online_battle_active()) {
-            dr_online_battle_init(&lobby);
-            xsdk_log_write("D52-2: online battle initialized after lobby paired");
+        /* D52-2: lockstep online battle once the lobby is paired. The host is
+         * player one, the client player two; both consoles number frames from
+         * 1 and only advance when the input for that frame is known. */
+        if(lobby.state == LOBBY_PAIRED && !dr_online_battle_active(&online_battle)) {
+            if(dr_online_battle_init(&online_battle,&lobby,lobby.host?0:1)==1)
+                xsdk_log_write("D52-2: online battle ready role=%s side=%d",
+                               lobby.host?"host":"client",lobby.host?0:1);
         }
-        if(dr_online_battle_active()) {
-            uint32_t local_input = (uint32_t)ui.buttons |
-                                   ((uint32_t)ui.lt << 16) |
-                                   ((uint32_t)ui.rt << 24);
-            uint32_t remote_input = 0;
-            int update_rc = dr_online_battle_update(local_input, &remote_input);
-            if(update_rc < 0) {
-                xsdk_log_write("D52-2: desync detected, rollback not implemented yet");
-            }
-            /* TODO: feed remote_input to engine when engine is linked */
+        if(dr_online_battle_active(&online_battle)) {
+            uint32_t local_input=demo_pad_to_input(buttons);
+            uint32_t remote_input=0;
+            (void)dr_online_battle_update(&online_battle,local_input,&remote_input);
+            uint32_t frame,local_hash,remote_hash;
+            if(dr_online_battle_desync(&online_battle,&frame,&local_hash,&remote_hash))
+                xsdk_log_write("D52-2 DESYNC frame=%u local=%08X remote=%08X; "
+                               "rollback not implemented yet",
+                               (unsigned)frame,(unsigned)local_hash,
+                               (unsigned)remote_hash);
+            /* TODO: feed remote_input to the real bt3xbx Battle_Main. */
         }
-        if(dr_online_battle_active() && lobby.state != LOBBY_PAIRED) {
-            dr_online_battle_shutdown();
-            xsdk_log_write("D52-2: online battle shutdown because lobby no longer paired");
+        if(dr_online_battle_active(&online_battle) && lobby.state != LOBBY_PAIRED) {
+            xsdk_log_write("D52-2: online battle stopped after %u frame(s), "
+                           "%u hash(es) verified",
+                           (unsigned)dr_online_battle_frame(&online_battle),
+                           (unsigned)dr_online_battle_matched(&online_battle));
+            dr_online_battle_shutdown(&online_battle);
         }
         snprintf(ui.network,sizeof(ui.network),"%s",lobby.message);
         ui.lobby_role=lobby.state==LOBBY_OFF?0:(lobby.host?1:2);

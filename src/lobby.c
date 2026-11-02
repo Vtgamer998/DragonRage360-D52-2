@@ -1,7 +1,6 @@
 /* SPDX-License-Identifier: MIT
- * D52-2: Determinism and synchronization of entries in the lobby D52-1
- * This module integrates the lobby with the bt3xbx battle engine for
- * online multiplayer support with deterministic state synchronization.
+ * Independent experimental lobby protocol. Does not carry battle inputs.
+ * All wire integers are little endian; no native structs are transmitted.
  */
 #include "lobby.h"
 #include <arpa/inet.h>
@@ -11,9 +10,9 @@
 #include <string.h>
 #include <sys/socket.h>
 #include <unistd.h>
-#include <stdint.h>
-
-enum { DISCOVER=1,OFFER,JOIN,ACCEPT,HEARTBEAT,LEAVE,BUSY,INPUT,HASH, PACKET=32 };
+/* D52-1 control types 1..7. D52-2 adds INPUT(8) and HASH(9); control types
+ * keep their numbers so an old and a new console can still pair. */
+enum { DISCOVER=1,OFFER,JOIN,ACCEPT,HEARTBEAT,LEAVE,BUSY,INPUT=8,HASH=9, PACKET=32 };
 static uint32_t rd(const unsigned char *p) { return (uint32_t)p[0]|(uint32_t)p[1]<<8|(uint32_t)p[2]<<16|(uint32_t)p[3]<<24; }
 static void wr(unsigned char *p,uint32_t v) { for(int i=0;i<4;i++) p[i]=(unsigned char)(v>>(i*8)); }
 static int same(const struct sockaddr_in *a,const struct sockaddr_in *b)
@@ -21,221 +20,311 @@ static int same(const struct sockaddr_in *a,const struct sockaddr_in *b)
 static void send_packet(DrLobby *l,const struct sockaddr_in *to,unsigned type,uint32_t nonce,uint32_t session)
 {
     unsigned char p[PACKET]={0}; memcpy(p,"DRL1",4);wr(p+4,1);wr(p+8,type);wr(p+12,nonce);wr(p+16,session);
-    (void)sendto(l->fd,p,sizeof(p),0,(const struct sockaddr *)to,sizeof *to);
+    (void)sendto(l->fd,p,sizeof(p),0,(const struct sockaddr *)to,sizeof(*to));
 }
-
-/* D52-2: Send input packet with input data */
-static void send_input_packet(DrLobby *l,const struct sockaddr_in *to,uint32_t nonce,uint32_t session,uint32_t input_data)
+void dr_lobby_init(DrLobby *l) { memset(l,0,sizeof(*l));l->fd=-1;strcpy(l->message,"Rede desligada."); }
+const char *dr_lobby_state_name(int state)
 {
-    unsigned char p[PACKET]={0}; memcpy(p,"DRL1",4);wr(p+4,1);wr(p+8,INPUT);wr(p+12,nonce);wr(p+16,session);wr(p+20,input_data);
-    (void)sendto(l->fd,p,sizeof(p),0,(const struct sockaddr *)to,sizeof *to);
-}
-
-/* D52-2: Send hash packet with state hash */
-static void send_hash_packet(DrLobby *l,const struct sockaddr_in *to,uint32_t nonce,uint32_t session,uint32_t hash)
-{
-    unsigned char p[PACKET]={0}; memcpy(p,"DRL1",4);wr(p+4,1);wr(p+8,HASH);wr(p+12,nonce);wr(p+16,session);wr(p+20,hash);
-    (void)sendto(l->fd,p,sizeof(p),0,(const struct sockaddr *)to,sizeof *to);
-}
-
-/* D52-2: Send input data to the peer */
-void dr_lobby_send_input(DrLobby *l,uint32_t input_data)
-{
-    if(!l || l->state!=LOBBY_PAIRED) return;
-    
-    /* Send input packet to peer */
-    send_input_packet(l,&l->peer,l->nonce,l->session,input_data);
-}
-
-/* D52-2: Receive input data from the peer */
-int dr_lobby_receive_input(DrLobby *l,uint32_t *input_data)
-{
-    if(!l || l->state!=LOBBY_PAIRED) return 0;
-    
-    struct sockaddr_in from;
-    socklen_t fromlen=sizeof(from);
-    unsigned char packet[PACKET];
-    
-    /* Check for pending input packet */
-    ssize_t n=recvfrom(l->fd,packet,sizeof(packet),MSG_DONTWAIT,(struct sockaddr *)&from,&fromlen);
-    if(n<=0) return 0;
-    
-    if(n!=PACKET || memcmp(packet,"DRL1",4)) return 0;
-    if(rd(packet+4)!=1) return 0;
-    if(rd(packet+8)!=INPUT) return 0;
-    if(rd(packet+12)!=l->nonce || rd(packet+16)!=l->session) return 0;
-    
-    *input_data=rd(packet+20);
-    return 1;
-}
-
-/* D52-2: Send state hash to peer */
-void dr_lobby_send_hash(DrLobby *l,uint32_t hash)
-{
-    if(!l || l->state!=LOBBY_PAIRED) return;
-    
-    send_hash_packet(l,&l->peer,l->nonce,l->session,hash);
-}
-
-/* D52-2: Receive state hash from peer */
-int dr_lobby_receive_hash(DrLobby *l,uint32_t *hash)
-{
-    if(!l || l->state!=LOBBY_PAIRED) return 0;
-    
-    struct sockaddr_in from;
-    socklen_t fromlen=sizeof(from);
-    unsigned char packet[PACKET];
-    
-    ssize_t n=recvfrom(l->fd,packet,sizeof(packet),MSG_DONTWAIT,(struct sockaddr *)&from,&fromlen);
-    if(n<=0) return 0;
-    
-    if(n!=PACKET || memcmp(packet,"DRL1",4)) return 0;
-    if(rd(packet+4)!=1) return 0;
-    if(rd(packet+8)!=HASH) return 0;
-    if(rd(packet+12)!=l->nonce || rd(packet+16)!=l->session) return 0;
-    
-    *hash=rd(packet+20);
-    return 1;
-}
-
-/* D52-2: Compute battle state hash for synchronization */
-uint32_t compute_battle_state_hash(const void *battle_state, size_t size)
-{
-    if(!battle_state || size==0) return 0;
-    
-    uint32_t hash=0;
-    const unsigned char *p=battle_state;
-    
-    /* XOR-based hash over the battle state */
-    for(size_t i=0;i<size;i++) {
-        hash^=p[i];
-        hash=(hash<<1)|(hash>>31);
-    }
-    
-    return hash;
-}
-
-/* D52-1: Compute lobby state hash */
-uint32_t compute_lobby_state_hash(const DrLobby *l)
-{
-    if(!l) return 0;
-    
-    uint32_t hash=0;
-    /* Hash the essential lobby state */
-    hash^=(uint32_t)l->state;
-    hash^=(uint32_t)l->host;
-    hash^=l->nonce;
-    hash^=l->session;
-    
-    /* Include peer info if paired */
-    if(l->state==LOBBY_PAIRED) {
-        hash^=l->peer.sin_addr.s_addr;
-        hash^=l->peer.sin_port;
-    }
-    
-    return hash;
-}
-
-/* D52-1: Retransmit logic with clock wrap handling */
-void dr_lobby_retransmit(DrLobby *l, uint32_t now)
-{
-    if(!l) return;
-    
-    /* Retransmit after 12 seconds timeout */
-    if((now - l->last_send) > 12000) {
-        if(l->state==LOBBY_SEARCH || l->state==LOBBY_JOIN) {
-            send_packet(l,&l->target,l->state==LOBBY_SEARCH?DISCOVER:JOIN,l->nonce,0);
-        }
-        l->last_send=now;
+    switch(state) {
+    case LOBBY_HOST: return "host";
+    case LOBBY_SEARCH: return "search";
+    case LOBBY_JOIN: return "join";
+    case LOBBY_PAIRED: return "paired";
+    default: return "off";
     }
 }
-
-void dr_lobby_init(DrLobby *l) { memset(l,0,sizeof *l);l->fd=-1;l->state=LOBBY_OFF; }
-const char *dr_lobby_state_name(int s)
-{ return s==LOBBY_OFF?"off":s==LOBBY_HOST?"host":s==LOBBY_SEARCH?"search":s==LOBBY_JOIN?"join":s==LOBBY_PAIRED?"paired":"unknown"; }
-
 int dr_lobby_parse_target(const char *line,char *target,size_t size,uint16_t *port)
 {
-    char extra; unsigned p=7371;
-    if(!line || !target || !size || !port) return 0;
-    if(sscanf(line,"%15s %u %c",target,&p,&extra)>2 || p==0 || p>65535) return 0;
-    *port=(uint16_t)p; return 1;
-}
-
-int dr_lobby_start(DrLobby *l,int host,const char *target,uint16_t port,uint32_t now,uint32_t nonce)
-{
-    struct sockaddr_in addr;
-    if(!l) return -1;
-    dr_lobby_stop(l);
-    l->fd=socket(AF_INET,SOCK_DGRAM,IPPROTO_UDP);
-    if(l->fd<0) return -1;
-    int opt=1; setsockopt(l->fd,SOL_SOCKET,SO_REUSEADDR,&opt,sizeof opt);
-    memset(&addr,0,sizeof addr);
-    addr.sin_family=AF_INET; addr.sin_port=htons(port);
-    addr.sin_addr.s_addr=INADDR_ANY;
-    if(bind(l->fd,(struct sockaddr *)&addr,sizeof addr)<0) { dr_lobby_stop(l); return -2; }
-    l->host=host; l->nonce=nonce; l->started=l->last_send=now;
-    l->state=host?LOBBY_HOST:LOBBY_SEARCH;
-    if(target && inet_pton(AF_INET,target,&l->target.sin_addr)==1) {
-        l->target.sin_family=AF_INET; l->target.sin_port=htons(port);
-        l->state=LOBBY_JOIN;
-        send_packet(l,&l->target,JOIN,nonce,0);
-    } else if(!host) {
-        struct sockaddr_in bc;
-        memset(&bc,0,sizeof bc);
-        bc.sin_family=AF_INET; bc.sin_port=htons(port);
-        inet_pton(AF_INET,"255.255.255.255",&bc.sin_addr);
-        send_packet(l,&bc,DISCOVER,nonce,0);
+    char host[16]={0},port_text[16]={0},extra[2]={0};
+    struct in_addr address;
+    unsigned long value;
+    char *end=NULL;
+    if(!line || !target || size<16 || !port) return 0;
+    int fields=sscanf(line,"%15s %15s %1s",host,port_text,extra);
+    if(fields<1 || fields>2 || inet_pton(AF_INET,host,&address)!=1) return 0;
+    *port=7371;
+    if(fields>=2) {
+        value=strtoul(port_text,&end,10);
+        if(!end || *end || !value || value>65535) return 0;
+        *port=(uint16_t)value;
     }
-    return 0;
+    snprintf(target,size,"%s",host);
+    return 1;
 }
-
-void dr_lobby_tick(DrLobby *l,uint32_t now)
-{
-    unsigned char packet[PACKET]; struct sockaddr_in from;
-    if(!l || l->fd<0 || l->state==LOBBY_OFF) return;
-    for(;;) {
-        socklen_t len=sizeof from;
-        ssize_t n=recvfrom(l->fd,packet,sizeof packet,MSG_DONTWAIT,(struct sockaddr *)&from,&len);
-        if(n<=0) break;
-        if(n!=PACKET || memcmp(packet,"DRL1",4) || rd(packet+4)!=1) continue;
-        unsigned type=rd(packet+8),nonce=rd(packet+12),session=rd(packet+16);
-        switch(type) {
-        case DISCOVER: if(l->state==LOBBY_HOST) send_packet(l,&from,OFFER,l->nonce,0); break;
-        case OFFER: if(l->state==LOBBY_SEARCH || l->state==LOBBY_JOIN) {
-                l->peer=from; l->session=session?session:nonce;
-                send_packet(l,&from,JOIN,l->nonce,l->session); l->state=LOBBY_JOIN; } break;
-        case JOIN: if(l->state==LOBBY_HOST && !l->peer.sin_port) {
-                l->peer=from; l->session=nonce; send_packet(l,&from,ACCEPT,l->nonce,l->session); l->state=LOBBY_PAIRED; } break;
-        case ACCEPT: if(l->state==LOBBY_JOIN) { l->peer=from; l->state=LOBBY_PAIRED; } break;
-        case HEARTBEAT: if(same(&from,&l->peer)) l->last_seen=now; break;
-        case LEAVE: if(same(&from,&l->peer)) dr_lobby_stop(l); return;
-        case BUSY: if(l->state==LOBBY_JOIN) { snprintf(l->message,sizeof l->message,"Host ocupado."); dr_lobby_stop(l); return; }
-        default: break;
-        }
-    }
-    if(l->state==LOBBY_SEARCH || l->state==LOBBY_JOIN)
-        if(now-l->last_send>=1000) {
-            if(l->target.sin_addr.s_addr) send_packet(l,&l->target,l->state==LOBBY_JOIN?JOIN:DISCOVER,l->nonce,l->session);
-            else { struct sockaddr_in bc={.sin_family=AF_INET,.sin_port=l->target.sin_port?l->target.sin_port:htons(7371)};
-                   inet_pton(AF_INET,"255.255.255.255",&bc.sin_addr); send_packet(l,&bc,DISCOVER,l->nonce,0); }
-            l->last_send=now;
-        }
-    if(l->state==LOBBY_PAIRED) {
-        if(now-l->last_send>=500) { send_packet(l,&l->peer,HEARTBEAT,l->nonce,l->session); l->last_send=now; }
-        if(now-l->last_seen>=5000) { snprintf(l->message,sizeof l->message,"Conexão perdida."); dr_lobby_stop(l); }
-        else snprintf(l->message,sizeof l->message,"Conectado a %s:%u",inet_ntoa(l->peer.sin_addr),ntohs(l->peer.sin_port));
-    } else if(l->state==LOBBY_HOST)
-        snprintf(l->message,sizeof l->message,"Host aguardando...");
-    else snprintf(l->message,sizeof l->message,"Procurando host...");
-    
-    /* D52-1: Call retransmit with clock wrap handling */
-    dr_lobby_retransmit(l,now);
-}
-
 void dr_lobby_stop(DrLobby *l)
 {
-    if(!l) return;
-    if(l->fd>=0) close(l->fd);
-    memset(l,0,sizeof *l); l->fd=-1; l->state=LOBBY_OFF;
+    if(l->fd>=0) {
+        if(l->session && l->peer.sin_port) send_packet(l,&l->peer,LEAVE,l->nonce,l->session);
+        close(l->fd);
+    }
+    dr_lobby_init(l);
+}
+int dr_lobby_start(DrLobby *l,int host,const char *target,uint16_t port,uint32_t now,uint32_t nonce)
+{
+    dr_lobby_stop(l);l->host=host;l->nonce=nonce?nonce:1;l->session=host?l->nonce:0;
+    l->target.sin_family=AF_INET;l->target.sin_port=htons(port);
+    if(inet_pton(AF_INET,target?target:"255.255.255.255",&l->target.sin_addr)!=1) goto fail;
+    l->fd=socket(AF_INET,SOCK_DGRAM,IPPROTO_UDP);if(l->fd<0) goto fail;
+    int yes=1;
+    if(setsockopt(l->fd,SOL_SOCKET,SO_BROADCAST,&yes,sizeof(yes))) goto fail;
+    struct sockaddr_in local={.sin_family=AF_INET,.sin_port=host?htons(port):0};
+    if(bind(l->fd,(const struct sockaddr *)&local,sizeof(local))) goto fail;
+    l->state=host?LOBBY_HOST:LOBBY_SEARCH;l->started=now;l->last_seen=now;l->last_send=now-1000;
+    snprintf(l->message,sizeof(l->message),host?"Sala aberta UDP %u. Aguardando cliente...":"Buscando host UDP %u...",port);return 1;
+fail:
+    dr_lobby_stop(l);strcpy(l->message,"Falha ao abrir rede. Confira IP e porta ocupada.");return 0;
+}
+static void paired(DrLobby *l)
+{
+    char ip[16]="?";inet_ntop(AF_INET,&l->peer.sin_addr,ip,sizeof(ip));
+    l->state=LOBBY_PAIRED;
+    snprintf(l->message,sizeof(l->message),"Lobby conectado: %s %s:%u\nMotor de luta ainda indisponível.",l->host?"cliente":"host",ip,(unsigned)ntohs(l->peer.sin_port));
+}
+void dr_lobby_tick(DrLobby *l,uint32_t now)
+{
+    if(l->fd<0) return;
+    l->tick_now=now;
+    /* Fixed budget prevents an incoming flood from monopolizing the frame. */
+    for(int budget=0;budget<16;budget++) {
+        struct pollfd ready={.fd=l->fd,.events=POLLIN};
+        if(poll(&ready,1,0)<=0 || !(ready.revents&POLLIN)) break;
+        unsigned char p[PACKET+1];struct sockaddr_in from={0};socklen_t size=sizeof(from);
+        /* D52-2: peek first. An INPUT/HASH datagram belongs to the
+         * synchronization layer, so leave it in the queue instead of
+         * consuming and discarding it here. */
+        ssize_t n=recvfrom(l->fd,p,sizeof(p),MSG_PEEK,(struct sockaddr *)&from,&size);
+        if(n==PACKET && !memcmp(p,"DRL1",4) && rd(p+4)==1) {
+            unsigned peeked=rd(p+8);
+            if(peeked==INPUT || peeked==HASH) break;
+        }
+        size=sizeof(from);
+        n=recvfrom(l->fd,p,sizeof(p),0,(struct sockaddr *)&from,&size);
+        if(n!=PACKET || from.sin_family!=AF_INET || memcmp(p,"DRL1",4) || rd(p+4)!=1 || rd(p+20) || rd(p+24) || rd(p+28)) continue;
+        unsigned type=rd(p+8);uint32_t nonce=rd(p+12),session=rd(p+16);
+        if(!nonce) continue;
+        if(l->host) {
+            if(type==DISCOVER && !session && l->state==LOBBY_HOST && !l->peer.sin_port)
+                send_packet(l,&from,OFFER,nonce,l->session);
+            else if(type==JOIN && session==l->session) {
+                if(l->peer.sin_port && (!same(&from,&l->peer) || nonce!=l->nonce)) send_packet(l,&from,BUSY,nonce,session);
+                else {
+                    l->peer=from;l->nonce=nonce;l->last_seen=now;
+                    send_packet(l,&from,ACCEPT,nonce,session);
+                }
+            } else if(same(&from,&l->peer) && session==l->session && nonce==l->nonce) {
+                if(type==HEARTBEAT) {l->last_seen=now;paired(l);}
+                if(type==LEAVE) {l->peer.sin_port=0;l->state=LOBBY_HOST;strcpy(l->message,"Cliente saiu. Aguardando novo cliente...");}
+            }
+        } else {
+            if(type==OFFER && l->state==LOBBY_SEARCH && nonce==l->nonce && session &&
+               (l->target.sin_addr.s_addr==htonl(INADDR_BROADCAST) || same(&from,&l->target))) {
+                l->peer=from;l->session=session;l->state=LOBBY_JOIN;l->last_send=now-1000;l->last_seen=now;
+                strcpy(l->message,"Host encontrado. Conectando...");
+            } else if(same(&from,&l->peer) && nonce==l->nonce && session==l->session) {
+                if(type==ACCEPT && (l->state==LOBBY_JOIN || l->state==LOBBY_PAIRED)) {l->last_seen=now;paired(l);l->last_send=now-1000;}
+                if(type==HEARTBEAT && l->state==LOBBY_PAIRED) l->last_seen=now;
+                if(type==BUSY || type==LEAVE) {dr_lobby_stop(l);strcpy(l->message,"Host ocupado ou sala encerrada. Busque novamente.");return;}
+            }
+        }
+    }
+    if((l->state==LOBBY_PAIRED || l->state==LOBBY_JOIN || (l->host && l->peer.sin_port)) && (uint32_t)(now-l->last_seen)>12000) {
+        if(l->host) {l->peer.sin_port=0;l->state=LOBBY_HOST;strcpy(l->message,"Cliente desconectado. Aguardando outro...");}
+        else {dr_lobby_stop(l);strcpy(l->message,"Conexão perdida. Busque novamente.");return;}
+    }
+    if(l->state==LOBBY_SEARCH && (uint32_t)(now-l->started)>30000) {
+        dr_lobby_stop(l);strcpy(l->message,"Nenhum host em 30 segundos. Confira a rede.");return;
+    }
+    if((uint32_t)(now-l->last_send)<500) return;
+    l->last_send=now;
+    if(l->state==LOBBY_SEARCH) send_packet(l,&l->target,DISCOVER,l->nonce,0);
+    if(l->state==LOBBY_JOIN) send_packet(l,&l->peer,JOIN,l->nonce,l->session);
+    if(l->state==LOBBY_PAIRED) send_packet(l,&l->peer,HEARTBEAT,l->nonce,l->session);
+}
+
+
+/* ===================== D52-2 synchronization layer ===================== *
+ * The D52-1 state machine above is deliberately untouched. These helpers
+ * only run while the lobby is paired, and dr_lobby_tick already refuses any
+ * datagram whose trailer words are non-zero - which is exactly what INPUT
+ * and HASH carry - so control packets and input packets never collide.
+ *
+ * Wire (all little endian, no native structs):
+ *   INPUT  [0..3]="DRL1" [4..7]=1 [8..11]=8 [12..15]=nonce [16..19]=session
+ *          [20..23]=input value [24..27]=frame [28..31]=ack
+ *   HASH   [0..3]="DRL1" [4..7]=1 [8..11]=9 [12..15]=nonce [16..19]=session
+ *          [20..23]=state hash [24..27]=frame [28..31]=0
+ *
+ * Both consoles number frames from 0 and only advance when the input for the
+ * frame is known, so a lost datagram stalls the simulation instead of making
+ * the two machines run different frames. Frames are buffered in a 16-deep
+ * window, which absorbs reordering, duplicates and short bursts of loss. */
+
+enum { D52_INPUT_DEPTH=16, D52_INPUT_MASK=D52_INPUT_DEPTH-1,
+       D52_INPUT_RTX_MS=120, D52_INPUT_RTX_MAX=6 };
+
+static void send_input_packet(DrLobby *l,const struct sockaddr_in *to,
+                              uint32_t nonce,uint32_t session,
+                              uint32_t value,uint32_t frame,uint32_t ack)
+{
+    unsigned char p[PACKET]={0};
+    memcpy(p,"DRL1",4);
+    wr(p+4,1);wr(p+8,INPUT);wr(p+12,nonce);wr(p+16,session);
+    wr(p+20,value);wr(p+24,frame);wr(p+28,ack);
+    (void)sendto(l->fd,p,sizeof p,0,(const struct sockaddr *)to,sizeof *to);
+}
+
+static void send_hash_packet(DrLobby *l,const struct sockaddr_in *to,
+                             uint32_t nonce,uint32_t session,
+                             uint32_t hash,uint32_t frame)
+{
+    unsigned char p[PACKET]={0};
+    memcpy(p,"DRL1",4);
+    wr(p+4,1);wr(p+8,HASH);wr(p+12,nonce);wr(p+16,session);
+    wr(p+20,hash);wr(p+24,frame);
+    (void)sendto(l->fd,p,sizeof p,0,(const struct sockaddr *)to,sizeof *to);
+}
+
+/* Queue the local input for `frame` and put it on the wire. Frames start at
+ * 1; 0 always means "nothing yet" on both sides of the protocol. */
+int dr_lobby_send_input(DrLobby *l,uint32_t frame,uint32_t input)
+{
+    unsigned slot;
+    if(!l || l->fd<0 || l->state!=LOBBY_PAIRED) return 0;
+    if(!frame) return 0;
+    if((int32_t)(frame-l->tx_acked)<=0) return 0;        /* already acked */
+    if((int32_t)(frame-(l->tx_highest+D52_INPUT_DEPTH))>0) return 0; /* too far */
+    slot=frame&D52_INPUT_MASK;
+    l->tx_value[slot]=input;
+    l->tx_frame_of[slot]=frame;
+    l->tx_sent|=1u<<slot;
+    l->tx_sent_at[slot]=l->tick_now;
+    l->tx_rtx[slot]=0;
+    if((int32_t)(frame-l->tx_highest)>0 || !l->tx_highest) l->tx_highest=frame;
+    send_input_packet(l,&l->peer,l->nonce,l->session,input,frame,l->rx_frame);
+    return 1;
+}
+
+/* Drain INPUT datagrams into the receive window. Non-INPUT datagrams are
+ * left in the socket for dr_lobby_tick, so nothing the state machine needs
+ * is ever discarded here. */
+static void lobby_pump_inputs(DrLobby *l)
+{
+    for(int budget=0;budget<32;budget++) {
+        unsigned char p[PACKET];struct sockaddr_in from={0};
+        socklen_t size=sizeof from;
+        ssize_t n=recvfrom(l->fd,p,sizeof p,MSG_PEEK|MSG_DONTWAIT,
+                           (struct sockaddr *)&from,&size);
+        if(n!=(ssize_t)PACKET) return;
+        if(memcmp(p,"DRL1",4) || rd(p+4)!=1) return;
+        if(rd(p+8)!=INPUT) return;                  /* control: leave for tick */
+        size=sizeof from;
+        n=recvfrom(l->fd,p,sizeof p,MSG_DONTWAIT,(struct sockaddr *)&from,&size);
+        if(n!=(ssize_t)PACKET) return;
+        if(rd(p+16)!=l->session) continue;          /* not our session */
+        uint32_t value=rd(p+20),frame=rd(p+24),ack=rd(p+28);
+        unsigned slot;
+        if((int32_t)(ack-l->tx_acked)>0) {          /* peer got our frames */
+            if((int32_t)(ack-l->tx_acked)>=(int32_t)D52_INPUT_DEPTH)
+                l->tx_sent=0;
+            else
+                for(uint32_t f=l->tx_acked+1;f<=ack;f++)
+                    l->tx_sent&=~(1u<<(f&D52_INPUT_MASK));
+            l->tx_acked=ack;
+        }
+        if((int32_t)(frame-l->rx_frame)<=0) continue;      /* old or duplicate */
+        if((int32_t)(frame-(l->rx_frame+D52_INPUT_DEPTH))>0) continue; /* too far */
+        slot=frame&D52_INPUT_MASK;
+        l->rx_value[slot]=value;
+        l->rx_frame_of[slot]=frame;
+        l->rx_present|=1u<<slot;
+        while(l->rx_present&(1u<<((l->rx_frame+1)&D52_INPUT_MASK))) {
+            l->rx_frame++;
+            l->rx_present&=~(1u<<(l->rx_frame&D52_INPUT_MASK));
+        }
+    }
+}
+
+/* Return the next peer input in frame order. Frame 1 is the first frame. */
+int dr_lobby_receive_input(DrLobby *l,uint32_t *frame,uint32_t *input)
+{
+    if(!l || l->fd<0 || l->state!=LOBBY_PAIRED || !frame || !input) return 0;
+    lobby_pump_inputs(l);
+    if((int32_t)(l->rx_frame-l->rx_delivered)<=0) return 0;
+    l->rx_delivered++;
+    *frame=l->rx_delivered;
+    *input=l->rx_value[l->rx_delivered&D52_INPUT_MASK];
+    return 1;
+}
+
+/* Frames the peer is still missing are re-sent after a short delay. This is
+ * the live-combat path; the 12 s window in dr_lobby_tick only notices a dead
+ * link and is far too slow to hide an input gap. */
+void dr_lobby_retransmit(DrLobby *l,uint32_t now)
+{
+    unsigned slot;uint32_t frame;
+    if(!l || l->fd<0 || l->state!=LOBBY_PAIRED) return;
+    lobby_pump_inputs(l);
+    for(frame=l->tx_acked+1;frame<=l->tx_highest;frame++) {
+        slot=frame&D52_INPUT_MASK;
+        if(!(l->tx_sent&(1u<<slot)) || l->tx_frame_of[slot]!=frame) continue;
+        if(l->tx_rtx[slot]>=D52_INPUT_RTX_MAX) continue;
+        if((uint32_t)(now-l->tx_sent_at[slot])<D52_INPUT_RTX_MS) continue;
+        send_input_packet(l,&l->peer,l->nonce,l->session,
+                          l->tx_value[slot],frame,l->rx_frame);
+        l->tx_sent_at[slot]=now;
+        l->tx_rtx[slot]++;
+        return;                                     /* one resend per tick */
+    }
+}
+
+void dr_lobby_send_hash(DrLobby *l,uint32_t hash,uint32_t frame)
+{
+    if(!l || l->fd<0 || l->state!=LOBBY_PAIRED) return;
+    send_hash_packet(l,&l->peer,l->nonce,l->session,hash,frame);
+}
+
+int dr_lobby_receive_hash(DrLobby *l,uint32_t *hash,uint32_t *frame)
+{
+    if(!l || l->fd<0 || l->state!=LOBBY_PAIRED || !hash) return 0;
+    for(;;) {
+        unsigned char p[PACKET];struct sockaddr_in from={0};
+        socklen_t size=sizeof from;
+        ssize_t n=recvfrom(l->fd,p,sizeof p,MSG_PEEK|MSG_DONTWAIT,
+                           (struct sockaddr *)&from,&size);
+        if(n!=(ssize_t)PACKET) return 0;
+        if(memcmp(p,"DRL1",4) || rd(p+4)!=1) return 0;
+        if(rd(p+8)!=HASH) return 0;                 /* control: leave for tick */
+        size=sizeof from;
+        n=recvfrom(l->fd,p,sizeof p,MSG_DONTWAIT,(struct sockaddr *)&from,&size);
+        if(n!=(ssize_t)PACKET) return 0;
+        if(rd(p+16)!=l->session) continue;
+        *hash=rd(p+20);
+        if(frame) *frame=rd(p+24);
+        return 1;
+    }
+}
+
+uint32_t compute_lobby_state_hash(const DrLobby *l)
+{
+    /* FNV-1a over the fields both consoles must agree on. */
+    uint32_t h=2166136261u;
+    if(!l) return h;
+    const uint32_t fields[]={
+        (uint32_t)l->state,(uint32_t)l->host,l->nonce,l->session,
+        l->peer.sin_addr.s_addr,(uint32_t)ntohs(l->peer.sin_port),
+        l->target.sin_addr.s_addr,(uint32_t)ntohs(l->target.sin_port),
+    };
+    for(size_t i=0;i<sizeof fields/sizeof fields[0];i++)
+        for(int b=0;b<4;b++){h^=(fields[i]>>(b*8))&0xFFu;h*=16777619u;}
+    return h;
+}
+
+uint32_t compute_battle_state_hash(const void *state,size_t size)
+{
+    /* FNV-1a: byte-exact, endian-defined, identical on both consoles. */
+    const unsigned char *p=state;
+    uint32_t h=2166136261u;
+    if(!p) return h;
+    for(size_t i=0;i<size;i++){h^=p[i];h*=16777619u;}
+    return h;
 }
