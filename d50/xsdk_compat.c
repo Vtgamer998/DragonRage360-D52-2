@@ -51,6 +51,8 @@ void D50_Log(const char *format,...)
 #ifdef DR_XBOX360
     xsdk_log_write("%s",line);
 #else
-    fputs(line,stdout);fputc('\n',stdout);
+    /* Flush every line: when the test aborts, a buffered stdout would lose
+     * the very lines that explain the failure. */
+    fputs(line,stdout);fputc('\n',stdout);fflush(stdout);
 #endif
 }
