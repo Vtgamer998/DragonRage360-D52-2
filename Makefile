@@ -40,13 +40,16 @@ d50-probe-test:
 d52-lobby-test:
 	mkdir -p build
 	gcc -std=gnu17 -O2 -Wall -Wextra -Werror -fsanitize=address,undefined -g -Isrc -Id50 d50/test_d52_lobby.c d50/lobby_selftest.c d50/xsdk_compat.c src/lobby.c -o build/test-d52-lobby
-# D52-2: loopback UDP lobby + online battle synchronization self-test, host only.
+	ASAN_OPTIONS=detect_leaks=0 ./build/test-d52-lobby
+# D52-2: loopback lockstep online battle self-test (lobby + state hash), host only.
 .PHONY: d52-online-test
 d52-online-test:
 	mkdir -p build
 	gcc -std=gnu17 -O2 -Wall -Wextra -Werror -fsanitize=address,undefined -g -Isrc -Id50 d50/test_d52_online.c d50/online_battle_selftest.c d50/xsdk_compat.c src/online_battle.c src/lobby.c -o build/test-d52-online
 	ASAN_OPTIONS=detect_leaks=0 ./build/test-d52-online
-	ASAN_OPTIONS=detect_leaks=0 ./build/test-d52-lobby
+# Both D52 suites in one go.
+.PHONY: d52-test
+d52-test: d52-lobby-test d52-online-test
 clean:
 	rm -rf build
 .PHONY: disc-test

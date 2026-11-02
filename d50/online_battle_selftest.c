@@ -69,6 +69,21 @@ static uint32_t pattern_b(uint32_t frame)
     return in;
 }
 
+/* Fault injection: pull `n` datagrams off a socket and throw them away, the
+ * way a congested LAN would. Only used after the lobby is paired. */
+static unsigned drop_datagrams(int fd,unsigned n)
+{
+    unsigned char p[64];struct sockaddr_in from;socklen_t size=sizeof from;
+    unsigned dropped=0;
+    while(dropped<n) {
+        ssize_t got=recvfrom(fd,p,sizeof p,MSG_DONTWAIT,
+                             (struct sockaddr *)&from,&size);
+        if(got<=0) break;
+        dropped++;
+    }
+    return dropped;
+}
+
 int D52_OnlineBattleSelfTest(void)
 {
     static DrLobby host,client;
@@ -129,6 +144,14 @@ int D52_OnlineBattleSelfTest(void)
         (void)dr_online_battle_update(&side1,
                                       pattern_b(dr_online_battle_frame(&side1)),
                                       &client_remote);
+
+        /* Fault injection: throw away a few datagrams on both sides and let
+         * the 120 ms retransmission recover them. */
+        if(rounds==30) {
+            unsigned d=drop_datagrams(host.fd,4)+drop_datagrams(client.fd,4);
+            D50_Log("D52-2 fault injection: dropped %u datagram(s), "
+                    "retransmission must recover",d);
+        }
 
         if(host.state!=LOBBY_PAIRED || client.state!=LOBBY_PAIRED) {
             D50_Log("FAIL: D52-2 lobby dropped at round %u host=%s client=%s",
