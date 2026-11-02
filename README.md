@@ -1,22 +1,38 @@
-# DragonRage360 · D52-2 — Determinismo e sincronização de entradas online
+# DragonRage360 · D53-A — Adaptador do motor real (sobre a D52-2)
 
 Esta é a continuação direta da [D52-1](https://github.com/Vtgamer998/DragonRage360)
-(lobby UDP). A D52-1 **não foi reescrita**: o protocolo de pareamento original
-foi preservado byte a byte, e a D52-2 foi adicionada **por cima**, sem alterar
-um único campo dos pacotes de controle.
+(lobby UDP) e da D52-2 (lockstep com hash). A D52-1 **não foi reescrita**: o
+protocolo de pareamento original foi preservado byte a byte, e as camadas
+seguintes foram adicionadas **por cima**, sem alterar um único campo dos
+pacotes de controle.
 
-O objetivo da D52-2 é simples de enunciar e difícil de cumprir:
+O objetivo da D52-2 continua valendo, e a D53-A acrescenta a peça que faltava:
 
 > Dado o mesmo par de entradas no mesmo número de quadro, as duas CPUs
-> (PowerPC do Xbox 360 e o seu PC de teste) devem produzir exatamente o mesmo
-> estado, e as duas consoles devem concordar com isso a cada quadro.
+> devem produzir exatamente o mesmo estado — e esse estado agora pode ser o do
+> **motor real**, não o de uma simulação de substituição.
 
-Sem isso, não existe multiplayer online real — existe apenas dois jogos
-rodando lado a lado.
+A D53-A não destrava jogabilidade online no console; ela destrava a *ponte*
+para ela. Ver "Plano da D53" no fim deste arquivo.
 
 ---
 
 ## O que foi implementado
+
+### 0. Motor restaurado e `main.c` compilando (D53-A, cuidado nº 1)
+
+`engine/platform/`, `engine/combat/`, `engine/net/`, `engine/resource/`,
+`engine/schema/`, `engine/patches/` e `engine/capture/` foram restaurados a
+partir da branch `d50-bt3xbx` do repositório original. Isso resolve a
+dependência de `xb_platform.h` que impedia a compilação de `src/main.c`.
+
+```
+$ gcc -c -std=gnu17 -O1 -Wall -Wextra ... -DDR_XBOX360 src/main.c -o main.o
+EXIT=0      # zero avisos, zero erros
+```
+
+Nada no motor original foi modificado: os arquivos são cópias fiéis das
+fontes da D52-1.
 
 ### 1. Protocolo de sincronização sobre o lobby existente
 
@@ -80,6 +96,79 @@ O design não é "manda a entrada e segue o jogo". É **lockstep**:
 O teste de host roda **os dois lados no mesmo processo**; o console mantém
 uma única instância `static`.
 
+### 6. Adaptador de engine (D53-A)
+
+`src/engine_adapter.{h,c}` define a costura entre o harness de lockstep e
+**qualquer** motor de batalha, como uma tabela de ponteiros:
+
+```c
+typedef struct {
+    const char *name;
+    int  (*start)(void *ctx);                        /* Battle_Init   */
+    int  (*update)(void *ctx,uint32_t in0,uint32_t in1); /* Battle_StepFrame */
+    int  (*end)(void *ctx);                          /* Battle_Term   */
+    uint32_t (*hash)(void *ctx);                     /* FNV-1a do estado */
+} DrEngineOps;
+```
+
+Há dois backends:
+
+| Backend | Arquivo | Onde roda |
+|---|---|---|
+| `dr_reference_ops` | `src/reference_adapter.c` | testes de host e CI — simulação inteira, sem GPU, sem ISO |
+| `dr_bt3xbx_ops` | `src/bt3xbx_adapter.c` | o XEX, sob `-DDR_HAVE_BT3XBX` |
+
+A máquina de fases (`unbound → idle → running → ended`) é o que torna o
+início e o fim seguros: uma chamada fora de ordem (update antes de start, end
+duas vezes, start enquanto roda) vira **erro reportado** e o backend **não é
+chamado**. Garantias concretas:
+
+- `end()` roda **no máximo uma vez** por `start()` — nunca um `Battle_Term` duplo;
+- um `start()` recusado deixa a instância `idle`, então dá para tentar de novo;
+- um `update()` que falha mantém a instância `running`, então o `end()` ainda
+  pode liberar o que o motor alocou.
+
+Trocar a simulação de substituto pelo motor real é **uma mudança de ponteiro**,
+não uma refactorização: `dr_online_battle_init_with()` já aceita o backend.
+
+### 7. A ponte para o motor real (D53-A, cuidado nº 2)
+
+`src/bt3xbx_adapter.c` **não modifica o motor**. Ele chama apenas os três
+pontos de entrada que o próprio motor expõe e documenta em
+`vendor/tenkaichi-original/include/battle/battle.h`:
+
+```
+Battle_Main      running=1; Battle_Init(); Battle_Loop(); Battle_Term();
+Battle_Loop      while (!Battle_StepFrame()) {}
+Battle_StepFrame UM quadro; devolve != 0 quando a luta termina
+```
+
+Como `Battle_StepFrame` existe e avança exatamente um quadro, dirigir o motor
+pelo lockstep **não exige nenhuma mudança no motor**: `start → Battle_Init`,
+`update → Battle_StepFrame`, `end → Battle_Term`.
+
+**A entrada entra por `gXbPadPoll`.** O caminho no motor é
+
+```
+Battle_StepFrame() → Pad_Update() → scePad2Read() → Port_PadRead()
+                                             → gXbPadPoll(socket, &st)  ← junta
+```
+
+`xb_pad.h` documenta `gXbPadPoll` como substituível (*"any other source (a
+test, a recording…) replaces it here"*). Enquanto a partida está online, o
+adaptador instala ali as duas palavras de entrada **sincronizadas** e guarda a
+função anterior; no `end()` ele a devolve, então o jogo offline continua lendo
+o controle real. Sem isso, os dois consoles simulariam o mesmo quadro com
+entradas diferentes e divergiriam no primeiro quadro.
+
+**O hash cobre o estado real, não um placeholder.** `bt_hash()` faz FNV-1a
+sobre os campos de `gBattleWork` lidos **por nome** — nunca por um intervalo
+de bytes crus, porque `BattleWork` contém `BattleMember`, cujo layout depende
+do tamanho do ponteiro (no host `BattleWork` tem 7384 bytes; no PowerPC,
+0x1A00 = 6656). E `BattleMember.data` / `.buf` são **pulados de propósito**:
+são ponteiros do heap do loader, e um endereço de heap não faz parte da
+simulação.
+
 ---
 
 ## O que os testes provam — e o que não provam
@@ -98,42 +187,93 @@ PASS: D52-2 lockstep harness bound host=side0 client=side1
 D52-2 fault injection: dropped 2 datagram(s), retransmission must recover
 PASS: D52-2 converged after 1 extra rounds at frame 184
 PASS: D52-2 both sides at frame 184
-PASS: D52-2 state hash matches: DFC3DFBA
+PASS: D52-2 state hash matches: 150DFCE4
 PASS: D52-2 91 peer hashes verified per side, no desync
 PASS: D52-2 loopback online battle selftest, host only
+```
+
+```
+$ make d53-test
+PASS: D53-A bind refuses NULL ops, a missing end() and NULL ctx
+PASS: D53-A update/end refused before start, backend untouched
+PASS: D53-A start/update/end sequence, no double start, no double end
+PASS: D53-A restart after end works (rematch path)
+PASS: D53-A failed start leaves the instance startable
+PASS: D53-A failed update still allows a safe end
+PASS: D53-A two instances, same 300-frame sequence, identical hash B4727BDF
+PASS: D53-A different inputs produce different hashes (the hash is not constant)
+PASS: D53-A harness lockstep through the adapter at frame 534, hash 46E05A17, 266 peer hashes verified
+PASS: D53-A engine adapter lifecycle, determinism and lockstep
+
+PASS: D53-A bt3xbx start calls Battle_Init once and installs the seam
+PASS: D53-A bt3xbx synchronized inputs reach the engine (pad0=0004 pad1=1000)
+PASS: D53-A bt3xbx hash moves with the simulation (8BCF72D4)
+PASS: D53-A bt3xbx hash skips BattleMember.data (heap pointers stays out of the comparison)
+PASS: D53-A bt3xbx one Battle_Term per end, pad seam restored, no double release
+PASS: D53-A bt3xbx replaying the same 30 frames reproduces hash 05E13575
+PASS: D53-A bt3xbx different inputs give a different hash (05E13575 vs 8CEA09F5)
+PASS: D53-A bt3xbx bridge call sequence, pad injection, hash semantics and reproducibility
 ```
 
 Compilado com `-Wall -Wextra -Werror -fsanitize=address,undefined` — sem um
 único aviso.
 
-**Provado:** o protocolo D52-1 não foi quebrado; dois lados convergem para o
-mesmo quadro e o mesmo hash mesmo com atrasos, reordenação, duplicatas e
-**perda forçada de datagramas** (a recuperação pela retransmissão de 120 ms
-foi verificada de ponta a ponta).
+**Provado:**
+
+- O protocolo D52-1 não foi quebrado; dois lados convergem para o mesmo quadro
+  e o mesmo hash mesmo com atrasos, reordenação, duplicatas e **perda forçada
+  de datagramas** (a recuperação pela retransmissão de 120 ms foi verificada
+  de ponta a ponta).
+- **Critério de conclusão da D53-A:** duas instâncias executam a mesma
+  sequência de 300 quadros através do adaptador e produzem **hashes idênticos
+  em todos os quadros**, com inicialização e encerramento seguros.
+- O hash **não é constante**: entradas diferentes dão hash diferente (sem
+  essa checagem a anterior seria vazia).
+- A máquina de fases impede start/end duplicados e toda chamada fora de ordem,
+  sem nunca chegar ao backend.
+- A ponte chama `Battle_Init` uma vez, um `Battle_StepFrame` por quadro,
+  `Battle_Term` uma vez; injeta as entradas sincronizadas (o stub lê de volta
+  `pad0=0004 pad1=1000`); restaura `gXbPadPoll` no fim; e o hash ignora
+  `BattleMember.data`.
 
 **Não provado** (e nenhum teste em loopback pode provar):
 
 - Sessão física entre duas consoles (Wi-Fi, roteador, NAT).
 - A pilha de rede do Xbox 360.
-- Que o loop de batalha real do bt3xbx é determinístico — `sim_step()` ainda é
-  uma simulação inteira de substituição.
+- Que o **motor real** do bt3xbx é determinístico. O teste da ponte usa
+  `d50/bt3xbx_stub.c`, que imita o motor nos dois pontos de que a ponte
+  depende — mas não é a luta. Isso é D53-B, no console.
+- Que o XEX compila e roda. Não há toolchain PowerPC neste ambiente.
 
 ---
 
 ## Limitações conhecidas
 
-1. **`sim_step()` é um substituto.** A D53 substitui essa função pelo
-   `Battle_Main` real do bt3xbx. Tudo o mais (numeração de quadros, fila de
-   entradas, comparação de hash) permanece como está.
-2. **Nenhum rollback.** Um desync é detectado e logado, não corrigido. Rollback
-   é D54 e depende do determinismo estar provado primeiro — a sua recomendação
-   de priorizar o adaptador de engine antes do rollback está correta.
-3. **O build do XEX não foi executado aqui.** Não há toolchain PowerPC neste
-   ambiente. `src/main.c` não compila neste repositório por causa de
-   `xb_platform.h` ausente (`engine/platform/` não está no repo) — uma lacuna
-   pré-existente, não introduzida pela D52-2.
-4. **Sem limite de quadro por segundo.** O lockstep estagna se um lado parar
+1. **`rand()` é o risco nº 1 de determinismo (D53-B).** O código vendor chama
+   `rand()` **363 vezes em 46 arquivos**, incluindo simulação (`btl_char_hit.c`,
+   `btl_seq.c`, `gsc.c`) e não só desenho. `srand()` **nunca é chamado** em
+   lugar nenhum, então ambos os lados partem da semente padrão e são
+   determinísticos **desde que chamem `rand()` o mesmo número de vezes** — o
+   que vale se ambos executam o mesmo binário com as mesmas entradas. Ainda
+   assim, é a primeira coisa a verificar em D53-B. Corrigir exigiria tocar no
+   motor original, que está preservado.
+2. **A ponte foi provada contra um stub, não contra o motor.** `d50/bt3xbx_stub.c`
+   implementa os quatro símbolos que o adaptador chama e lê os controles por
+   `gXbPadPoll` exatamente como o motor faz. Ele prova a sequência de chamadas
+   e a injeção de entrada; não prova a luta.
+3. **`dr_bt3xbx_ops` é singleton.** O motor mantém um `gBattleWork` estático,
+   então só existe uma instância dele. O critério de "duas instâncias" foi
+   provado no backend de referência, que é instanciável.
+4. **Nenhum rollback.** Um desync é detectado e logado, não corrigido. Rollback
+   é D54 e depende do determinismo estar provado primeiro.
+5. **Sem limite de quadro por segundo.** O lockstep estagna se um lado parar
    de responder; o mecanismo de saída é o timeout de 12 s da D52-1.
+6. **A temporização interna foi verificada, não eliminada.** O relógio de
+   batalha avança por tabela fixa indexada por contador de quadros
+   (`BtlClock_Tick`), não por relógio de parede; `Battle_UpdateWork` conta
+   quadros. A única espera em tempo real no quadro é `Gfx_EndFrame(2)` (dois
+   vsyncs), que regula o **ritmo** de renderização e não escreve estado de
+   simulação. Se algum dia isso mudar, a divergência aparece no hash.
 
 ---
 
@@ -141,15 +281,17 @@ foi verificada de ponta a ponta).
 
 | Etapa | Descrição | Estado |
 |---|---|---|
-| **A** | Adaptador de engine: interface `start`/`update`/`end` para trocar `sim_step()` pelo `Battle_Main` real sem refatorar o engine inteiro | próximo |
-| **B** | Sincronização real com números de quadro sobre o loop de batalha do bt3xbx | depende de A |
+| **A** | Adaptador de engine: interface `start`/`update`/`end`, ponte para `Battle_Init`/`Battle_StepFrame`/`Battle_Term`, hash do estado real, dois backends (referência + bt3xbx) | **concluída** |
+| **B** | Ligar `dr_bt3xbx_ops` no `src/main.c` sob `-DDR_HAVE_BT3XBX`, resolver a divisão XDK-vs-xsdk do build, gerar o XEX e testar no console — incluindo verificar o `rand()` | próxima |
 | **C** | Menus e partidas online | |
 | **D** | Build do XEX e validação de console | |
 
-O adaptador da etapa A existe para que a troca do substituto pelo engine real
-seja uma mudança de **um ponteiro de função**, não uma refactorização de
-milhares de linhas. É a peça que falta para provar que o determinismo escala
-do substituto inteiro para o jogo de verdade.
+A etapa A existe para que a troca do substituto pelo engine real seja uma
+mudança de **um ponteiro de função**, não uma refactorização de milhares de
+linhas. Ela cumpriu esse papel: `dr_online_battle_init_with(b, lobby, side,
+&dr_bt3xbx_ops, &estado)` é tudo que falta para rodar a luta real pelo
+lockstep. O que ainda não está provado é que o motor real *seja* determinístico
+— isso só se vê no console, com os dois lados trocando hashes.
 
 ---
 
@@ -158,11 +300,13 @@ do substituto inteiro para o jogo de verdade.
 ```sh
 git clone https://github.com/Vtgamer998/DragonRage360-D52-2.git
 cd DragonRage360-D52-2
-make d52-test        # D52-1 e D52-2, com sanitizers
+make d52-test        # D52-1 e D52-2 (lobby + lockstep), com sanitizers
+make d53-test        # D53-A: adaptador + ponte para o motor (stub)
 ```
 
 Requer apenas `gcc` e `make` (Linux). Nenhuma toolchain de Xbox é usada nos
-testes — todo o código de rede roda em loopback sobre UDP real.
+testes — todo o código de rede roda em loopback sobre UDP real, e a ponte para
+o motor roda contra `d50/bt3xbx_stub.c`.
 
 ---
 
@@ -174,9 +318,14 @@ O projeto é **AGPL-3.0** (`LICENSE`), com o detalhamento por módulo em
 O código desta entrega é de licença mista, marcada arquivo a arquivo com
 cabeçalho SPDX — os cabeçalhos são a fonte de verdade:
 
-- `src/lobby.c`, `src/online_battle.c` e a camada D52-2: **MIT**
-  (herdado do cabeçalho do protocolo de lobby original, que já declarava MIT).
-- Os testes em `d50/` e a maior parte de `src/`: **AGPL-3.0-or-later**.
+- `src/lobby.c`, `src/online_battle.c`, a camada D52-2 e o adaptador de engine
+  (`src/engine_adapter.*`, `src/reference_adapter.c`, `src/bt3xbx_adapter.*`):
+  **MIT** (herdado do cabeçalho do protocolo de lobby original, que já
+  declarava MIT).
+- Os testes em `d50/` e o resto de `src/`: **AGPL-3.0-or-later**.
+- `engine/` (restaurado da D52-1): as licenças originais em
+  `engine/LICENSE-UPSTREAM-AGPL-3.0.txt` e `engine/LICENSE-codec-MIT.txt`,
+  com o aviso em cada cabeçalho de arquivo.
 
 Como o executável final é um trabalho derivado combinado, é distribuído sob
 AGPL-3.0, com as fontes nesta pasta.

@@ -1,0 +1,593 @@
+--- a/engine/platform/platform/xb_gamedata.c
++++ b/engine/platform/platform/xb_gamedata.c
+@@ -1,178 +1,168 @@
+ /* SPDX-License-Identifier: MIT
+- * See xb_gamedata.h. */
++ * Checked loading of typed native data runs from the user's PS2 programs.
++ * No native pointer is taken from the external manifest. All failure checks
++ * happen before commit; this module never attempts to execute the game.
++ */
+ #include <stdint.h>
++#include <limits.h>
+ #include <stdio.h>
+ #include <stdlib.h>
+ #include <string.h>
+ #include "xb_gamedata.h"
+-#include "xb_port_addr.h"
+-
+ #ifdef XB_HOST_TEST
+-#define XB_LOG(...) (fprintf(stderr, __VA_ARGS__), fputc('\n', stderr))
++#define XB_LOG(...) (fprintf(stderr,__VA_ARGS__),fputc('\n',stderr))
+ #else
+ #include "xb_disc.h"
+ #include "xsdk/log.h"
+ #define XB_LOG(...) xsdk_log_write(__VA_ARGS__)
+ #endif
+-
+ #define ROM_BASE 0x100000u
+-#define ROM_END 0x2FF180u
+-
+-volatile uint32_t gPortDataStripped = 2;
+-
+-static uint32_t le32(const uint8_t *p) { return (uint32_t)p[0] | (uint32_t)p[1] << 8 | (uint32_t)p[2] << 16 | (uint32_t)p[3] << 24; }
+-static uint16_t le16(const uint8_t *p) { return (uint16_t)(p[0] | p[1] << 8); }
+-static uint64_t le64(const uint8_t *p) { return (uint64_t)le32(p) | (uint64_t)le32(p + 4) << 32; }
+-
+-/* The loaded sections of the PS2 ELF (little-endian, 32-bit) as one image from ROM_BASE. */
+-static uint8_t *flat_image(const uint8_t *elf, size_t elfSize) {
+-    uint32_t shoff;
+-    uint16_t shentsize, shnum;
+-    uint8_t *img;
+-    uint32_t i;
+-
+-    if (elfSize < 0x34 || memcmp(elf, "\177ELF", 4) != 0) {
+-        return NULL;
++#define ROM_END 0x2ff180u
++#define MAX_FILE 0x4000000u
++#define MAX_RECORDS 65536u
++#define MAX_TARGETS 64u
++#define MAX_SECTIONS 512u
++volatile uint32_t gPortDataStripped=2;
++static XbDataTarget targets[MAX_TARGETS];
++static size_t target_count;
++static int loading;
++typedef struct Cover {uint32_t off,size;} Cover;
++typedef struct Run {uint8_t *dst;const uint8_t *src;uint32_t length,width,address;} Run;
++static uint32_t le32(const uint8_t *p){return (uint32_t)p[0]|(uint32_t)p[1]<<8|(uint32_t)p[2]<<16|(uint32_t)p[3]<<24;}
++static uint16_t le16(const uint8_t *p){return (uint16_t)(p[0]|p[1]<<8);}
++static uint64_t le64(const uint8_t *p){return (uint64_t)le32(p)|(uint64_t)le32(p+4)<<32;}
++static int overlap(uintptr_t a,size_t an,uintptr_t b,size_t bn){return a<=b?b-a<an:a-b<bn;}
++int XbGameData_SetTargets(const XbDataTarget *maps,size_t count)
++{
++    if(loading)return XBGD_STATE;
++    if(!maps || !count || count>MAX_TARGETS)return XBGD_BAD_TARGET;
++    for(size_t i=0;i<count;i++) {
++        if(!maps[i].bytes || !maps[i].size || maps[i].size>0x100000000ull-maps[i].address ||
++           (uintptr_t)maps[i].bytes>UINTPTR_MAX-maps[i].size)return XBGD_BAD_TARGET;
++        for(size_t j=0;j<i;j++)if(overlap(maps[i].address,maps[i].size,maps[j].address,maps[j].size) ||
++            overlap((uintptr_t)maps[i].bytes,maps[i].size,(uintptr_t)maps[j].bytes,maps[j].size))return XBGD_BAD_TARGET;
+     }
+-    shoff = le32(elf + 0x20);
+-    shentsize = le16(elf + 0x2E);
+-    shnum = le16(elf + 0x30);
+-    img = calloc(1, ROM_END - ROM_BASE);
+-    if (img == NULL) {
+-        return NULL;
++    memcpy(targets,maps,count*sizeof(*maps));target_count=count;return XBGD_OK;
++}
++int XbGameData_ClearTargets(void)
++{if(loading)return XBGD_STATE;memset(targets,0,sizeof(targets));target_count=0;return XBGD_OK;}
++static uint8_t *destination(uint32_t address,uint32_t length)
++{
++    for(size_t i=0;i<target_count;i++)if(address>=targets[i].address) {
++        size_t at=address-targets[i].address;
++        if(at<=targets[i].size && length<=targets[i].size-at)return (uint8_t *)targets[i].bytes+at;
+     }
+-    for (i = 0; i < shnum && (size_t)shoff + (size_t)(i + 1) * shentsize <= elfSize; i++) {
+-        const uint8_t *sh = elf + shoff + (size_t)i * shentsize; /* name, type, flags, addr, offset, size */
+-        uint32_t type = le32(sh + 4), flags = le32(sh + 8), addr = le32(sh + 12), off = le32(sh + 16), size = le32(sh + 20);
+-
+-        if ((flags & 2) && type != 8 && size != 0 && addr >= ROM_BASE && addr + size <= ROM_END && (size_t)off + size <= elfSize) {
+-            memcpy(img + (addr - ROM_BASE), elf + off, size);
+-        }
++    return NULL;
++}
++/* Require a real 32-bit LE MIPS executable and complete section headers.
++ * The bitmap-free coverage list distinguishes actual file bytes from holes;
++ * even zero-valued holes cannot be silently used as table values. */
++static int flat_image(const uint8_t *elf,size_t size,uint8_t **image,Cover *cover,size_t *count)
++{
++    if(!elf || size<52 || size>MAX_FILE || memcmp(elf,"\177ELF\1\1\1",7) ||
++       le16(elf+16)!=2 || le16(elf+18)!=8 || le32(elf+20)!=1 || le16(elf+40)!=52 ||
++       le16(elf+46)!=40)return XBGD_NO_ELF;
++    uint32_t shoff=le32(elf+32);uint32_t n=le16(elf+48);
++    if(!n || n>MAX_SECTIONS || shoff<52 || shoff>size || n>(size-shoff)/40)return XBGD_NO_ELF;
++    *count=0;
++    for(uint32_t i=0;i<n;i++) {
++        const uint8_t *sh=elf+shoff+i*40;
++        uint32_t type=le32(sh+4),flags=le32(sh+8),addr=le32(sh+12),off=le32(sh+16),len=le32(sh+20);
++        if(!(flags&2) || type==8 || !len)continue;
++        if((uint64_t)addr+len>0x100000000ull || off>size || len>size-off)return XBGD_NO_ELF;
++        if(addr>=ROM_END || (uint64_t)addr+len<=ROM_BASE)continue;
++        if(addr<ROM_BASE || len>ROM_END-addr)return XBGD_NO_ELF;
++        for(size_t j=0;j<*count;j++)if(overlap(addr-ROM_BASE,len,cover[j].off,cover[j].size))return XBGD_NO_ELF;
++        cover[*count]=(Cover){addr-ROM_BASE,len};(*count)++;
+     }
+-    return img;
++    if(!*count)return XBGD_NO_ELF;
++    *image=calloc(1,ROM_END-ROM_BASE);if(!*image)return XBGD_MEMORY;
++    for(uint32_t i=0;i<n;i++) {
++        const uint8_t *sh=elf+shoff+i*40;
++        uint32_t addr=le32(sh+12),len=le32(sh+20);
++        if((le32(sh+8)&2) && le32(sh+4)!=8 && len && addr>=ROM_BASE && addr<ROM_END)
++            memcpy(*image+addr-ROM_BASE,elf+le32(sh+16),len);
++    }
++    return XBGD_OK;
+ }
+-
+-/* Copies n bytes from `from` to `to`, reversing each unit of w bytes (w = 1: plain copy). Byte by byte: neither
+-   side is known to be aligned. */
+-static void copy_swapped(uint8_t *to, const uint8_t *from, uint32_t n, uint32_t w) {
+-    uint32_t i, k;
+-
+-    if (w == 1) {
+-        memcpy(to, from, n);
+-        return;
++static int covered(const Cover *cover,size_t count,uint32_t off,uint32_t length)
++{
++    uint64_t end=(uint64_t)off+length,at=off;
++    while(at<end) {
++        uint64_t next=at;
++        for(size_t i=0;i<count;i++)if(at>=cover[i].off && at<(uint64_t)cover[i].off+cover[i].size)
++            next=(uint64_t)cover[i].off+cover[i].size;
++        if(next==at)return 0;
++        at=next;
+     }
+-    for (i = 0; i < n; i += w) {
+-        for (k = 0; k < w; k++) {
+-            to[i + k] = from[i + w - 1 - k];
+-        }
++    return 1;
++}
++static int by_address(const void *a,const void *b)
++{uint32_t x=((const Run *)a)->address,y=((const Run *)b)->address;return (x>y)-(x<y);}
++int XbGameData_Load(const XbDataFiles *files,const uint8_t *list,size_t listSize,long bias,int allowModified)
++{
++    if(loading)return XBGD_STATE;
++    if(!files || !files->read || !list || listSize<16 || memcmp(list,"BT3X",4))return XBGD_BAD_LIST;
++    uint32_t count=le32(list+4);uint64_t want=le64(list+8),hash=0xcbf29ce484222325ull;
++    if(!count || count>MAX_RECORDS || (listSize-16)/20!=count || (listSize-16)%20)return XBGD_BAD_LIST;
++#if LONG_MAX > 0xffffffffLL
++    if(bias<-(int64_t)UINT32_MAX || bias>(int64_t)UINT32_MAX)return XBGD_BAD_TARGET;
++#endif
++    if(!target_count)return XBGD_NO_TARGETS;
++    loading=1;
++    uint8_t *elf=NULL,*src[2]={NULL,NULL};size_t elfSize=0,sourceSize[2]={ROM_END-ROM_BASE,0},nc=0;
++    Cover *cover=calloc(MAX_SECTIONS,sizeof(*cover));Run *runs=calloc(count,sizeof(*runs));
++    int rc=XBGD_OK;
++    if(!cover || !runs){rc=XBGD_MEMORY;goto done;}
++    if(files->read(files->ctx,"SLUS_216.78",&elf,&elfSize) || !elf){rc=XBGD_NO_ELF;goto done;}
++    rc=flat_image(elf,elfSize,&src[0],cover,&nc);if(rc)goto done;
++    free(elf);elf=NULL;
++    if(files->read(files->ctx,"DBZP.BIN",&src[1],&sourceSize[1]) || !src[1] || !sourceSize[1] || sourceSize[1]>MAX_FILE){rc=XBGD_NO_DBZP;goto done;}
++    /* Decode into private Run records before any writes, so a manifest
++     * aliased with a registered destination cannot change later addresses. */
++    for(uint32_t i=0;i<count;i++) {
++        const uint8_t *r=list+16+(size_t)i*20;
++        uint32_t addr=le32(r),which=le32(r+4),off=le32(r+8),len=le32(r+12),width=le32(r+16);
++        if(which>1 || !len || off>sourceSize[which] || len>sourceSize[which]-off ||
++           !(width==1 || width==2 || width==4 || width==8) || len%width || off%width ||
++           (which==0 && !covered(cover,nc,off,len))){rc=XBGD_BAD_RECORD;goto done;}
++        int64_t adjusted=(int64_t)addr+(int64_t)bias;
++        if(adjusted<0 || adjusted>UINT32_MAX || (uint64_t)adjusted+len>0x100000000ull ||
++           (uint64_t)adjusted%width){rc=XBGD_BAD_TARGET;goto done;}
++        uint8_t *dst=destination((uint32_t)adjusted,len);
++        if(!dst){rc=XBGD_BAD_TARGET;goto done;}
++        runs[i]=(Run){dst,src[which]+off,len,width,(uint32_t)adjusted};
++        for(uint32_t k=0;k<len;k++)hash=(hash^runs[i].src[k])*0x100000001b3ull;
+     }
++    qsort(runs,count,sizeof(*runs),by_address);
++    for(uint32_t i=1;i<count;i++)if((uint64_t)runs[i-1].address+runs[i-1].length>runs[i].address){rc=XBGD_OVERLAP;goto done;}
++    if(hash!=want && !allowModified){rc=XBGD_HASH;goto done;}
++    if(hash!=want)XB_LOG("gamedata: explicitly accepting modified source checksum");
++    for(uint32_t i=0;i<count;i++) {
++        Run *r=&runs[i];
++        for(uint32_t at=0;at<r->length;at+=r->width)
++            for(uint32_t k=0;k<r->width;k++)r->dst[at+k]=r->src[at+r->width-1-k];
++    }
++    XB_LOG("gamedata: committed %u checked data runs; no game started",(unsigned)count);
++done:
++    if(rc)XB_LOG("gamedata: rejected with error %d; destinations untouched",rc);
++    free(elf);free(src[0]);free(src[1]);free(cover);free(runs);loading=0;return rc;
+ }
+-
+-int XbGameData_Load(const XbDataFiles *files, const uint8_t *list, size_t listSize, long bias, int allowModified) {
+-    uint8_t *elf = NULL, *src[2] = {NULL, NULL};
+-    size_t elfSize = 0, srcSize[2] = {0, 0};
+-    uint64_t hash = 0xCBF29CE484222325ull, want;
+-    uint32_t count, i, k;
+-    int rc = XBGD_OK;
+-
+-    if (list == NULL || listSize < 16 || memcmp(list, "BT3X", 4) != 0) {
+-        XB_LOG("gamedata: damaged or foreign list");
+-        return XBGD_BAD_LIST;
+-    }
+-    count = le32(list + 4);
+-    want = le64(list + 8);
+-    if ((listSize - 16) / 20 < count) {
+-        XB_LOG("gamedata: list cut short (%u runs, %u bytes)", (unsigned)count, (unsigned)listSize);
+-        return XBGD_BAD_LIST;
+-    }
+-    if (files->read(files->ctx, "SLUS_216.78", &elf, &elfSize) != 0 || elf == NULL) {
+-        XB_LOG("gamedata: the game's program (SLUS_216.78) was not found on the disc");
+-        return XBGD_NO_ELF;
+-    }
+-    src[0] = flat_image(elf, elfSize);
+-    free(elf);
+-    if (src[0] == NULL) {
+-        XB_LOG("gamedata: SLUS_216.78 is not an ELF");
+-        return XBGD_NO_ELF;
+-    }
+-    srcSize[0] = ROM_END - ROM_BASE;
+-    if (files->read(files->ctx, "DBZP.BIN", &src[1], &srcSize[1]) != 0 || src[1] == NULL) {
+-        XB_LOG("gamedata: the game's menu program (BIN/DBZP.BIN) was not found on the disc");
+-        free(src[0]);
+-        return XBGD_NO_DBZP;
+-    }
+-    /* Check every run before touching memory: a damaged list must not leave the program half written. */
+-    for (i = 0; i < count && rc == XBGD_OK; i++) {
+-        const uint8_t *r = list + 16 + (size_t)i * 20;
+-        uint32_t which = le32(r + 4), off = le32(r + 8), len = le32(r + 12), w = le32(r + 16);
+-
+-        if (which > 1 || (size_t)off + len > srcSize[which] || !(w == 1 || w == 2 || w == 4 || w == 8) || len % w != 0) {
+-            XB_LOG("gamedata: run %u is damaged (source %u, offset 0x%X, length %u, width %u)", (unsigned)i, (unsigned)which, (unsigned)off,
+-                   (unsigned)len, (unsigned)w);
+-            rc = XBGD_BAD_RECORD;
+-        }
+-    }
+-    if (rc == XBGD_OK) {
+-        for (i = 0; i < count; i++) {
+-            const uint8_t *r = list + 16 + (size_t)i * 20;
+-            uint32_t addr = le32(r), which = le32(r + 4), off = le32(r + 8), len = le32(r + 12), w = le32(r + 16);
+-            const uint8_t *from = src[which] + off;
+-
+-            copy_swapped((uint8_t *)Port_Ptr(addr + (uint32_t)bias), from, len, w);
+-            for (k = 0; k < len; k++) {
+-                hash = (hash ^ from[k]) * 0x100000001B3ull;
+-            }
+-        }
+-        if (hash != want) {
+-            if (!allowModified) {
+-                XB_LOG("gamedata: the programs on your disc are not the unmodified USA release (SLUS-21678)");
+-                rc = XBGD_HASH; /* (already copied: the caller must not run the game on this) */
+-            } else {
+-                XB_LOG("gamedata: the data comes from a modified image; changes to the game's code do not apply");
+-            }
+-        }
+-    }
+-    free(src[0]);
+-    free(src[1]);
+-    return rc;
++#ifndef XB_HOST_TEST
++static int disc_read(void *ctx,const char *name,uint8_t **buf,size_t *size)
++{
++    char rel[64];dr_span span;(void)ctx;
++    *buf=NULL;*size=0;
++    snprintf(rel,sizeof(rel),strcmp(name,"DBZP.BIN")==0?"disc/BIN/%s":"disc/%s",name);
++    if(XbDisc_FindFile(rel,&span)!=DR_OK || !span.size || span.size>MAX_FILE)return -1;
++    *buf=malloc((size_t)span.size);if(!*buf)return -1;
++    if(XbDisc_ReadSpan(&span,0,*buf,(size_t)span.size)!=DR_OK){free(*buf);*buf=NULL;return -1;}
++    *size=(size_t)span.size;return 0;
+ }
+-
+-#ifndef XB_HOST_TEST
+-static int disc_read(void *ctx, const char *name, uint8_t **buf, size_t *size) {
+-    /* TODO-VERIFICAR: whether dr_game_file knows the disc's root files by these names; the PC extraction puts them at
+-       disc/SLUS_216.78 and disc/BIN/DBZP.BIN, and "disc/DATA/NAME" is what xb_plat_file.c already asks for. */
+-    char rel[64];
+-    dr_span span;
+-    (void)ctx;
+-
+-    snprintf(rel, sizeof(rel), strcmp(name, "DBZP.BIN") == 0 ? "disc/BIN/%s" : "disc/%s", name);
+-    if (XbDisc_FindFile(rel, &span) != 0) {
+-        return -1;
+-    }
+-    *buf = malloc((size_t)span.size + 1);
+-    if (*buf == NULL || XbDisc_ReadSpan(&span, 0, *buf, (size_t)span.size) != 0) {
+-        free(*buf);
+-        *buf = NULL;
+-        return -1;
+-    }
+-    *size = (size_t)span.size;
+-    return 0;
+-}
+-
+-int XbGameData_LoadFromDisc(const char *listPath, long bias, int allowModified) {
+-    XbDataFiles files = {disc_read, NULL};
+-    uint8_t *list = NULL;
+-    size_t listSize = 0;
+-    int rc;
+-
+-    if (XbDisc_ReadHostFile(listPath, &list, &listSize) != 0) {
+-        if (gPortDataStripped == 1) {
+-            XB_LOG("gamedata: this program needs the file that came with it: %s", listPath);
+-        }
+-        return XBGD_NO_LIST;
+-    }
+-    rc = XbGameData_Load(&files, list, listSize, bias, allowModified);
+-    free(list);
+-    return rc;
++int XbGameData_LoadFromDisc(const char *listPath,long bias,int allowModified)
++{
++    XbDataFiles files={disc_read,NULL};uint8_t *list=NULL;size_t size=0;
++    if(!listPath || XbDisc_ReadHostFile(listPath,&list,&size)!=DR_OK)return XBGD_NO_LIST;
++    int rc=XbGameData_Load(&files,list,size,bias,allowModified);free(list);return rc;
+ }
+ #endif
+--- a/engine/platform/platform/xb_gamedata.h
++++ b/engine/platform/platform/xb_gamedata.h
+@@ -29,8 +29,13 @@
+     XBGD_NO_ELF = 2,       /* SLUS_216.78 missing or not an ELF */
+     XBGD_NO_DBZP = 3,      /* BIN/DBZP.BIN missing */
+     XBGD_BAD_RECORD = 4,   /* a run points outside its source, or has a bad width */
+-    XBGD_HASH = 5,         /* the disc's programs are not the unmodified USA release (data was still copied if allowModified) */
+-    XBGD_NO_LIST = 6       /* no list file */
++    XBGD_HASH = 5,         /* checksum mismatch; no destination writes */
++    XBGD_NO_LIST = 6,      /* no list file */
++    XBGD_NO_TARGETS = 7,  /* native data regions were not registered */
++    XBGD_BAD_TARGET = 8,  /* destination outside the explicit writable regions */
++    XBGD_OVERLAP = 9,     /* overlapping destination records */
++    XBGD_MEMORY = 10,     /* allocation failed */
++    XBGD_STATE = 11       /* loader/registration called recursively */
+ };
+ 
+ /* How the loader gets the two programs. read gives a malloc'ed copy of the named file (free() it): "SLUS_216.78"
+@@ -40,13 +45,24 @@
+     void *ctx;
+ } XbDataFiles;
+ 
+-/* Copies the runs into memory at address + bias (bias: where the program was really loaded minus where it was
+-   linked; 0 normally). allowModified: a hash mismatch (a translation or a mod of the USA release) is accepted. */
++/* Register the native DATA regions owned by this build, before loading.
++ * Address is a 32-bit link address, bytes is its actual writable storage.
++ * Descriptors are copied; storage is borrowed until cleared. Neither logical
++ * nor physical ranges may overlap. Invalid registration preserves old maps.
++ * The API is single-thread only; re-entry from a file callback is rejected. */
++typedef struct XbDataTarget {uint32_t address;void *bytes;size_t size;} XbDataTarget;
++int XbGameData_SetTargets(const XbDataTarget *,size_t);
++int XbGameData_ClearTargets(void);
++
++/* Copies the runs into registered DATA storage at address + bias (bias: where the program was really loaded minus where it was
++   linked; 0 normally). Validates all sources, destinations and checksum BEFORE
++   any write. Exact manifest length is required; no overlapping records or ELF
++   holes. allowModified: a hash mismatch (a translation or a mod of the USA release) is accepted. */
+ int XbGameData_Load(const XbDataFiles *files, const uint8_t *list, size_t listSize, long bias, int allowModified);
+ 
+ /* On the console: the list from `listPath` (an xsdk path such as "game:/dragonrage.dat") and the programs from the
+    mounted disc (xb_disc.h: XbDisc_Mount first). Returns XBGD_*; XBGD_NO_LIST means "no list: the data is linked in"
+-   (a developer build), which is not an error unless gPortDataStripped says the program was stripped. */
++   (a developer build), the caller must treat absence as a boot blocker for a skeleton-data build. */
+ int XbGameData_LoadFromDisc(const char *listPath, long bias, int allowModified);
+ 
+ /* Set to 1 in the program's file by the strip tool: this program does not work without its list. 2 (not 0) so that
+--- a/engine/platform/tools/test_xb_gamedata.c
++++ b/engine/platform/tools/test_xb_gamedata.c
+@@ -1,38 +1,105 @@
++/* SPDX-License-Identifier: MIT */
++#include <assert.h>
++#include <limits.h>
+ #include <stdio.h>
+ #include <stdlib.h>
+ #include <string.h>
+-#include <stdint.h>
+ #include "xb_gamedata.h"
+-uintptr_t gXbWindow;
+-static uint8_t elf[0x200], dbzp[64], mem[0x1000];
+-static int rd(void *c, const char *n, uint8_t **b, size_t *s){ (void)c;
+-  if(!strcmp(n,"SLUS_216.78")){*b=malloc(sizeof elf);memcpy(*b,elf,sizeof elf);*s=sizeof elf;return 0;}
+-  *b=malloc(sizeof dbzp);memcpy(*b,dbzp,sizeof dbzp);*s=sizeof dbzp;return 0;}
+-static void p32(uint8_t*p,uint32_t v){p[0]=v;p[1]=v>>8;p[2]=v>>16;p[3]=v>>24;}
+-static uint64_t fnv(uint64_t h,const uint8_t*d,size_t n){for(size_t i=0;i<n;i++)h=(h^d[i])*0x100000001B3ull;return h;}
+-int main(void){
+-  gXbWindow=(uintptr_t)mem;
+-  memcpy(elf,"\177ELF",4); p32(elf+0x20,0x100); elf[0x2E]=40; elf[0x30]=1; /* 1 section header at 0x100 */
+-  uint8_t*sh=elf+0x100; p32(sh+4,1); p32(sh+8,2); p32(sh+12,0x100000); p32(sh+16,0x40); p32(sh+20,0x40);
+-  for(int i=0;i<0x40;i++) elf[0x40+i]=i+1;           /* the flat image from 0x100000 = 01 02 03 .. */
+-  for(int i=0;i<64;i++) dbzp[i]=0xA0+i;
+-  uint8_t list[16+3*20]; memset(list,0,sizeof list); memcpy(list,"BT3X",4); p32(list+4,3);
+-  /* runs: word swap of src0[0..8) to mem 0x10, half swap of src0[8..12) to 0x20, bytes of dbzp[4..8) to 0x30 */
+-  uint32_t r[3][5]={{0x10,0,0,8,4},{0x20,0,8,4,2},{0x30,1,4,4,1}};
+-  const uint8_t*from[3]={elf+0x40,elf+0x48,dbzp+4}; size_t ln[3]={8,4,4};
+-  uint64_t h=0xCBF29CE484222325ull; for(int i=0;i<3;i++) h=fnv(h,from[i],ln[i]);
+-  for(int i=0;i<3;i++) for(int k=0;k<5;k++) p32(list+16+i*20+k*4,r[i][k]);
+-  for(int k=0;k<8;k++) list[8+k]=(uint8_t)(h>>(8*k));
+-  XbDataFiles f={rd,NULL};
+-  int rc=XbGameData_Load(&f,list,sizeof list,0,0);
+-  printf("rc=%d\n",rc);
+-  printf("word: %02X %02X %02X %02X %02X %02X %02X %02X (want 04 03 02 01 08 07 06 05)\n",mem[0x10],mem[0x11],mem[0x12],mem[0x13],mem[0x14],mem[0x15],mem[0x16],mem[0x17]);
+-  printf("half: %02X %02X %02X %02X (want 0A 09 0C 0B)\n",mem[0x20],mem[0x21],mem[0x22],mem[0x23]);
+-  printf("byte: %02X %02X %02X %02X (want A4 A5 A6 A7)\n",mem[0x30],mem[0x31],mem[0x32],mem[0x33]);
+-  /* damaged: width 3 must be refused and write nothing */
+-  memset(mem,0,sizeof mem); p32(list+16+2*20+16,3);
+-  printf("bad width rc=%d (want 4), memory untouched: %d\n",XbGameData_Load(&f,list,sizeof list,0,0),mem[0x10]==0&&mem[0x30]==0);
+-  p32(list+16+2*20+16,1); list[8]^=1;
+-  printf("bad hash rc=%d (want 5), allowModified rc=%d (want 0)\n",XbGameData_Load(&f,list,sizeof list,0,0),XbGameData_Load(&f,list,sizeof list,0,1));
+-  printf("foreign list rc=%d (want 1)\n",XbGameData_Load(&f,(const uint8_t*)"BT3D0000000000000000",20,0,0));
+-  return 0;}
++static uint8_t elf[0x300],dbzp[128],memory[4096],list[16+4*20],saved[sizeof(list)];
++static int mode,reenter,reads;static unsigned checks;
++static const uint32_t BASE=0x82001000;
++static void p16(uint8_t *p,uint16_t x){p[0]=x;p[1]=x>>8;}
++static void p32(uint8_t *p,uint32_t x){for(unsigned i=0;i<4;i++)p[i]=(uint8_t)(x>>(8*i));}
++static uint64_t fnv(uint64_t h,const uint8_t *p,size_t n){while(n--)h=(h^*p++)*0x100000001b3ull;return h;}
++static int rd(void *ctx,const char *name,uint8_t **buf,size_t *size) {
++    (void)ctx;reads++;
++    if(reenter) {
++        assert(XbGameData_ClearTargets()==XBGD_STATE);
++        assert(XbGameData_SetTargets(NULL,0)==XBGD_STATE);
++        assert(XbGameData_Load(NULL,NULL,0,0,0)==XBGD_STATE);
++    }
++    const uint8_t *src;
++    if(!strcmp(name,"SLUS_216.78")){*size=sizeof(elf);src=elf;}
++    else {assert(!strcmp(name,"DBZP.BIN"));*size=sizeof(dbzp);src=dbzp;}
++    *buf=malloc(*size);assert(*buf);memcpy(*buf,src,*size);
++    return (mode==1 && src==elf) || (mode==2 && src==dbzp)?-1:0;
++}
++static void setup(void) {
++    mode=reenter=reads=0;memset(memory,0x5a,sizeof(memory));memset(elf,0,sizeof(elf));
++    memcpy(elf,"\177ELF\1\1\1",7);p16(elf+16,2);p16(elf+18,8);p32(elf+20,1);
++    p16(elf+40,52);p32(elf+32,0x100);p16(elf+46,40);p16(elf+48,2);
++    uint8_t *sh=elf+0x128;p32(sh+4,1);p32(sh+8,2);p32(sh+12,0x100000);p32(sh+16,0x40);p32(sh+20,64);
++    for(unsigned i=0;i<64;i++)elf[0x40+i]=(uint8_t)(i+1);
++    for(unsigned i=0;i<sizeof(dbzp);i++)dbzp[i]=(uint8_t)(0xa0+i);
++    memset(list,0,sizeof(list));memcpy(list,"BT3X",4);p32(list+4,4);
++    uint32_t rows[4][5]={{BASE+0x40,0,16,8,8},{BASE+0x10,0,0,8,4},{BASE+0x30,1,4,4,1},{BASE+0x20,0,8,4,2}};
++    uint64_t hash=0xcbf29ce484222325ull;
++    for(unsigned i=0;i<4;i++) {
++        for(unsigned k=0;k<5;k++)p32(list+16+i*20+k*4,rows[i][k]);
++        hash=fnv(hash,rows[i][1]?dbzp+rows[i][2]:elf+0x40+rows[i][2],rows[i][3]);
++    }
++    for(unsigned i=0;i<8;i++)list[8+i]=(uint8_t)(hash>>(8*i));
++    memcpy(saved,list,sizeof(list));
++    XbDataTarget maps[2]={{BASE,memory,256},{BASE+0x1000,memory+512,256}};
++    assert(!XbGameData_ClearTargets() && !XbGameData_SetTargets(maps,2));
++}
++static void pristine(void){for(size_t i=0;i<sizeof(memory);i++)assert(memory[i]==0x5a);}
++static int load(long bias,int mod){XbDataFiles files={rd,NULL};return XbGameData_Load(&files,list,sizeof(list),bias,mod);}
++static void reject(int want){int rc=load(0,0);assert(rc==want);pristine();checks++;}
++int main(void) {
++    setup();reenter=1;assert(!load(0,0));
++    assert(!memcmp(memory+0x10,"\4\3\2\1\10\7\6\5",8));
++    assert(!memcmp(memory+0x20,"\12\11\14\13",4));
++    assert(!memcmp(memory+0x30,"\244\245\246\247",4));
++    assert(!memcmp(memory+0x40,"\30\27\26\25\24\23\22\21",8));checks++;
++    setup();list[8]^=1;reject(XBGD_HASH);assert(!load(0,1));checks++;
++    setup();p32(list+16+20*3,BASE+256);reject(XBGD_BAD_TARGET);
++    setup();p32(list+16+20*3,BASE+0x14);reject(XBGD_OVERLAP);
++    setup();p32(list+16+20*3+4,2);reject(XBGD_BAD_RECORD);
++    setup();p32(list+16+20*3+8,64);reject(XBGD_BAD_RECORD); /* allocated-image hole */
++    setup();p32(list+16+20*3+12,0);reject(XBGD_BAD_RECORD);
++    setup();p32(list+16+20*3+16,3);reject(XBGD_BAD_RECORD);
++    setup();p32(list+16+20*3+8,9);reject(XBGD_BAD_RECORD);
++    setup();p32(list+16+20*3,BASE+0x21);reject(XBGD_BAD_TARGET);
++    setup();assert(load(-0x7fffffffL,0)==XBGD_BAD_TARGET);pristine();checks++;
++#if LONG_MAX > 0xffffffffLL
++    setup();assert(load(LONG_MAX,0)==XBGD_BAD_TARGET);pristine();checks++;
++#endif
++    setup();mode=1;reject(XBGD_NO_ELF);setup();mode=2;reject(XBGD_NO_DBZP);
++    setup();elf[4]=2;reject(XBGD_NO_ELF);setup();elf[5]=2;reject(XBGD_NO_ELF);
++    setup();p16(elf+18,20);reject(XBGD_NO_ELF);setup();p16(elf+46,1);reject(XBGD_NO_ELF);
++    setup();p32(elf+32,0x2f0);reject(XBGD_NO_ELF);
++    setup();p32(elf+0x128+16,0x2f0);reject(XBGD_NO_ELF);
++    setup();p32(elf+0x128+12,0xfffffff0);reject(XBGD_NO_ELF);
++    setup();p16(elf+48,3);memcpy(elf+0x150,elf+0x128,40);reject(XBGD_NO_ELF);
++    setup();p32(list+4,0);reject(XBGD_BAD_LIST);setup();p32(list+4,65537);reject(XBGD_BAD_LIST);
++    setup();assert(!XbGameData_ClearTargets());reject(XBGD_NO_TARGETS);assert(!reads);
++    setup();XbDataFiles files={rd,NULL};
++    assert(XbGameData_Load(NULL,list,sizeof(list),0,0)==XBGD_BAD_LIST);
++    assert(XbGameData_Load(&files,list,sizeof(list)-1,0,0)==XBGD_BAD_LIST);
++    uint8_t extra[sizeof(list)+1];memcpy(extra,list,sizeof(list));extra[sizeof(list)]=0;
++    assert(XbGameData_Load(&files,extra,sizeof(extra),0,0)==XBGD_BAD_LIST);pristine();checks+=3;
++    /* Failed target registration is atomic; no physical or logical aliases. */
++    XbDataTarget bad[2]={{BASE,memory,256},{BASE+512,memory+128,256}};
++    assert(XbGameData_SetTargets(bad,2)==XBGD_BAD_TARGET);assert(!load(0,0));checks++;
++    setup();bad[1]=(XbDataTarget){BASE+128,memory+512,256};
++    assert(XbGameData_SetTargets(bad,2)==XBGD_BAD_TARGET);assert(!load(0,0));checks++;
++    setup();bad[0]=(XbDataTarget){0xfffffff0,memory,32};
++    assert(XbGameData_SetTargets(bad,1)==XBGD_BAD_TARGET);assert(!load(0,0));checks++;
++    /* Nonzero load bias translates logical addresses, not native pointers. */
++    setup();XbDataTarget shifted={BASE+0x2000,memory,256};
++    assert(!XbGameData_SetTargets(&shifted,1) && !load(0x2000,0));checks++;
++    /* Destination writes may overwrite the manifest itself. The prepared
++     * run descriptors and checksum are already private before commit. */
++    setup();for(unsigned i=0;i<4;i++)p32(list+16+20*i,BASE+0x80+16*i);
++    memcpy(memory+0x80,list,sizeof(list));
++    assert(!XbGameData_Load(&files,memory+0x80,sizeof(list),0,0));
++    assert(!memcmp(memory+0x80,"\30\27\26\25\24\23\22\21",8));
++    assert(!memcmp(memory+0x90,"\4\3\2\1\10\7\6\5",8));checks++;
++    /* Deterministic malformed-record sweep with a late-record failure. */
++    for(unsigned i=0;i<512;i++) {
++        setup();p32(list+16+20*3+8,0xffff0000u+i*4);reject(XBGD_BAD_RECORD);
++    }
++    assert(!XbGameData_ClearTargets());
++    printf("PASS: %u data-loader checks; typed BE runs, strict ELF coverage, complete preflight, no writes on failures, maps/bias, re-entry, source errors and checksum; host only\n",checks);
++}
+--- a/engine/platform/tools/test_xb_strip.py
++++ b/engine/platform/tools/test_xb_strip.py
+@@ -18,14 +18,15 @@
+     pass
+ for addr, so, ln, w in recs:
+     out[addr - 0x82000000:addr - 0x82000000 + ln] = swapped(bytes(src[so:so + ln]), w)
+-ok = True
+-for i in range(len(xb)):
+-    if out[i] != 0 and out[i] != xb[i]:
+-        ok = False; print("mismatch at", i)
+-assert ok
++rebuilt = bytearray(xb)
++for z0,z1 in zero:
++    rebuilt[z0:z1] = bytes(z1-z0)
++for addr,so,ln,w in recs:
++    rebuilt[addr-0x82000000:addr-0x82000000+ln] = swapped(bytes(src[so:so+ln]),w)
++assert rebuilt == xb, "reloading must reproduce every original byte"
+ assert out[8:12] == bytes(4), "the linker's word must not be taken"
+ widths = sorted({w for *_, w in recs})
+ print("runs:", [(hex(a), l, w) for a, _, l, w in recs])
+-assert 8 in widths and 1 in widths or True
++assert widths == [1, 2, 4, 8], widths
+ assert fnv(taken) == fnv(b"".join(bytes(src[so:so + ln]) for _, so, ln, _ in recs))
+ print("ok")
+--- a/engine/platform/tools/xb_strip_data.py
++++ b/engine/platform/tools/xb_strip_data.py
+@@ -156,6 +156,12 @@
+         for (addr, so, ln, w) in recs:
+             records.append((addr, which, so, ln, w))
+         taken += tk
++    # A zero/incomplete manifest cannot restore the skeleton tables of this
++    # project. Never publish a release whose data was silently left missing.
++    if not pieces or not records or odd:
++        raise SystemExit("No complete data layout found; no release emitted. "
++                         "The skeleton build needs explicit typed data metadata; "
++                         "byte matching does not reconstruct missing table values.")
+     flag = next((int(l.split()[0], 16) for l in nm if l.endswith(" " + a.flag_symbol)), None)
+     if flag is not None and file_off(flag) is not None:
+         image[file_off(flag):file_off(flag) + 4] = struct.pack(">I", 1)  # big-endian: the program's own byte order
+--- /dev/null
++++ b/engine/tools/test_gamedata.py
+@@ -0,0 +1,14 @@
++#!/usr/bin/env python3
++# SPDX-License-Identifier: MIT
++"""Run the actual native data loader with synthetic sources and writable maps."""
++from pathlib import Path
++import argparse,subprocess,json,os
++p=argparse.ArgumentParser(description=__doc__);p.add_argument('output',type=Path);p.add_argument('--sanitize',action='store_true')
++a=p.parse_args();out=a.output.resolve();out.mkdir(parents=True,exist_ok=True);e=Path(__file__).resolve().parents[1];platform=e/'platform/platform'
++cmd=['gcc','-std=gnu17','-O1','-g','-Wall','-Wextra','-Werror','-DXB_HOST_TEST','-I'+str(platform)]
++if a.sanitize:cmd+=['-fsanitize=address,undefined','-fno-omit-frame-pointer']
++cmd+=list(map(str,[e/'platform/tools/test_xb_gamedata.c',platform/'xb_gamedata.c']))+['-o',str(out/'test-data')]
++subprocess.run(cmd,check=True);r=subprocess.run([str(out/'test-data')],capture_output=True,text=True,env=dict(os.environ,ASAN_OPTIONS='detect_leaks=0'))
++(out/'data-test.txt').write_text(r.stdout+r.stderr);print(r.stdout,end='')
++if r.returncode:print(r.stderr[-3000:])
++r.check_returncode();(out/'data-test.json').write_text(json.dumps({'result':'PASS','sanitizers':a.sanitize,'synthetic_sources_only':True,'PowerPC_execution':False,'real_ISO_data_loaded':False,'battle_executed':False},indent=2)+'\n')
+--- /dev/null
++++ b/engine/tools/test_strip_refusal.py
+@@ -0,0 +1,20 @@
++#!/usr/bin/env python3
++# SPDX-License-Identifier: MIT
++"""Check that the old stripper cannot emit an empty release from this build."""
++from pathlib import Path
++import argparse,json,shutil,struct,subprocess,tempfile
++p=argparse.ArgumentParser(description=__doc__);p.add_argument('native_elf',type=Path);p.add_argument('native_map',type=Path);p.add_argument('prefix');p.add_argument('output',type=Path)
++a=p.parse_args();out=a.output.resolve();out.mkdir(parents=True,exist_ok=True);e=Path(__file__).resolve().parents[1]
++with tempfile.TemporaryDirectory(prefix='dr-data-refusal-') as tmp:
++ root=Path(tmp);elf=root/'native.elf';shutil.copy2(a.native_elf,elf);shutil.copy2(a.native_map,str(elf)+'.map')
++ data=root/'gamedata/disc';(data/'BIN').mkdir(parents=True)
++ source=bytearray(0x200);source[:7]=b'\x7fELF\x01\x01\x01';struct.pack_into('<I',source,0x20,0x100);struct.pack_into('<HH',source,0x2e,40,2)
++ struct.pack_into('<6I',source,0x128,0,1,2,0x100000,0x40,64);source[0x40:0x80]=bytes(range(64))
++ (data/'SLUS_216.78').write_bytes(source);(data/'BIN/DBZP.BIN').write_bytes(bytes(64))
++ release=root/'release'
++ cmd=['python3',str(e/'platform/tools/xb_strip_data.py'),'--exe',str(elf),'--prefix',a.prefix,'--data',str(root/'gamedata'),'--out',str(release)]
++ r=subprocess.run(cmd,capture_output=True,text=True);(out/'strip-refusal.txt').write_text(r.stdout+r.stderr)
++ assert r.returncode and 'No complete data layout found' in r.stderr,(r.returncode,r.stdout,r.stderr)
++ assert not release.exists(),'incomplete release must not be written'
++ (out/'strip-refusal.json').write_text(json.dumps({'result':'PASS','real_native_ELF_inspected':True,'sources':'synthetic files only','release_emitted':False},indent=2)+'\n')
++ print('PASS: actual native ELF/map/binutils inspected; incomplete skeleton layout refused, no release/dat emitted')

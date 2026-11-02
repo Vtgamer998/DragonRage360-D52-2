@@ -1,0 +1,40 @@
+--- a/src/sys/bpe.c	2026-10-23 18:50:20.560163354 -0300
++++ b/src/sys/bpe.c	2026-10-23 18:50:26.677485671 -0300
+@@ -1,6 +1,9 @@
+ #include "common.h"
+ #include "sys/bpe.h"
+ #include "sys/heap.h"
++#ifdef PORT_BIGENDIAN /* Xbox 360: the disc's data is little-endian (port: xb_resconv.h) */
++#include "xb_resconv.h"
++#endif
+ 
+ /* Expands byte-pair-encoded data (Philip Gage's "expand"); allocates the output when dst is NULL. Returns the output. */
+ void *Bpe_Decode(void *src, void *dst, s32 *rawSize) {
+@@ -17,11 +20,18 @@
+     s16 blockSize;
+     s32 hi;
+     void *buf;
++#ifdef PORT_BIGENDIAN
++    void *origSrc = src;
+ 
++    size = (s32)XbRes_Le32(src); /* the header words are PS2 little-endian; the packed bytes after them are bytes */
++    packSize = (s32)XbRes_Le32((u8 *)src + 4);
++    src = (u8 *)src + 8;
++#else
+     size = *(s32 *)src;
+     src = (s32 *)src + 1;
+     packSize = *(s32 *)src;
+     src = (s32 *)src + 1;
++#endif
+     if (rawSize != NULL) {
+         *rawSize = size;
+     }
+@@ -77,5 +87,8 @@
+             }
+         }
+     }
++#ifdef PORT_BIGENDIAN
++    XbRes_AfterBpe(origSrc, buf, size); /* converts the unpacked file's byte order, if it is a registered one */
++#endif
+     return buf;
+ }

@@ -42,14 +42,36 @@ d52-lobby-test:
 	gcc -std=gnu17 -O2 -Wall -Wextra -Werror -fsanitize=address,undefined -g -Isrc -Id50 d50/test_d52_lobby.c d50/lobby_selftest.c d50/xsdk_compat.c src/lobby.c -o build/test-d52-lobby
 	ASAN_OPTIONS=detect_leaks=0 ./build/test-d52-lobby
 # D52-2: loopback lockstep online battle self-test (lobby + state hash), host only.
+# Since D53-A the harness delegates the simulation to the engine adapter, so the
+# adapter and the reference backend are linked here too.
 .PHONY: d52-online-test
 d52-online-test:
 	mkdir -p build
-	gcc -std=gnu17 -O2 -Wall -Wextra -Werror -fsanitize=address,undefined -g -Isrc -Id50 d50/test_d52_online.c d50/online_battle_selftest.c d50/xsdk_compat.c src/online_battle.c src/lobby.c -o build/test-d52-online
+	gcc -std=gnu17 -O2 -Wall -Wextra -Werror -fsanitize=address,undefined -g -Isrc -Id50 d50/test_d52_online.c d50/online_battle_selftest.c d50/xsdk_compat.c src/online_battle.c src/lobby.c src/engine_adapter.c src/reference_adapter.c -o build/test-d52-online
 	ASAN_OPTIONS=detect_leaks=0 ./build/test-d52-online
 # Both D52 suites in one go.
 .PHONY: d52-test
 d52-test: d52-lobby-test d52-online-test
+# D53-A: engine adapter contract against the reference backend, host only.
+# No engine, no GPU, no ISO data: the adapter, the phase machine and the
+# two-instance determinism check, which is the D53-A completion criterion.
+.PHONY: d53-adapter-test
+d53-adapter-test:
+	mkdir -p build
+	gcc -std=gnu17 -O2 -Wall -Wextra -Werror -fsanitize=address,undefined -g -Isrc -Id50 d50/test_d53_adapter.c d50/engine_adapter_selftest.c d50/xsdk_compat.c src/engine_adapter.c src/reference_adapter.c src/online_battle.c src/lobby.c -o build/test-d53-adapter
+	ASAN_OPTIONS=detect_leaks=0 ./build/test-d53-adapter
+# D53-A: the same entry point with the bt3xbx bridge compiled in. The engine is
+# replaced by d50/bt3xbx_stub.c, which reads the pads through gXbPadPoll exactly
+# as the real engine does, so the call sequence and the pad injection are proven
+# on a PC. The real engine is D53-B, on the console.
+.PHONY: d53-bridge-test
+d53-bridge-test:
+	mkdir -p build
+	gcc -std=gnu17 -O2 -Wall -Wextra -Werror -fsanitize=address,undefined -g -DDR_HAVE_BT3XBX -Isrc -Id50 -Ivendor/tenkaichi-original/include -Iengine/platform/platform d50/test_d53_adapter.c d50/engine_adapter_selftest.c d50/bt3xbx_adapter_selftest.c d50/bt3xbx_stub.c d50/xsdk_compat.c src/engine_adapter.c src/reference_adapter.c src/online_battle.c src/lobby.c src/bt3xbx_adapter.c engine/platform/platform/xb_plat_pad.c -o build/test-d53-bridge
+	ASAN_OPTIONS=detect_leaks=0 ./build/test-d53-bridge
+# Both D53-A suites in one go.
+.PHONY: d53-test
+d53-test: d53-adapter-test d53-bridge-test
 clean:
 	rm -rf build
 .PHONY: disc-test

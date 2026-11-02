@@ -1,0 +1,21 @@
+--- a/src/sys/heap.c
++++ b/src/sys/heap.c
+@@ -1,3 +1,6 @@
++#ifdef PORT_BIGENDIAN
++#include "xb_resconv.h"
++#endif
+ #include "common.h"
+ #include "sys/heap.h"
+ 
+@@ -202,6 +205,11 @@
+     HeapBlock *next;
+     s32 merge = 0;
+ 
++#ifdef PORT_BIGENDIAN
++    if (block->used && block->dataSize > 0) {
++        XbRes_Forget((void *)(u32)block->data, (size_t)block->dataSize);
++    }
++#endif
+     Heap_InitFreeBlock(block, block->size);
+     prev = Heap_PrevBlock(block);
+     next = Heap_NextBlock(block);

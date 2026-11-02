@@ -1,0 +1,25 @@
+--- a/src/sys/bpe.c
++++ b/src/sys/bpe.c
+@@ -1,9 +1,16 @@
+ #include "common.h"
+ #include "sys/bpe.h"
+ #include "sys/heap.h"
++#ifdef PORT_BIGENDIAN
++#include "xb_resconv.h"
++extern void *XbBpe_Decode(void *, void *, s32 *);
++#endif
+ 
+ /* Expands byte-pair-encoded data (Philip Gage's "expand"); allocates the output when dst is NULL. Returns the output. */
+ void *Bpe_Decode(void *src, void *dst, s32 *rawSize) {
++#ifdef PORT_BIGENDIAN
++    return XbBpe_Decode(src, dst, rawSize);
++#else
+     u8 left[256];
+     u8 right[256];
+     u8 stack[256];
+@@ -78,4 +85,5 @@
+         }
+     }
+     return buf;
++#endif
+ }

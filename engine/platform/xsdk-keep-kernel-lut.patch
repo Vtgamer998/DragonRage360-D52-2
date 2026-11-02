@@ -1,0 +1,36 @@
+diff --git a/include/xsdk/display.h b/include/xsdk/display.h
+index 0e307d0..1b7a913 100644
+--- a/include/xsdk/display.h
++++ b/include/xsdk/display.h
+@@ -18,6 +18,8 @@ typedef enum {
+ 	XSDK_DISPLAY_720P,
+ 	// The kernel's own front buffer and scaling, 640x480 on the console tested.
+ 	XSDK_DISPLAY_KERNEL,
++	// Keep the kernel gamma LUT and viewport; do not request hardware autofill.
++	XSDK_DISPLAY_KERNEL_KEEP_LUT,
+ } XsdkDisplayMode;
+ 
+ // Takes the display and returns the front buffer's size; STATUS_NOT_SUPPORTED where there is none, as in Xenia.
+diff --git a/src/display.c b/src/display.c
+index 2c81e3f..d9d5f6e 100644
+--- a/src/display.c
++++ b/src/display.c
+@@ -218,10 +218,14 @@ NTSTATUS xsdk_display_open(XsdkDisplayMode mode, uint32_t *width, uint32_t *heig
+ 		xsdk_log_write("display: no display controller");
+ 		return STATUS_NOT_SUPPORTED;
+ 	}
+-	const NTSTATUS status = fill_lut();
+-	if (!NT_SUCCESS(status)) {
+-		xsdk_log_write("display: the LUT autofill didn't finish: 0x%08X", (unsigned)status);
+-		return status;
++	if (mode == XSDK_DISPLAY_KERNEL_KEEP_LUT) {
++		xsdk_log_write("display: retaining kernel gamma LUT; hardware autofill not requested");
++	} else {
++		const NTSTATUS status = fill_lut();
++		if (!NT_SUCCESS(status)) {
++			xsdk_log_write("display: the LUT autofill didn't finish: 0x%08X", (unsigned)status);
++			return status;
++		}
+ 	}
+ 	old_surface = (Surface){
+ 		.address = gpu_registers[D1GRPH_PRIMARY_SURFACE_ADDRESS],

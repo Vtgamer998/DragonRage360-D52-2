@@ -1,0 +1,852 @@
+--- a/Makefile
++++ b/Makefile
+@@ -3,7 +3,7 @@
+ TOOLCHAIN ?= ../xsdk-gcc/bin/powerpc-xsdk-elf-
+ CC := $(TOOLCHAIN)gcc
+ CFLAGS := -mcpu=cell -fno-pic -std=gnu17 -MMD -MP -O2 -g -ffunction-sections -fdata-sections -Wall -Wextra -Werror -I$(XSDK)/include -Isrc -Iengine/graphics -Iengine/capture/port/src/gs -Iengine/platform/platform -DDR_XBOX360
+-OBJECTS := build/dr_dma_producer.o build/dr_gs_stream.o build/gs_draw.o build/gs_core.o build/gs_sony.o build/dr_gs_backend.o build/dr_gs_replay.o build/dr_capture_demo.o build/dr_capture_platform.o build/main.o build/demo_ui.o build/dr_disc.o build/bt3_wire.o build/net_check.o build/lobby.o build/dr_anim.o build/dr_bpe.o build/dr_resource_selftest.o build/dr_container.o build/dr_skeleton.o build/dr_xenos.o build/dr_gs_texture.o build/dr_graphics_demo.o build/dr_body_demo.o build/dr_texfile.o build/dr_body_pipeline.o build/dr_body_model.o build/dr_elf.o build/dr_face_vif.o build/dr_targets.o build/dr_vu1.o build/dr_vu1_selftest.o build/save_unlock.o build/save_export.o
++OBJECTS := build/dr_gs_native.o build/dr_dma_producer.o build/dr_gs_stream.o build/gs_draw.o build/gs_core.o build/gs_sony.o build/dr_gs_backend.o build/dr_gs_replay.o build/dr_capture_demo.o build/dr_capture_platform.o build/main.o build/demo_ui.o build/dr_disc.o build/bt3_wire.o build/net_check.o build/lobby.o build/dr_anim.o build/dr_bpe.o build/dr_resource_selftest.o build/dr_container.o build/dr_skeleton.o build/dr_xenos.o build/dr_gs_texture.o build/dr_graphics_demo.o build/dr_body_demo.o build/dr_texfile.o build/dr_body_pipeline.o build/dr_body_model.o build/dr_elf.o build/dr_face_vif.o build/dr_targets.o build/dr_vu1.o build/dr_vu1_selftest.o build/save_unlock.o build/save_export.o
+ .PHONY: all clean host-test
+ PLATFORM_OBJECTS := $(patsubst engine/platform/platform/%.c,build/%.o,$(wildcard engine/platform/platform/*.c))
+ OBJECTS += $(PLATFORM_OBJECTS)
+--- a/engine/capture/port/src/gs/gs_core.c
++++ b/engine/capture/port/src/gs/gs_core.c
+@@ -25,6 +25,11 @@
+ #include <string.h>
+ #include <time.h>
+ #include "gs_internal.h"
++#ifdef DR_XBOX360
++#include "dr_gs_native.h"
++#include "gs_draw.h"
++static void run_chain(uint32_t,int);
++#endif
+ #include "../port_addr.h"
+ 
+ #define SURF_W 1024
+@@ -49,7 +54,9 @@
+ 
+ static Target sTargets[16];
+ static int sTargetCount;
++#ifndef DR_XBOX360
+ static unsigned sMissingTex;
++#endif
+ static unsigned sPix[5]; /* per frame: outside scissor, failed alpha test, failed depth test, colour written, depth written */
+ static int sDrawFrom;       /* BT3_GS_FROM=<frame>: draw only from this frame on (the reference is slow) */
+ static int sProbeX = -1, sProbeY = -1;
+@@ -930,6 +937,7 @@
+ /* One run of VIF data (32-bit words): GIF data (DIRECT) goes to the GS, everything else to VU1 (gs_vu1.c).
+    A command's data may continue in the next run (the command word often sits in the DMA tag, its data behind):
+    DIRECT data is passed on as it comes, the data of the other commands is collected first. */
++#ifndef DR_XBOX360
+ static void vif(const uint32_t *w, uint32_t count) {
+     static uint32_t direct;                    /* quadwords of GIF data still to come */
+     static uint32_t pend, need, have, buf[2048]; /* a command waiting for `need` words of data */
+@@ -1013,8 +1021,11 @@
+     }
+ }
+ 
++#endif
++
+ /* ------------------------------------------------------------------------------------------------ DMA and frames */
+ 
++#ifndef DR_XBOX360
+ static void screenshot(void) {
+     static int every = -1;
+     static uint64_t shown; /* FRAME register of the buffer that received the most pixels */
+@@ -1202,6 +1213,8 @@
+     return (uint64_t)ts.tv_sec * 1000000000ull + (uint64_t)ts.tv_nsec;
+ }
+ 
++#endif
++
+ /* getenv for the renderer's files (gs_internal.h): remembered per name. The names are string literals, so the
+    same call site always passes the same pointer and the search is a few pointer comparisons. */
+ #undef getenv
+@@ -1234,6 +1247,7 @@
+ /* Which renderer: BT3_GS = "gpu" (the window), "1" (the software reference), "none" (nothing is drawn: tests).
+    Without the variable a release program opens its window, so that it can be started by a double click; a
+    developer's build draws nothing, as the checks expect. */
++#ifndef DR_XBOX360
+ static const char *gs_mode(void) {
+     extern volatile uint32_t gPortDataStripped; /* plat_mem.c: 1 in a release program */
+     const char *m = getenv("BT3_GS");
+@@ -1273,8 +1287,14 @@
+     return on;
+ }
+ 
++#endif
++
+ /* A transfer on the GIF channel itself (the game uses it for texture uploads outside the frame's list):
+    `qwc` quadwords of GIF data at `addr`, or with chain = 1 a source chain of them starting at `addr`. */
++#ifdef DR_XBOX360
++void Port_GsGifChannel(uint32_t addr,uint32_t qwc,int chain)
++{(void)dr_gs_native_gif(addr,qwc,chain);}
++#else
+ void Port_GsGifChannel(uint32_t addr, uint32_t qwc, int chain) {
+     int guard;
+ 
+@@ -1305,7 +1325,12 @@
+     }
+ }
+ 
++#endif
++
+ /* Carries out a source-chain transfer on VIF1 that starts at `tadr` (PS2 address = host address). */
++#ifdef DR_XBOX360
++void Port_GsVif1Chain(uint32_t tadr,int tte) {run_chain(tadr,tte);}
++#else
+ void Port_GsVif1Chain(uint32_t tadr, int tte) {
+     static uint64_t next, start, sum, worst, sumGame, sumList, sumTex, sumPipe, sumEnd, perMin = ~0ull, perMax;
+     static unsigned n, over;
+@@ -1392,7 +1417,20 @@
+     }
+ }
+ 
++#endif
++
+ /* Executes one frame's list: the DMA chain at `tadr` on VIF1, then the end-of-frame work of the back end. */
++#ifdef DR_XBOX360
++/* Bound canonical-LE chain -> shared VU/GIF state -> installed native backend.
++ * The application owns display/present. No desktop thread/pacing or guessed
++ * Port_Ptr address is used. Void SDK entry points expose errors via the session. */
++static void run_chain(uint32_t tadr,int tte) {
++    int e=dr_gs_native_vif1(tadr,tte);
++    if(!e)e=GsDraw_XenosSubmit();
++    if(e)dr_gs_native_reject(e);
++    else gGsFrame++;
++}
++#else
+ static void run_chain(uint32_t tadr, int tte) {
+     uint32_t stack[2], sp = 0;
+     int guard;
+@@ -1452,6 +1490,8 @@
+     }
+     sMissingTex = 0;
+ }
++
++#endif
+ 
+ /* The game reads a piece of a frame buffer back (sceGsExecStoreImage; the cross-fade of the fight's scenes takes the
+    frame being shown, 512 x 224 at a time). `bp` in units of 64 pixels: 0xE00 a frame buffer (32 a page), 8 a row of
+@@ -1472,9 +1512,11 @@
+         fprintf(stderr, "gs: frame %u: the game reads %ux%u back from buffer %#x, row %u\n", sFrame, w, h, fbp, y0);
+     }
+     if (sGpu) {
++#ifndef DR_XBOX360
+         if (sThreaded) {
+             return;
+         }
++#endif
+         {
+             /* First choice: the frame stays on the card as it was drawn and the cross-fade draws from that (the
+                game is handed black, which it uploads and never shows). BT3_XFADE_READ=1: the game's own way. */
+@@ -1503,7 +1545,11 @@
+                 memcpy(rgb + (y * w + x) * 3, kept + ((y0 + y) * 512 + x) * 4, 3);
+             }
+         }
++#ifdef DR_XBOX360
++    } else if (0) { /* no implicit software fallback in native capture profile */
++#else
+     } else if (gs_mode() != NULL) {
++#endif
+         for (y = 0; y < h && y0 + y < 448; y++) {
+             for (x = 0; x < w; x++) {
+                 uint32_t c = vram_rw(fbp << 5, 8, 0, x, y0 + y, 0, 0);
+--- a/engine/capture/port/src/gs/gs_sony.c
++++ b/engine/capture/port/src/gs/gs_sony.c
+@@ -9,6 +9,9 @@
+ #include <stdint.h>
+ #include <string.h>
+ #include "../port_addr.h"
++#ifdef DR_XBOX360
++#include "dr_gs_native.h"
++#endif
+ 
+ extern void Port_GsGifChannel(uint32_t addr, uint32_t qwc, int chain);
+ int gGsMainFbp = -1; /* frame-buffer address of the frame being drawn (from sceGsSwapDBuff); -1 before the first swap */
+@@ -54,6 +57,12 @@
+ 
+ int sceGsSetDefDBuff(void *p, int psm, int w, int h, int ztest, int zpsm, int clear) {
+     DBuff *db = p;
++#ifdef DR_XBOX360
++    if(!p || (psm!=0 && psm!=2) || w<=0 || w>2048 || h<=0 || h>2048 ||
++       ztest<0 || ztest>3 || (zpsm!=0x30 && zpsm!=0x31 && zpsm!=0x32 && zpsm!=0x3a) ||
++       (((uint64_t)w*h*((psm&2)?2:4)+8191)/8192)*3>512)
++        return dr_gs_native_reject(DR_STREAM_INVALID);
++#endif
+     uint32_t bytes = (psm & 2) ? 2 : 4, pages = ((uint32_t)w * (uint32_t)h * bytes + 8191) / 8192;
+ 
+     memset(db, 0, sizeof(*db));
+@@ -63,12 +72,35 @@
+ }
+ 
+ int sceGsPutDrawEnv(uint64_t *giftag) {
++#ifdef DR_XBOX360
++    /* SetDefDBuff and the game edit native u64 fields. Serialize them here;
++     * neither a native pointer-as-address nor a whole-buffer word swap works. */
++    if(!giftag)return dr_gs_native_reject(DR_STREAM_INVALID);
++    uint32_t n=(uint32_t)(giftag[0]&0x7fff);
++    if((n!=8 && n!=14) || ((giftag[0]>>58)&3)!=0 ||
++       (giftag[0]>>60)!=1 || giftag[1]!=14)
++        return dr_gs_native_reject(DR_STREAM_INVALID);
++    unsigned char canonical[15*16];
++    for(unsigned i=0;i<2*(n+1);i++) {
++        uint64_t value=giftag[i];
++        for(unsigned b=0;b<8;b++)canonical[i*8+b]=(unsigned char)(value>>(8*b));
++    }
++    DrGsSpan span={0x44000000,canonical,(n+1)*16};
++    int e=dr_gs_native_bind(&span,1);
++    if(e)return e;
++    Port_GsGifChannel(span.address,n+1,0);e=dr_gs_native_error();
++    dr_gs_native_unbind();return e;
++#else
+     Port_GsGifChannel(Port_Addr(giftag), 1 + (uint32_t)(giftag[0] & 0x7FFF), 0);
+     return 0;
++#endif
+ }
+ 
+ int sceGsSwapDBuff(void *p, int id) {
+     DBuff *db = p;
++#ifdef DR_XBOX360
++    if(!p)return dr_gs_native_reject(DR_STREAM_INVALID);
++#endif
+     /* the buffer this frame is drawn into: what the renderer shows when the frame is finished */
+     gGsMainFbp = (int)(((id & 1) ? db->draw1.frame.v : db->draw0.frame.v) & 0x1FF);
+     return sceGsPutDrawEnv((id & 1) ? db->giftag1 : db->giftag0);
+--- /dev/null
++++ b/engine/graphics/dr_gs_native.c
+@@ -0,0 +1,73 @@
++/* SPDX-License-Identifier: AGPL-3.0-or-later */
++#include "dr_gs_native.h"
++#include <string.h>
++#include "dr_vu1.h"
++static struct {DrGsStream stream;DrGsSpan spans[64];size_t count;int opened,busy;} native;
++int dr_gs_native_reject(int e)
++{if(!native.opened)return DR_STREAM_INVALID;if(!native.stream.error)native.stream.error=e?e:DR_STREAM_INVALID;return native.stream.error;}
++int dr_gs_native_error(void) {return native.opened?native.stream.error:DR_STREAM_INVALID;}
++int dr_gs_native_open(DrStreamGif gif,void *opaque)
++{
++    if(native.opened || !gif)return DR_STREAM_INVALID;
++    memset(&native,0,sizeof(native));
++    int e=dr_gs_stream_init(&native.stream,gif,opaque);if(e)return e;
++    native.opened=1;return 0;
++}
++int dr_gs_native_close(void)
++{
++    if(!native.opened || native.busy)return DR_STREAM_INVALID;
++    dr_vu1_reset(NULL,NULL);memset(&native,0,sizeof(native));return 0;
++}
++int dr_gs_native_bind(const DrGsSpan *spans,size_t count)
++{
++    if(!native.opened)return DR_STREAM_INVALID;
++    if(native.stream.error)return native.stream.error;
++    if(native.busy || native.count || !spans || !count || count>64)return dr_gs_native_reject(DR_STREAM_INVALID);
++    size_t total=0;
++    for(size_t i=0;i<count;i++) {
++        if(!spans[i].bytes || !spans[i].size || spans[i].size>0x4000000u-total ||
++           spans[i].size>0x100000000ull-spans[i].address)
++            return dr_gs_native_reject(DR_STREAM_RANGE);
++        total+=spans[i].size;
++        for(size_t j=0;j<i;j++)if((uint64_t)spans[i].address<(uint64_t)spans[j].address+spans[j].size &&
++            (uint64_t)spans[j].address<(uint64_t)spans[i].address+spans[i].size)
++            return dr_gs_native_reject(DR_STREAM_RANGE);
++    }
++    memcpy(native.spans,spans,count*sizeof(*spans));native.count=count;return 0;
++}
++void dr_gs_native_unbind(void)
++{if(native.busy){dr_gs_native_reject(DR_STREAM_INVALID);return;}memset(native.spans,0,sizeof(native.spans));native.count=0;}
++int dr_gs_native_vif1(uint32_t address,int tte)
++{
++    if(!native.opened)return DR_STREAM_INVALID;
++    if(native.busy)return dr_gs_native_reject(DR_STREAM_INVALID);
++    if(!native.count)return dr_gs_native_reject(DR_STREAM_RANGE);
++    native.busy=1;int e=dr_gs_stream_chain(&native.stream,native.spans,native.count,address,tte);
++    native.busy=0;return e;
++}
++int dr_gs_native_gif(uint32_t address,uint32_t qwc,int chain)
++{
++    if(!native.opened)return DR_STREAM_INVALID;
++    if(native.stream.error)return native.stream.error;
++    if(!native.count)return dr_gs_native_reject(DR_STREAM_RANGE);
++    if(native.busy)return dr_gs_native_reject(DR_STREAM_INVALID);
++    if(chain==1) {
++        native.busy=1;int e=dr_gs_stream_gif_chain(&native.stream,native.spans,native.count,address);
++        native.busy=0;return e;
++    }
++    if(chain!=0 || (address&15) || qwc>65536)return dr_gs_native_reject(DR_STREAM_INVALID);
++    if(!qwc)return 0;
++    uint64_t bytes=(uint64_t)qwc*16;
++    for(size_t i=0;i<native.count;i++)if(address>=native.spans[i].address) {
++        size_t at=address-native.spans[i].address;
++        if(at<=native.spans[i].size && bytes<=native.spans[i].size-at) {
++            memset(&native.stream.stats,0,sizeof(native.stream.stats));
++            native.busy=1;
++            int e=dr_gs_stream_gif(&native.stream,(const unsigned char *)native.spans[i].bytes+at,(size_t)bytes);
++            native.busy=0;return e;
++        }
++    }
++    return dr_gs_native_reject(DR_STREAM_RANGE);
++}
++int dr_gs_native_stats(DrGsStreamStats *out)
++{if(!native.opened || !out)return DR_STREAM_INVALID;*out=native.stream.stats;return 0;}
+--- /dev/null
++++ b/engine/graphics/dr_gs_native.h
+@@ -0,0 +1,21 @@
++/* SPDX-License-Identifier: AGPL-3.0-or-later */
++#ifndef DR_GS_NATIVE_H
++#define DR_GS_NATIVE_H
++#include "dr_gs_stream.h"
++/* Single-thread, renderer-owned session. The sole VU interpreter is shared by
++ * native producer submission and legacy Port_Gs* entry points. Bind copies
++ * only descriptors: canonical LE buffers must stay alive through the call.
++ * Raw engine pointers and mixed-endian packets are never inferred/mapped. */
++int dr_gs_native_open(DrStreamGif,void *);
++int dr_gs_native_close(void);
++int dr_gs_native_bind(const DrGsSpan *,size_t);
++void dr_gs_native_unbind(void);
++int dr_gs_native_vif1(uint32_t,int);
++int dr_gs_native_gif(uint32_t,uint32_t,int);
++int dr_gs_native_error(void);
++int dr_gs_native_reject(int);
++int dr_gs_native_stats(DrGsStreamStats *);
++/* Original engine entry points. Errors are available through the session. */
++void Port_GsVif1Chain(uint32_t,int);
++void Port_GsGifChannel(uint32_t,uint32_t,int);
++#endif
+--- a/engine/graphics/dr_gs_stream.c
++++ b/engine/graphics/dr_gs_stream.c
+@@ -107,7 +107,7 @@
+     }
+     return NULL;
+ }
+-int dr_gs_stream_chain(DrGsStream *s,const DrGsSpan *spans,size_t n,uint32_t address,int tte)
++static int chain(DrGsStream *s,const DrGsSpan *spans,size_t n,uint32_t address,int tte,int gif)
+ {
+     if(!s || !s->gif)return DR_STREAM_INVALID;
+     if(s->error)return s->error;
+@@ -153,8 +153,24 @@
+         case 7:end=1;break;
+         }
+         int e=tte?dr_gs_stream_vif(s,tag+8,8):0;
+-        if(!e && count)e=dr_gs_stream_vif(s,data,count);
++        if(!e && count)e=gif?dr_gs_stream_gif(s,data,count):dr_gs_stream_vif(s,data,count);
+         if(e)return e;
+-        if(end)return dr_gs_stream_finish(s);
++        if(end)return gif?s->error:dr_gs_stream_finish(s);
+     }
+ }
++
++int dr_gs_stream_gif(DrGsStream *s,const void *bytes,size_t size)
++{
++    if(!s || !s->gif)return DR_STREAM_INVALID;
++    if(s->error)return s->error;
++    if((!bytes && size) || size%16)return fail(s,DR_STREAM_INVALID);
++    if(!s->word_budget || s->word_budget>4194304 || s->stats.words>s->word_budget ||
++       size/4>s->word_budget-s->stats.words)return fail(s,DR_STREAM_BUDGET);
++    s->stats.words+=(uint32_t)(size/4);
++    if(size)kick(s,bytes,(uint32_t)(size/16));
++    return s->error;
++}
++int dr_gs_stream_chain(DrGsStream *s,const DrGsSpan *spans,size_t n,uint32_t address,int tte)
++{return chain(s,spans,n,address,tte,0);}
++int dr_gs_stream_gif_chain(DrGsStream *s,const DrGsSpan *spans,size_t n,uint32_t address)
++{return chain(s,spans,n,address,0,1);}
+--- a/engine/graphics/dr_gs_stream.h
++++ b/engine/graphics/dr_gs_stream.h
+@@ -34,5 +34,9 @@
+  * Error is sticky until init. A failed chain can modify VU/GS/VRAM state;
+  * discard its captured draws and reinitialize before another attempt.
+  * No GPU work/present is submitted by this module. */
++/* GIF-channel transfers share the checked chain walker; tag TTE words are
++ * never interpreted as VIF on this channel. No VU state is reset. */
++int dr_gs_stream_gif(DrGsStream *,const void *,size_t);
++int dr_gs_stream_gif_chain(DrGsStream *,const DrGsSpan *,size_t,uint32_t);
+ int dr_gs_stream_chain(DrGsStream *,const DrGsSpan *,size_t,uint32_t,int tte);
+ #endif
+--- a/engine/tests/test_capture.c
++++ b/engine/tests/test_capture.c
+@@ -123,5 +123,5 @@
+     }
+     for(unsigned i=0;i<4096;i++) assert(!images[i].live);
+     assert(!gpu_opens && !gpu_closes && !present_opens && !present_closes && !presents);
+-    puts("PASS: full gs_core/gs_draw/GsBackend compiled; unaligned LE GIF, CT32/CT16/T8/T4 uploads, original capture draw/replay, unmerged self-target consumers and raw-alpha source binding, canonical RGBA, borrowed lifecycle, nine open/close cycles, original outline/CLUT consumers, frozen IDs and wrong-owner preflight, three native VU programs, indexed preflight, shadow-run stencil clear, filter/clamp capture states, DATE/FBA marker capture; unknown VU rejected; GPU APIs MOCKED, no hardware pixels");
++    puts("PASS: shared native Port_Gs VIF/MPG/UNPACK/MSCAL/XGKICK, GIF and DBuff clear probe; full gs_core/gs_draw/GsBackend compiled; unaligned LE GIF, CT32/CT16/T8/T4 uploads, original capture draw/replay, unmerged self-target consumers and raw-alpha source binding, canonical RGBA, borrowed lifecycle, nine open/close cycles, original outline/CLUT consumers, frozen IDs and wrong-owner preflight, three native VU programs, indexed preflight, shadow-run stencil clear, filter/clamp capture states, DATE/FBA marker capture; unknown VU rejected; GPU APIs MOCKED, no hardware pixels");
+ }
+--- /dev/null
++++ b/engine/tests/test_gs_native.c
+@@ -0,0 +1,63 @@
++/* SPDX-License-Identifier: AGPL-3.0-or-later */
++#include "dr_gs_native.h"
++#include "dr_vu1.h"
++#include <assert.h>
++#include <stdio.h>
++#include <string.h>
++static unsigned char received[512];static unsigned used;static int callback_error,reenter;
++static int gif(void *opaque,const unsigned char *p,uint32_t n) {
++    assert(opaque==received && n && n*16<=sizeof(received)-used);
++    if(callback_error)return callback_error;
++    if(reenter){assert(dr_gs_native_close()==DR_STREAM_INVALID);dr_gs_native_unbind();return 0;}
++    memcpy(received+used,p,n*16);used+=n*16;return 0;
++}
++static void put(unsigned char *p,uint32_t v){for(unsigned i=0;i<4;i++)p[i]=(unsigned char)(v>>(8*i));}
++static void tag(unsigned char *p,unsigned id,unsigned qwc,unsigned ref){memset(p,0,16);put(p,id<<28|qwc);put(p+4,ref);}
++static void start(void){used=0;callback_error=reenter=0;assert(!dr_gs_native_open(gif,received));}
++int main(void) {
++    unsigned char bytes[256]={0},external[32],readback[16];
++    for(unsigned i=0;i<32;i++)external[i]=(unsigned char)(i*11+7);
++    DrGsSpan spans[2]={{0x1000,bytes,sizeof(bytes)},{0x5000,external,sizeof(external)}};
++    assert(dr_gs_native_error()==DR_STREAM_INVALID);assert(dr_gs_native_open(NULL,NULL)==DR_STREAM_INVALID);
++    start();assert(dr_gs_native_open(gif,received)==DR_STREAM_INVALID);
++    tag(bytes,7,3,0);put(bytes+16,0x4a020000);
++    put(bytes+20,0x8000033c);put(bytes+24,0x400002ff);put(bytes+28,0x8000033c);put(bytes+32,0x2ff);
++    put(bytes+36,0x6c010001);memcpy(bytes+40,external,16);put(bytes+56,0x14000000);
++    assert(!dr_gs_native_bind(spans,2) && !dr_gs_native_vif1(0x1000,0));
++    assert(!dr_vu1_read(16,readback,16) && !memcmp(readback,external,16));
++    DrGsStreamStats stats;assert(!dr_gs_native_stats(&stats) && stats.vu_calls==1);dr_gs_native_unbind();
++    assert(!dr_gs_native_bind(spans,2) && !dr_gs_native_gif(0x5000,2,0));
++    assert(used==32 && !memcmp(received,external,32));dr_gs_native_unbind();
++    assert(!dr_vu1_read(16,readback,16) && !memcmp(readback,external,16));
++    memset(bytes,0,sizeof(bytes));tag(bytes,7,1,0);put(bytes+16,0x14000000);
++    assert(!dr_gs_native_bind(spans,2) && !dr_gs_native_vif1(0x1000,0));
++    assert(!dr_gs_native_stats(&stats) && stats.vu_calls==1);dr_gs_native_unbind();
++    DrGsSpan desc=spans[1];assert(!dr_gs_native_bind(&desc,1));desc.bytes=NULL;desc.size=0;
++    assert(!dr_gs_native_gif(0x5000,1,0));dr_gs_native_unbind();
++    assert(dr_gs_native_gif(0x5000,1,0)==DR_STREAM_RANGE);
++    assert(dr_gs_native_bind(spans,2)==DR_STREAM_RANGE);assert(!dr_gs_native_close());
++    for(unsigned id=0;id<8;id++) {
++        start();memset(bytes,0,sizeof(bytes));
++        if(id==0 || id==3 || id==4){tag(bytes,id,2,0x5000);tag(bytes+16,7,0,0);}
++        else if(id==6){tag(bytes,5,0,0x1040);tag(bytes+16,7,0,0);tag(bytes+64,6,2,0);memcpy(bytes+80,external,32);}
++        else {tag(bytes,id,2,0x1040);memcpy(bytes+16,external,32);tag(bytes+48,7,0,0);tag(bytes+64,id==5?6:7,0,0);}
++        put(bytes+8,0x08000000);put(bytes+12,0x08000000); /* TTE is ignored on GIF */
++        assert(!dr_gs_native_bind(spans,2) && !dr_gs_native_gif(0x1000,0,1));
++        assert(used==32 && !memcmp(received,external,32));assert(!dr_gs_native_close());
++    }
++    start();DrGsSpan overlap[2]={{0x1000,bytes,32},{0x1010,external,32}};
++    assert(dr_gs_native_bind(overlap,2)==DR_STREAM_RANGE);assert(!dr_gs_native_close());
++    start();DrGsSpan overflow={0xfffffff0,bytes,32};
++    assert(dr_gs_native_bind(&overflow,1)==DR_STREAM_RANGE);assert(!dr_gs_native_close());
++    start();assert(!dr_gs_native_bind(spans,2));assert(dr_gs_native_gif(0x5001,1,0)==DR_STREAM_INVALID);assert(!dr_gs_native_close());
++    start();assert(!dr_gs_native_bind(spans,2));assert(dr_gs_native_gif(0x5000,3,0)==DR_STREAM_RANGE);assert(!dr_gs_native_close());
++    start();assert(!dr_gs_native_bind(spans,2));callback_error=-499;
++    assert(dr_gs_native_gif(0x5000,1,0)==-499 && !used);assert(!dr_gs_native_close());
++    start();assert(!dr_gs_native_bind(spans,2));reenter=1;
++    assert(dr_gs_native_gif(0x5000,1,0)==DR_STREAM_INVALID);assert(!dr_gs_native_close());
++    start();tag(bytes,2,0,0x1000);assert(!dr_gs_native_bind(spans,2));
++    assert(dr_gs_native_gif(0x1000,0,1)==DR_STREAM_BUDGET);assert(!dr_gs_native_close());
++    start();tag(bytes,6,0,0);assert(!dr_gs_native_bind(spans,2));
++    assert(dr_gs_native_gif(0x1000,0,1)==DR_STREAM_STACK);assert(!dr_gs_native_close());
++    puts("PASS: native session, VIF uploads/MSCAL and shared VU persistence, direct GIF and eight DMA IDs, descriptor lifetimes, bounds/cycles/stack/callback errors and re-entry guards; host only");
++}
+--- /dev/null
++++ b/engine/tests/test_gs_sony_native.c
+@@ -0,0 +1,38 @@
++/* SPDX-License-Identifier: AGPL-3.0-or-later */
++#include "dr_gs_native.h"
++#include <assert.h>
++#include <stdint.h>
++#include <stdio.h>
++#include <string.h>
++extern int sceGsSetDefDBuff(void *,int,int,int,int,int,int);
++extern int sceGsSwapDBuff(void *,int);
++extern int sceGsPutDrawEnv(uint64_t *);
++extern int gGsMainFbp;
++static unsigned char received[1024];static size_t used;
++static uint64_t le64(const unsigned char *p){uint64_t v=0;for(unsigned i=0;i<8;i++)v|=(uint64_t)p[i]<<(i*8);return v;}
++static int gif(void *opaque,const unsigned char *p,uint32_t n){(void)opaque;assert(n*16<=sizeof(received)-used);memcpy(received+used,p,n*16);used+=n*16;return 0;}
++int main(void) {
++    uint64_t db[0x230/8],copy[0x230/8];
++    assert(!dr_gs_native_open(gif,NULL));
++    assert(!sceGsSetDefDBuff(db,0,512,448,3,0x31,1));
++    db[(0xe0+0x20)/8]=0x3f80000011223344ull; /* game-edited clear color */
++    memcpy(copy,db,sizeof(db));assert(!sceGsSwapDBuff(db,0));
++    assert(used==240 && gGsMainFbp==0 && !memcmp(copy,db,sizeof(db)));
++    assert(le64(received)==0x100000000000800eull && le64(received+8)==14);
++    assert(le64(received+16)==8ull<<16 && le64(received+24)==0x4c);
++    assert(le64(received+32)==(224ull|1ull<<24) && le64(received+40)==0x4e);
++    assert(le64(received+48)==0x720000007000ull && le64(received+56)==0x18);
++    assert(le64(received+176)==0x3f80000011223344ull && le64(received+184)==1);
++    assert(!sceGsSwapDBuff(db,1) && used==480 && gGsMainFbp==112);
++    assert((le64(received+256)&511)==112 && !memcmp(copy,db,sizeof(db)));
++    assert(!sceGsSetDefDBuff(db,2,512,448,2,0x32,0));
++    assert(!sceGsSwapDBuff(db,0) && used==624); /* eight register writes, no clear */
++    assert(!dr_gs_native_close());
++    assert(!dr_gs_native_open(gif,NULL));used=0;
++    memcpy(db,copy,sizeof(db));db[0x50/8]=(db[0x50/8]&~0x7fffull)|15;
++    assert(sceGsPutDrawEnv(db+0x50/8)==DR_STREAM_INVALID && !used);assert(!dr_gs_native_close());
++    assert(!dr_gs_native_open(gif,NULL));memcpy(db,copy,sizeof(db));
++    assert(sceGsSetDefDBuff(db,0,0,448,3,0x31,1)==DR_STREAM_INVALID);
++    assert(!memcmp(db,copy,sizeof(db)) && !used);assert(!dr_gs_native_close());
++    puts("PASS: native DBuff clear/no-clear, both frame buffers, game-edited u64 values, exact canonical GIF, preserved source and invalid-packet bounds; host transport only");
++}
+--- a/engine/tools/test_capture.py
++++ b/engine/tools/test_capture.py
+@@ -8,7 +8,7 @@
+ sdk,out=(Path(p).resolve() for p in sys.argv[1:3]);out.mkdir(parents=True,exist_ok=True)
+ files=[engine/'tests/test_capture.c']
+ files += [engine/'capture/port/src/gs'/s for s in ['gs_draw.c','gs_core.c','gs_sony.c']]
+-files += [engine/'graphics'/s for s in ['dr_gs_backend.c','dr_gs_replay.c','dr_xenos.c','dr_targets.c','dr_gs_texture.c','dr_graphics_demo.c','dr_gs_stream.c','dr_dma_producer.c']]
++files += [engine/'graphics'/s for s in ['dr_gs_backend.c','dr_gs_replay.c','dr_xenos.c','dr_targets.c','dr_gs_texture.c','dr_graphics_demo.c','dr_gs_stream.c','dr_gs_native.c','dr_dma_producer.c']]
+ files += [root/'src'/s for s in ['dr_capture_demo.c','dr_capture_platform.c','dr_vu1.c']]
+ cmd=['gcc','-std=gnu17','-O2','-Wall','-Wextra','-Werror','-DDR_XBOX360','-ffp-contract=off','-ffunction-sections','-fdata-sections','-Wl,--gc-sections']
+ cmd += ['-I'+str(p) for p in [engine/'graphics',engine/'capture/port/src/gs',sdk/'include',root/'src']]
+@@ -17,4 +17,4 @@
+ subprocess.run(cmd,check=True)
+ r=subprocess.run([str(out/'test-capture')],capture_output=True,text=True)
+ (out/'capture.txt').write_text(r.stdout+r.stderr);print(r.stdout+r.stderr,end='');r.check_returncode()
+-(out/'capture.json').write_text(json.dumps({'result':'PASS','capture':'bounded DMA/VIF DIRECT + whole gs_draw.c and gs_core.c, reachable GS sections linked','GPU_execution':False,'battle_loop':False,'sanitizers':'ASan/UBSan' if '--sanitize' in sys.argv else 'off','all_original_combat_packet_producers_adapted':False,'adapted_producer_subset':'register/rect helpers; diagnostic uses Frame/Zbuf/Scissor/XYOffset/AD and Dma_Flush/ResetBuffers','scope':'bounded canonical-LE DMA/VIF DIRECT -> GIF/register/VRAM -> real capture -> backend -> mock XSDK calls; lifecycle, endian boundaries, eight original filter/clamp selectors, DATE/FBA/snapshot descriptors, native VU shader selection/uniform uploads, shadow stencil reset, original captured outline/CLUT passes, unmerged self-target consumer resolves and raw-alpha binding, frozen effect IDs, rejected missing/wrong-owner snapshots and invalid CLUT/source before draw'},indent=2)+'\n')
++(out/'capture.json').write_text(json.dumps({'result':'PASS','capture':'bounded DMA/VIF DIRECT + whole gs_draw.c and gs_core.c, reachable GS sections linked','GPU_execution':False,'battle_loop':False,'sanitizers':'ASan/UBSan' if '--sanitize' in sys.argv else 'off','all_original_combat_packet_producers_adapted':False,'adapted_producer_subset':'register/rect helpers; diagnostic uses Frame/Zbuf/Scissor/XYOffset/AD and Dma_Flush/ResetBuffers','native_engine_probe':'Port_GsVif1Chain -> MPG/UNPACK/MSCAL/XGKICK -> actual GIF ALPHA state; Port_GsGifChannel; SetDefDBuff/SwapDBuff clear; GPU mocked','scope':'bounded canonical-LE DMA/VIF DIRECT -> GIF/register/VRAM -> real capture -> backend -> mock XSDK calls; lifecycle, endian boundaries, eight original filter/clamp selectors, DATE/FBA/snapshot descriptors, native VU shader selection/uniform uploads, shadow stencil reset, original captured outline/CLUT passes, unmerged self-target consumer resolves and raw-alpha binding, frozen effect IDs, rejected missing/wrong-owner snapshots and invalid CLUT/source before draw'},indent=2)+'\n')
+--- /dev/null
++++ b/engine/tools/test_gs_native.py
+@@ -0,0 +1,14 @@
++#!/usr/bin/env python3
++# SPDX-License-Identifier: AGPL-3.0-or-later
++"""Execute the shared native DMA/VIF/GIF session on the host, no GPU/game."""
++from pathlib import Path
++import argparse,json,subprocess
++p=argparse.ArgumentParser(description=__doc__);p.add_argument('output',type=Path);p.add_argument('--sanitize',action='store_true')
++a=p.parse_args();out=a.output.resolve();out.mkdir(parents=True,exist_ok=True);engine=Path(__file__).resolve().parents[1]
++cmd=['gcc','-std=gnu17','-O1','-g','-Wall','-Wextra','-Werror','-ffp-contract=off','-I'+str(engine/'graphics'),'-I'+str(engine/'vu')]
++if a.sanitize:cmd+=['-fsanitize=address,undefined','-fno-omit-frame-pointer']
++cmd+=list(map(str,[engine/'tests/test_gs_native.c',engine/'graphics/dr_gs_native.c',engine/'graphics/dr_gs_stream.c',engine/'vu/dr_vu1.c']))
++cmd+=['-lm','-o',str(out/'native-session')];subprocess.run(cmd,check=True)
++r=subprocess.run([str(out/'native-session')],capture_output=True,text=True);(out/'native-session.txt').write_text(r.stdout+r.stderr)
++print(r.stdout+r.stderr,end='');r.check_returncode()
++(out/'native-session.json').write_text(json.dumps({'result':'PASS','sanitizers':a.sanitize,'PPC_execution':False,'GPU_execution':False,'battle_execution':False,'scope':'shared native VU session, bound canonical mappings, direct GIF and all DMA chain types, sticky errors, lifecycle and re-entry'},indent=2)+'\n')
+--- /dev/null
++++ b/engine/tools/test_gs_sony_native.py
+@@ -0,0 +1,15 @@
++#!/usr/bin/env python3
++# SPDX-License-Identifier: AGPL-3.0-or-later
++"""Test native libgraph environment serialization with the real session."""
++from pathlib import Path
++import argparse,subprocess
++p=argparse.ArgumentParser(description=__doc__);p.add_argument('output',type=Path);p.add_argument('--sanitize',action='store_true')
++a=p.parse_args();out=a.output.resolve();out.mkdir(parents=True,exist_ok=True);e=Path(__file__).resolve().parents[1]
++cmd=['gcc','-std=gnu17','-DDR_XBOX360','-O1','-g','-Wall','-Wextra','-Werror','-ffp-contract=off','-I'+str(e/'graphics'),'-I'+str(e/'vu')]
++if a.sanitize:cmd+=['-fsanitize=address,undefined','-fno-omit-frame-pointer']
++# Exercise the exact native SDK entry point without a GPU/backend in this transport test.
++shim=out/'shim.c';shim.write_text('#include "dr_gs_native.h"\nvoid Port_GsGifChannel(uint32_t a,uint32_t n,int c){dr_gs_native_gif(a,n,c);}\n')
++files=[e/'tests/test_gs_sony_native.c',e/'capture/port/src/gs/gs_sony.c',e/'graphics/dr_gs_native.c',e/'graphics/dr_gs_stream.c',e/'vu/dr_vu1.c',shim]
++cmd+=list(map(str,files))+['-lm','-o',str(out/'sony-native')];subprocess.run(cmd,check=True)
++r=subprocess.run([str(out/'sony-native')],capture_output=True,text=True);(out/'sony-native.txt').write_text(r.stdout+r.stderr)
++print(r.stdout+r.stderr,end='');r.check_returncode()
+--- a/src/dr_capture_demo.c
++++ b/src/dr_capture_demo.c
+@@ -4,22 +4,70 @@
+  */
+ #include "dr_capture_demo.h"
+ #include "dr_gs_backend.h"
+-#include "dr_gs_stream.h"
++#include "dr_gs_native.h"
+ #include "dr_dma_producer.h"
+ #include "gs_internal.h"
+ #include "xsdk/log.h"
+ #include <string.h>
+ #include <math.h>
+ extern int gGsMainFbp;
++extern int sceGsSetDefDBuff(void *,int,int,int,int,int,int);
++extern int sceGsSwapDBuff(void *,int);
+ void Gs_XenosCaptureEnable(int enabled);
+ static int opened;
+-static DrGsStream stream;
+ static int stream_error;
+ static int stream_gif(void *opaque,const unsigned char *bytes,uint32_t count)
+ {(void)opaque;Gs_Gif(bytes,count);return 0;}
+ static int producer_submit(void *opaque,const DrGsSpan *spans,size_t count,uint32_t address)
+-{(void)opaque;return dr_gs_stream_chain(&stream,spans,count,address,1);}
++{
++    (void)opaque;int e=dr_gs_native_bind(spans,count);
++    if(e)return e;
++    e=dr_gs_native_vif1(address,1);
++    dr_gs_native_unbind();return e;
++}
+ static void le64(uint8_t *p,uint64_t v) {for(unsigned i=0;i<8;i++)p[i]=(uint8_t)(v>>(i*8));}
++static void le32(uint8_t *p,uint32_t v) {for(unsigned i=0;i<4;i++)p[i]=(uint8_t)(v>>(i*8));}
++/* Synthetic VU upload and XGKICK through the very Port_GsVif1Chain entry
++ * used by the engine. No commercial resources and no simulation started. */
++static int native_vif_probe(void)
++{
++    uint8_t bytes[96]={0};
++    le32(bytes,0x70000005); /* END + 5 quadwords of VIF words */
++    le32(bytes+16,0x4a030000); /* MPG three instructions */
++    le32(bytes+20,0x800006fc);le32(bytes+24,0x2ff); /* XGKICK vi0 */
++    le32(bytes+28,0x8000033c);le32(bytes+32,0x400002ff); /* E */
++    le32(bytes+36,0x8000033c);le32(bytes+40,0x2ff); /* delay */
++    le32(bytes+44,0x6c020000); /* UNPACK GIF packet to VU address zero */
++    le64(bytes+48,0x1000000000008001ull);le64(bytes+56,14);
++    le64(bytes+64,0x44);le64(bytes+72,0x42); /* ALPHA_1 */
++    le32(bytes+80,0x14000000); /* MSCAL program zero */
++    DrGsSpan span={0x43000000,bytes,sizeof(bytes)};
++    int e=dr_gs_native_bind(&span,1);
++    if(!e){Port_GsVif1Chain(span.address,0);e=dr_gs_native_error();}
++    dr_gs_native_unbind();
++    DrGsStreamStats stats={0};
++    if(!e)e=dr_gs_native_stats(&stats);
++    if(!e && (stats.vu_calls!=1 || stats.gif_quadwords!=2 || gGs.alpha[0]!=0x44))e=DR_STREAM_COMMAND;
++    /* The GIF-channel entry point shares mappings and GS state, without
++     * resetting VU memory/programs. It receives canonical bytes as well. */
++    if(!e) {
++        le64(bytes+64,0x48);
++        span=(DrGsSpan){0x43000000,bytes+48,32};
++        e=dr_gs_native_bind(&span,1);
++        if(!e){Port_GsGifChannel(span.address,2,0);e=dr_gs_native_error();
++            if(!e && gGs.alpha[0]!=0x48)e=DR_STREAM_COMMAND;}
++        dr_gs_native_unbind();
++    }
++    if(!e) {
++        uint64_t db[0x230/8];
++        e=sceGsSetDefDBuff(db,0,512,448,3,0x31,1);
++        if(!e)e=sceGsSwapDBuff(db,0);
++        if(!e && ((gGs.frame[0]&511)!=0 || gGs.xyoffset[0]!=(0x720000007000ull)))e=DR_STREAM_COMMAND;
++        if(!e)e=GsDraw_XenosSubmit();
++    }
++    xsdk_log_write("native Port_Gs VIF/MPG/UNPACK/MSCAL/XGKICK, GIF and DBuff clear probe rc=%d",e);
++    return e;
++}
+ static void reg(uint32_t address,uint64_t value)
+ {
+     /* Typed native register producer, explicit LE serialization, then real
+@@ -63,10 +111,10 @@
+     if(opened) return -1;
+     int e=dr_gs_backend_attach(width,height);if(e)return e;
+     if(!GsGpu_Init()) return -2;
+-    stream_error=dr_gs_stream_init(&stream,stream_gif,NULL);
++    stream_error=dr_gs_native_open(stream_gif,NULL);
+     if(stream_error) {GsDraw_XenosClose();return stream_error;}
+     stream_error=dr_dma_producer_open_mapped(producer_submit,NULL);
+-    if(stream_error) {GsDraw_XenosClose();return stream_error;}
++    if(stream_error) {dr_gs_native_close();GsDraw_XenosClose();return stream_error;}
+     Dma_ResetBuffers();
+     Gs_XenosCaptureEnable(1);
+     /* Exercise mapped NEXT and its patched return through the real consumer.
+@@ -76,8 +124,9 @@
+     stream_error=dr_dma_map_chain(chain,sizeof(chain),DR_DMA_W32,&address);
+     if(!stream_error){Dma_AddNext(chain,chain+4);Dma_Flush();stream_error=dr_dma_producer_error();}
+     xsdk_log_write("mapped DMA NEXT/return diagnostic rc=%d",stream_error);
++    if(!stream_error)stream_error=native_vif_probe();
+     if(!stream_error)palette();
+-    if(stream_error) {dr_dma_producer_close();GsDraw_XenosClose();Gs_XenosCaptureEnable(0);return stream_error;}
++    if(stream_error) {dr_dma_producer_close();dr_gs_native_close();GsDraw_XenosClose();Gs_XenosCaptureEnable(0);return stream_error;}
+     gGsMainFbp=0;opened=1;
+     xsdk_log_write("GS capture: adapted native producers/Dma_Flush -> bounded DMA/VIF DIRECT -> actual gs_core/GIF -> gs_draw -> sXenosBackend; synthetic data, no battle");
+     return 0;
+@@ -141,5 +190,5 @@
+     if(!opened)return 0;
+     int e=GsDraw_XenosClose();if(e)return e;
+     e=dr_dma_producer_close();if(e)return e;
+-    Gs_XenosCaptureEnable(0);opened=0;return 0;
++    dr_gs_native_close();Gs_XenosCaptureEnable(0);opened=0;return 0;
+ }
+--- /dev/null
++++ b/src/dr_gs_native.c
+@@ -0,0 +1,73 @@
++/* SPDX-License-Identifier: AGPL-3.0-or-later */
++#include "dr_gs_native.h"
++#include <string.h>
++#include "dr_vu1.h"
++static struct {DrGsStream stream;DrGsSpan spans[64];size_t count;int opened,busy;} native;
++int dr_gs_native_reject(int e)
++{if(!native.opened)return DR_STREAM_INVALID;if(!native.stream.error)native.stream.error=e?e:DR_STREAM_INVALID;return native.stream.error;}
++int dr_gs_native_error(void) {return native.opened?native.stream.error:DR_STREAM_INVALID;}
++int dr_gs_native_open(DrStreamGif gif,void *opaque)
++{
++    if(native.opened || !gif)return DR_STREAM_INVALID;
++    memset(&native,0,sizeof(native));
++    int e=dr_gs_stream_init(&native.stream,gif,opaque);if(e)return e;
++    native.opened=1;return 0;
++}
++int dr_gs_native_close(void)
++{
++    if(!native.opened || native.busy)return DR_STREAM_INVALID;
++    dr_vu1_reset(NULL,NULL);memset(&native,0,sizeof(native));return 0;
++}
++int dr_gs_native_bind(const DrGsSpan *spans,size_t count)
++{
++    if(!native.opened)return DR_STREAM_INVALID;
++    if(native.stream.error)return native.stream.error;
++    if(native.busy || native.count || !spans || !count || count>64)return dr_gs_native_reject(DR_STREAM_INVALID);
++    size_t total=0;
++    for(size_t i=0;i<count;i++) {
++        if(!spans[i].bytes || !spans[i].size || spans[i].size>0x4000000u-total ||
++           spans[i].size>0x100000000ull-spans[i].address)
++            return dr_gs_native_reject(DR_STREAM_RANGE);
++        total+=spans[i].size;
++        for(size_t j=0;j<i;j++)if((uint64_t)spans[i].address<(uint64_t)spans[j].address+spans[j].size &&
++            (uint64_t)spans[j].address<(uint64_t)spans[i].address+spans[i].size)
++            return dr_gs_native_reject(DR_STREAM_RANGE);
++    }
++    memcpy(native.spans,spans,count*sizeof(*spans));native.count=count;return 0;
++}
++void dr_gs_native_unbind(void)
++{if(native.busy){dr_gs_native_reject(DR_STREAM_INVALID);return;}memset(native.spans,0,sizeof(native.spans));native.count=0;}
++int dr_gs_native_vif1(uint32_t address,int tte)
++{
++    if(!native.opened)return DR_STREAM_INVALID;
++    if(native.busy)return dr_gs_native_reject(DR_STREAM_INVALID);
++    if(!native.count)return dr_gs_native_reject(DR_STREAM_RANGE);
++    native.busy=1;int e=dr_gs_stream_chain(&native.stream,native.spans,native.count,address,tte);
++    native.busy=0;return e;
++}
++int dr_gs_native_gif(uint32_t address,uint32_t qwc,int chain)
++{
++    if(!native.opened)return DR_STREAM_INVALID;
++    if(native.stream.error)return native.stream.error;
++    if(!native.count)return dr_gs_native_reject(DR_STREAM_RANGE);
++    if(native.busy)return dr_gs_native_reject(DR_STREAM_INVALID);
++    if(chain==1) {
++        native.busy=1;int e=dr_gs_stream_gif_chain(&native.stream,native.spans,native.count,address);
++        native.busy=0;return e;
++    }
++    if(chain!=0 || (address&15) || qwc>65536)return dr_gs_native_reject(DR_STREAM_INVALID);
++    if(!qwc)return 0;
++    uint64_t bytes=(uint64_t)qwc*16;
++    for(size_t i=0;i<native.count;i++)if(address>=native.spans[i].address) {
++        size_t at=address-native.spans[i].address;
++        if(at<=native.spans[i].size && bytes<=native.spans[i].size-at) {
++            memset(&native.stream.stats,0,sizeof(native.stream.stats));
++            native.busy=1;
++            int e=dr_gs_stream_gif(&native.stream,(const unsigned char *)native.spans[i].bytes+at,(size_t)bytes);
++            native.busy=0;return e;
++        }
++    }
++    return dr_gs_native_reject(DR_STREAM_RANGE);
++}
++int dr_gs_native_stats(DrGsStreamStats *out)
++{if(!native.opened || !out)return DR_STREAM_INVALID;*out=native.stream.stats;return 0;}
+--- /dev/null
++++ b/src/dr_gs_native.h
+@@ -0,0 +1,21 @@
++/* SPDX-License-Identifier: AGPL-3.0-or-later */
++#ifndef DR_GS_NATIVE_H
++#define DR_GS_NATIVE_H
++#include "dr_gs_stream.h"
++/* Single-thread, renderer-owned session. The sole VU interpreter is shared by
++ * native producer submission and legacy Port_Gs* entry points. Bind copies
++ * only descriptors: canonical LE buffers must stay alive through the call.
++ * Raw engine pointers and mixed-endian packets are never inferred/mapped. */
++int dr_gs_native_open(DrStreamGif,void *);
++int dr_gs_native_close(void);
++int dr_gs_native_bind(const DrGsSpan *,size_t);
++void dr_gs_native_unbind(void);
++int dr_gs_native_vif1(uint32_t,int);
++int dr_gs_native_gif(uint32_t,uint32_t,int);
++int dr_gs_native_error(void);
++int dr_gs_native_reject(int);
++int dr_gs_native_stats(DrGsStreamStats *);
++/* Original engine entry points. Errors are available through the session. */
++void Port_GsVif1Chain(uint32_t,int);
++void Port_GsGifChannel(uint32_t,uint32_t,int);
++#endif
+--- a/src/dr_gs_stream.c
++++ b/src/dr_gs_stream.c
+@@ -107,7 +107,7 @@
+     }
+     return NULL;
+ }
+-int dr_gs_stream_chain(DrGsStream *s,const DrGsSpan *spans,size_t n,uint32_t address,int tte)
++static int chain(DrGsStream *s,const DrGsSpan *spans,size_t n,uint32_t address,int tte,int gif)
+ {
+     if(!s || !s->gif)return DR_STREAM_INVALID;
+     if(s->error)return s->error;
+@@ -153,8 +153,24 @@
+         case 7:end=1;break;
+         }
+         int e=tte?dr_gs_stream_vif(s,tag+8,8):0;
+-        if(!e && count)e=dr_gs_stream_vif(s,data,count);
++        if(!e && count)e=gif?dr_gs_stream_gif(s,data,count):dr_gs_stream_vif(s,data,count);
+         if(e)return e;
+-        if(end)return dr_gs_stream_finish(s);
++        if(end)return gif?s->error:dr_gs_stream_finish(s);
+     }
+ }
++
++int dr_gs_stream_gif(DrGsStream *s,const void *bytes,size_t size)
++{
++    if(!s || !s->gif)return DR_STREAM_INVALID;
++    if(s->error)return s->error;
++    if((!bytes && size) || size%16)return fail(s,DR_STREAM_INVALID);
++    if(!s->word_budget || s->word_budget>4194304 || s->stats.words>s->word_budget ||
++       size/4>s->word_budget-s->stats.words)return fail(s,DR_STREAM_BUDGET);
++    s->stats.words+=(uint32_t)(size/4);
++    if(size)kick(s,bytes,(uint32_t)(size/16));
++    return s->error;
++}
++int dr_gs_stream_chain(DrGsStream *s,const DrGsSpan *spans,size_t n,uint32_t address,int tte)
++{return chain(s,spans,n,address,tte,0);}
++int dr_gs_stream_gif_chain(DrGsStream *s,const DrGsSpan *spans,size_t n,uint32_t address)
++{return chain(s,spans,n,address,0,1);}
+--- a/src/dr_gs_stream.h
++++ b/src/dr_gs_stream.h
+@@ -34,5 +34,9 @@
+  * Error is sticky until init. A failed chain can modify VU/GS/VRAM state;
+  * discard its captured draws and reinitialize before another attempt.
+  * No GPU work/present is submitted by this module. */
++/* GIF-channel transfers share the checked chain walker; tag TTE words are
++ * never interpreted as VIF on this channel. No VU state is reset. */
++int dr_gs_stream_gif(DrGsStream *,const void *,size_t);
++int dr_gs_stream_gif_chain(DrGsStream *,const DrGsSpan *,size_t,uint32_t);
+ int dr_gs_stream_chain(DrGsStream *,const DrGsSpan *,size_t,uint32_t,int tte);
+ #endif
+--- a/src/main.c
++++ b/src/main.c
+@@ -260,7 +260,7 @@
+     XbPlatform_Install();
+     DrLobby lobby;dr_lobby_init(&lobby);int logged_lobby_state=LOBBY_OFF;
+     demo_init(&ui);settings_load();
+-    xsdk_log_write("DragonRage360 demo 0.25: mapped DMA / platform diagnostics; Battle_Main not linked.");
++    xsdk_log_write("DragonRage360 demo 0.27: native VIF/VU / platform diagnostics; Battle_Main not linked.");
+     xsdk_log_write("%s: BPE decode + animation endian synthetic self-test",dr_resource_selftest()?"PASS":"FAIL");
+     xsdk_log_write("%s: bounded BIN + motion + skeleton synthetic self-test",dr_container_selftest()?"PASS":"FAIL");
+     xsdk_log_write("%s: GS texture address synthetic self-test",dr_gs_texture_selftest()?"PASS":"FAIL");
+@@ -374,7 +374,7 @@
+         if(capture_mode) {
+             int error=dr_capture_demo_draw();
+             if(error) {xsdk_log_write("FAIL: actual capture draw rc=%d",error);if(!dr_capture_demo_close())capture_mode=false;}
+-            xsdk_text_draw(50,44,2,0xffe0e0ff,"CAPTURA ORIGINAL GS · 0.25 EXPERIMENTAL");
++            xsdk_text_draw(50,44,2,0xffe0e0ff,"CAPTURA ORIGINAL GS · 0.27 EXPERIMENTAL");
+             xsdk_text_draw(52,100,1,0xffe0e0ff,"Captura GS / VU / sombras / contorno / tabelas por ID e Z");
+             xsdk_text_draw(52,650,1,0xffe0e0ff,"Dados sintéticos · sem combate · B voltar");
+         } else if(body_mode) {
+@@ -383,7 +383,7 @@
+                 xsdk_log_write("FAIL: real body diagnostic draw rc=%d",error);
+                 if(!dr_body_demo_close())body_mode=false;
+             }
+-            xsdk_text_draw(50,44,2,0xffe0e0ff,"MODELO DA ISO · POSE DE REFERÊNCIA · 0.25");
++            xsdk_text_draw(50,44,2,0xffe0e0ff,"MODELO DA ISO · POSE DE REFERÊNCIA · 0.27");
+             xsdk_text_draw(52,100,1,0xffe0e0ff,"Corpo e materiais reais / programa 0 da VU1");
+             xsdk_text_draw(950,175,1,0xffe0e0ff,"Texturas do pacote");
+             xsdk_text_draw(52,650,1,0xffe0e0ff,"Pose fixa / sem combate · X expressão · B voltar");
+@@ -393,7 +393,7 @@
+                 xsdk_log_write("FAIL: native graphics diagnostic draw, error=%d",error);
+                 dr_graphics_demo_close();graphics_mode=false;
+             }
+-            xsdk_text_draw(50,44,2,0xff101020,"DIAGNÓSTICO GS · DATE/FBA · 0.25");
++            xsdk_text_draw(50,44,2,0xff101020,"DIAGNÓSTICO GS · DATE/FBA · 0.27");
+             xsdk_text_draw(52,100,1,0xff101020,"PSMT8 / paleta / MODULATE / alpha / aditivo");
+             xsdk_text_draw(52,650,1,0xff101020,"Dados sintéticos · Y captura original · B voltar");
+         } else demo_draw(&ui,&paint,tick);
+--- a/tests/check_xex.py
++++ b/tests/check_xex.py
+@@ -31,6 +31,8 @@
+ assert required<=defined, 'body pipeline/native modules absent from link'
+ capture_required={'Dma_Flush','Dma_ResetBuffers','Dma_AddFrame','Dma_AddScissor','Dma_AddXyOffset','Dma_AddZbuf','dr_dma_write_ad','dr_dma_producer_open_mapped','dr_dma_map_chain','Dma_AddNext','dr_gs_stream_init','dr_gs_stream_chain','dr_gs_stream_vif','dr_vu1_vif_control','sXenosBackend','GsGpu_Init','GsGpu_Draw','GsGpu_DrawVu0','GsGpu_DrawVu4','GsGpu_DrawVu6','dr_gs_replay','dr_vu0_vert_container','dr_vu4_vert_container','dr_vu6_vert_container','dr_outline_frag_container','dr_dclut_frag_container','Gs_Gif','Gs_XenosCaptureEnable','GsDraw_XenosSubmit','dr_capture_demo_open','dr_capture_demo_draw'}
+ assert capture_required<=defined, 'actual capture/backend integration absent from link'
++native_required={'sceGsSetDefDBuff','sceGsPutDrawEnv','sceGsSwapDBuff','Port_GsVif1Chain','Port_GsGifChannel','dr_gs_native_open','dr_gs_native_bind','dr_gs_native_vif1','dr_gs_native_gif','dr_gs_native_error','dr_gs_stream_gif_chain'}
++assert native_required<=defined, 'shared native VIF/GIF engine entry points absent'
+ platform_required={'XbPlatform_Install','XbPlatform_ProbeFiles','XbDisc_Mount','ADXF_ReadNw','ADXF_OpenAfs',
+                    'XbRes_Install','XbRes_Report','XbRes_LoadMap','XbRes_RegisterChecked',
+                    'XbRes_RegisterAnimation','XbRes_RegisterSkeleton','gXbFilePostRead'}
+@@ -67,10 +69,10 @@
+                   'unencrypted basic-compression homebrew XEX'],
+         'linked_body_symbols':sorted(required),'unresolved_weak_symbols':sorted(weak),
+         'runtime_test':'Not run on Xbox 360 or emulator',
+-        'gpu_pixels_verified':False,'game_complete':False,'battle_loop_linked':'Battle_Main' in defined,
++        'native_engine_entry_points_linked':sorted(native_required),'shared_VU_session':True,'gpu_pixels_verified':False,'game_complete':False,'battle_loop_linked':'Battle_Main' in defined,
+         'platform_sources_compiled':True,'platform_resource_hook_linked':True,
+         'linked_platform_symbols':sorted(platform_required),'Bpe_Decode_linked':'Bpe_Decode' in defined,
+         'experimental_backend_linked':True,'original_GS_capture_linked':True,'linked_capture_symbols':sorted(capture_required),'registration_patch_provided':True,
+-        'native_VU_shader_path_linked':True,'shadow_stencil_run_path_linked':True,'buffer_consumers_linked':['outline from frozen IDs','depth/ID CLUT with raw alpha MRT','sampled target raw alpha and primitive feedback resolves'],'bounded_DMA_VIF_consumer_linked':True,'combat_DMA_producers_adapted':False,'adapted_DMA_producer_subset_linked':['Frame','Zbuf','Scissor','XYOffset','AD register','Flush','ResetBuffers'],'native_packet_producers_compiled':['Dma_Alloc','Dma_AddData','Dma_AddRef','Dma_BeginDirect','Dma_EndDirect','Dma_AddNext'],'mapped_chain_diagnostic_linked':True,'scope':'0.25 DMA patch and platform 0.4 integrated: ADXF post-read, converter registry/map/adapters and first-file ISO probes; combat remains outside XEX. Prior 0.24 features: adapted canonical-LE register producers and adapted Dma_Flush/ResetBuffers linked to bounded DMA/VIF/GS capture in synthetic diagnostic; rectangle and other helpers byte-tested against original source; Battle_Main, full combat producers and IA/collisions/animation integration absent; no hardware pixel validation'}
++        'native_VU_shader_path_linked':True,'shadow_stencil_run_path_linked':True,'buffer_consumers_linked':['outline from frozen IDs','depth/ID CLUT with raw alpha MRT','sampled target raw alpha and primitive feedback resolves'],'bounded_DMA_VIF_consumer_linked':True,'combat_DMA_producers_adapted':False,'adapted_DMA_producer_subset_linked':['Frame','Zbuf','Scissor','XYOffset','AD register','Flush','ResetBuffers'],'native_packet_producers_compiled':['Dma_Alloc','Dma_AddData','Dma_AddRef','Dma_BeginDirect','Dma_EndDirect','Dma_AddNext'],'mapped_chain_diagnostic_linked':True,'scope':'0.27 replaces native legacy DMA/VIF/GIF traversal with bounded canonical mappings and one shared VU session; Port_Gs entry points and synthetic MPG/UNPACK/MSCAL/XGKICK probe linked. No combat boot/presentation integration. 0.25 DMA patch and platform 0.4 integrated: ADXF post-read, converter registry/map/adapters and first-file ISO probes; combat remains outside XEX. Prior 0.24 features: adapted canonical-LE register producers and adapted Dma_Flush/ResetBuffers linked to bounded DMA/VIF/GS capture in synthetic diagnostic; rectangle and other helpers byte-tested against original source; Battle_Main, full combat producers and IA/collisions/animation integration absent; no hardware pixel validation'}
+ (root/'VALIDACAO.json').write_text(json.dumps(report,ensure_ascii=False,indent=2)+'\n')
+ print(json.dumps(report,ensure_ascii=False,indent=2))

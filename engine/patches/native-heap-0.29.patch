@@ -1,0 +1,518 @@
+--- a/engine/combat/heap.c
++++ b/engine/combat/heap.c
+@@ -1,5 +1,8 @@
+ #ifdef PORT_BIGENDIAN
+ #include "xb_resconv.h"
++#include "xb_mem.h"
++#include "xb_heap.h"
++#include <stdint.h>
+ #endif
+ #include "common.h"
+ #include "sys/heap.h"
+@@ -15,9 +18,18 @@
+ extern s32 gHeapDebugValue;
+ extern u8 gHeapDebugFlag;
+ extern s32 gHeapDebugUnused;
++#ifndef PORT_BIGENDIAN
+ extern u8 D_3BE71C[];
++#endif
+ extern s32 gHeapUnk70[HEAP_COUNT];
+ extern s32 gHeapUnk78[HEAP_COUNT];
++
++#ifdef PORT_BIGENDIAN
++static int xb_heap_ready;
++static int xb_heap_error=XB_HEAP_NOT_READY;
++int XbHeap_Ready(void) {return xb_heap_ready;}
++int XbHeap_LastError(void) {return xb_heap_error;}
++#endif
+ 
+ void Heap_ReportBadFree(void);
+ 
+@@ -73,15 +85,29 @@
+ }
+ 
+ void Heap_Create(void) {
++#ifdef PORT_BIGENDIAN
++    s32 size = XB_GAME_HEAP_BYTES;
++#else
+     s32 size = 0x1EFB000 - (u32)D_3BE71C;
++#endif
+     HeapBlock *start;
+-
++#ifdef PORT_BIGENDIAN
++    /* A repeated init must not leak another arena or wipe live allocations. */
++    if(xb_heap_ready){xb_heap_error=XB_HEAP_OK;return;}
++    gHeapStart[0]=NULL;gHeapEnd[0]=NULL;gHeapSize[0]=0;
++#endif
+     size += Mem_Align4Pad(size);
+     start = malloc(size);
++#ifdef PORT_BIGENDIAN
++    if(!start){xb_heap_error=XB_HEAP_NOT_READY;return;}
++#endif
+     gHeapSize[0] = size;
+     gHeapEnd[0] = (HeapBlock *)((u8 *)start + size);
+     gHeapStart[0] = start;
+     Heap_InitFreeBlock(start, size);
++#ifdef PORT_BIGENDIAN
++    xb_heap_ready=1;xb_heap_error=XB_HEAP_OK;
++#endif
+ }
+ 
+ HeapBlock *Heap_FindBlock(u32 data) {
+@@ -169,9 +195,18 @@
+     HeapBlock *free;
+     s32 need;
+ 
++#ifdef PORT_BIGENDIAN
++    xb_heap_error=XB_HEAP_OK;
++    if(!xb_heap_ready){xb_heap_error=XB_HEAP_NOT_READY;return NULL;}
++    if(size<=0 || !align || heap<0 || heap>HEAP_ANY ||
++       align>0x7fffffffU-0x24 || (u32)size>0x7fffffffU-align-0x24) {
++        xb_heap_error=XB_HEAP_ARGUMENT;return NULL;
++    }
++#else
+     if (size <= 0) {
+         return NULL;
+     }
++#endif
+     need = size + align + 0x24;
+     if (fromTail == 0) {
+         block = Heap_SearchFromHead(need, heap);
+@@ -179,6 +214,9 @@
+         block = Heap_SearchFromTail(need, heap);
+     }
+     if (block == NULL) {
++#ifdef PORT_BIGENDIAN
++        xb_heap_error=XB_HEAP_FULL;
++#endif
+         return NULL;
+     }
+     if (block->dataSize - need > 0x80) {
+@@ -259,7 +297,14 @@
+ 
+ void Heap_Free(void *ptr) {
+     HeapBlock *block;
+-
++#ifdef PORT_BIGENDIAN
++    xb_heap_error=XB_HEAP_OK;
++    if(!ptr)return;
++#if UINTPTR_MAX > UINT32_MAX
++    if((uintptr_t)ptr>UINT32_MAX){xb_heap_error=XB_HEAP_BAD_FREE;return;}
++#endif
++    if(!xb_heap_ready){xb_heap_error=XB_HEAP_NOT_READY;return;}
++#endif
+ #ifdef PORT
+     {
+         /* PC build: a block that is not the heap's (a large stage buffer, battle_load.c) goes back to the port */
+@@ -273,6 +318,9 @@
+ 
+     if (block == NULL) {
+         Heap_ReportBadFree();
++#ifdef PORT_BIGENDIAN
++        xb_heap_error=XB_HEAP_BAD_FREE;return;
++#endif
+     }
+     Heap_FreeBlock(block);
+ }
+--- /dev/null
++++ b/engine/platform/platform/xb_game_profile.c
+@@ -0,0 +1,7 @@
++/* SPDX-License-Identifier: MIT
++ * Actual limits of the supported native profile: original disc stages and
++ * original 4:3 camera composition (dr_capture_platform.c already selects it).
++ * These are configuration values, not success replies for missing services.
++ */
++int Port_StageBufSize(void) {return 0x6cb800;}
++float Port_WideFactor(void) {return 1.0f;}
+--- /dev/null
++++ b/engine/platform/platform/xb_heap.h
+@@ -0,0 +1,10 @@
++/* SPDX-License-Identifier: MIT */
++#ifndef XB_HEAP_H
++#define XB_HEAP_H
++/* Status of the actual game Heap_* implementation, not a replacement allocator.
++ * These functions are defined by engine/combat/heap.c in the engine build. */
++enum {XB_HEAP_OK=0,XB_HEAP_NOT_READY=-510,XB_HEAP_ARGUMENT=-511,
++      XB_HEAP_FULL=-512,XB_HEAP_BAD_FREE=-513};
++int XbHeap_Ready(void);
++int XbHeap_LastError(void);
++#endif
+--- a/engine/platform/platform/xb_mem.h
++++ b/engine/platform/platform/xb_mem.h
+@@ -10,6 +10,12 @@
+    Everything is logged to default.log, which is the point: the fixed mappings are the one thing nobody has seen
+    the console accept yet. */
+ unsigned XbMem_Init(void);
++/* Initialize only the relocatable game arena; no MMIO mappings or claim of
++ * whole-platform readiness. The allocated arena must fit 32-bit pointers. */
++int XbMem_InitHeap(void);
++/* Original USA game heap budget, expressed as a SIZE, not a relocated native
++ * address subtracted from the PS2's numeric end address. */
++#define XB_GAME_HEAP_BYTES ((0x01EFB000u-0x003BE71Cu+3u)&~3u)
+ 
+ /* Writes and reads back a pattern in every region that Init got, and round-trips Port_LowAlloc, Port_Malloc and
+    Port_GameBigAlloc. Returns the number of checks that failed (0 = all passed). Safe to call from a diagnostic
+--- a/engine/platform/platform/xb_plat_mem.c
++++ b/engine/platform/platform/xb_plat_mem.c
+@@ -20,6 +20,7 @@
+ #include <stdlib.h>
+ #include <string.h>
+ #include "xb_mem.h"
++#include "xb_resconv.h"
+ #include "xb_port_addr.h"
+ #include "xsdk/log.h"
+ #ifdef XB_USE_NTALLOC
+@@ -35,7 +36,7 @@
+ #endif
+ 
+ static uint8_t *sHeapRaw, *sHeapBase;
+-static unsigned sFailed; /* bit mask of what XbMem_Init could not get */
++static unsigned sFailed=15; /* no fixed region is owned before XbMem_Init */
+ static uint32_t sHeapNext, sHeapEnd; /* offsets into sHeapBase */
+ 
+ typedef struct Region {
+@@ -71,6 +72,24 @@
+ #endif
+ }
+ 
++/* Allocate the relocatable arena separately from fixed PS2 register windows.
++ * This initializer is idempotent and never clears a live game's arena. */
++int XbMem_InitHeap(void) {
++    if(sHeapRaw != NULL)return 0;
++    uint8_t *raw=calloc(1,(size_t)HEAP_SIZE+4096);
++    if(raw == NULL)return -1;
++    uintptr_t address=((uintptr_t)raw+4095)&~(uintptr_t)4095;
++    if(address>UINT32_MAX || (uint64_t)address+HEAP_SIZE>0x100000000ull) {
++        free(raw);
++        xsdk_log_write("mem: allocated game arena does not fit 32-bit addresses");
++        return -1;
++    }
++    sHeapRaw=raw;sHeapBase=(uint8_t *)address;
++    sHeapNext=HEAP_FIRST_OFFSET;sHeapEnd=HEAP_SIZE;
++    xsdk_log_write("mem: game arena at %p (%u bytes); fixed register windows separate",(void *)sHeapBase,(unsigned)HEAP_SIZE);
++    return 0;
++}
++
+ unsigned XbMem_Init(void) {
+     unsigned failed = 0, i;
+ 
+@@ -78,18 +97,7 @@
+         xsdk_log_write("mem: pointers are %u bytes; the game needs 4 (wrong ABI?)", (unsigned)sizeof(void *));
+         return 0xFFu;
+     }
+-    if (sHeapRaw == NULL) {
+-        sHeapRaw = calloc(1, (size_t)HEAP_SIZE + 4096);
+-        if (sHeapRaw == NULL) {
+-            xsdk_log_write("mem: game heap (%u bytes): out of memory", (unsigned)HEAP_SIZE);
+-            failed |= 1;
+-        } else {
+-            sHeapBase = (uint8_t *)(((uintptr_t)sHeapRaw + 4095) & ~(uintptr_t)4095);
+-            sHeapNext = HEAP_FIRST_OFFSET;
+-            sHeapEnd = HEAP_SIZE;
+-            xsdk_log_write("mem: game heap at %p (%u bytes)", (void *)sHeapBase, (unsigned)HEAP_SIZE);
+-        }
+-    }
++    if (XbMem_InitHeap() != 0) failed |= 1;
+     for (i = 0; i < sizeof(kFixed) / sizeof(kFixed[0]); i++) {
+         if (fixed_map(kFixed[i].addr, kFixed[i].size, kFixed[i].what) != 0) {
+             failed |= kFixed[i].bit;
+@@ -105,7 +113,7 @@
+ void *Port_Malloc(uint32_t size) {
+     uint32_t p = (sHeapNext + 15u) & ~15u;
+ 
+-    if (sHeapBase == NULL || size > sHeapEnd - p) {
++    if (sHeapBase == NULL || !size || p > sHeapEnd || size > sHeapEnd - p) {
+         xsdk_log_write("mem: malloc(0x%X) does not fit in the game heap", (unsigned)size);
+         return NULL;
+     }
+@@ -124,7 +132,7 @@
+    (battle_load.c). As an address, not a pointer: the game's files must not be handed a host function's pointer.
+    Blocks are remembered so that Port_GameBigFree can tell them from the game heap's. */
+ #define BIG_MAX 16
+-static struct { void *p; unsigned addr; } sBig[BIG_MAX];
++static struct { void *p; unsigned addr,size; } sBig[BIG_MAX];
+ 
+ unsigned Port_GameBigAlloc(int size) {
+     void *p;
+@@ -141,6 +149,7 @@
+     }
+     sBig[i].p = p;
+     sBig[i].addr = Port_Addr(p);
++    sBig[i].size = (unsigned)size;
+     return sBig[i].addr;
+ }
+ 
+@@ -149,9 +158,11 @@
+ 
+     for (i = 0; i < BIG_MAX; i++) {
+         if (sBig[i].p != NULL && sBig[i].addr == addr) {
++            XbRes_Forget(sBig[i].p,sBig[i].size);
+             free(sBig[i].p);
+             sBig[i].p = NULL;
+             sBig[i].addr = 0;
++            sBig[i].size = 0;
+             return 1;
+         }
+     }
+--- /dev/null
++++ b/engine/tests/test_heap_native.c
+@@ -0,0 +1,125 @@
++/* SPDX-License-Identifier: MIT
++ * Actual game heap and native arena; host mmap substitutes only allocation
++ * and log transport. No Xbox MMIO, ABI execution, models or fight are claimed. */
++#define _GNU_SOURCE
++#include <assert.h>
++#include <limits.h>
++#include <stdint.h>
++#include <stdio.h>
++#include <stdlib.h>
++#include <stdarg.h>
++#include <string.h>
++#include <sys/mman.h>
++#include "sys/heap.h"
++#include "xb_heap.h"
++#include "xb_mem.h"
++#include "xb_resconv.h"
++HeapBlock *gHeapStart[2],*gHeapEnd[2];s32 gHeapSize[2],gHeapDebugValue,gHeapDebugUnused,gHeapUnk70[2],gHeapUnk78[2];u8 gHeapDebugFlag;
++extern s32 Heap_GetFreeSize(void),Heap_GetUsedSize(void);
++extern int Port_StageBufSize(void);extern float Port_WideFactor(void);
++extern void XbRes_TestRead(int,int,uint64_t,uint64_t,void *,size_t);
++static int allocation_mode=1;static unsigned events,checks;
++static struct {void *p;size_t n;int high;} regions[64];
++void *XbTest_Calloc(size_t n,size_t size) {
++    if(allocation_mode==1)return NULL;
++    if(size && n>SIZE_MAX/size)return NULL;
++    size_t bytes=(n*size+4095)&~(size_t)4095;void *p;
++    if(allocation_mode==2)p=calloc(n,size);
++    else {
++        p=NULL;
++        /* Non-fixed hints work on both ARM64 and x86_64 hosts. Never replace
++         * another mapping. Accept only a complete arena below 4 GiB. */
++        for(uintptr_t hint=0x30000000;hint<0x70000000;hint+=0x4000000) {
++            void *candidate=mmap((void *)hint,bytes,PROT_READ|PROT_WRITE,MAP_PRIVATE|MAP_ANONYMOUS,-1,0);
++            if(candidate==MAP_FAILED)continue;
++            if((uintptr_t)candidate<=UINT32_MAX && (uint64_t)(uintptr_t)candidate+bytes<=0x100000000ull){p=candidate;break;}
++            assert(!munmap(candidate,bytes));
++        }
++        if(!p)return NULL;
++    }
++    assert(p);
++    for(unsigned i=0;i<64;i++)if(!regions[i].p){regions[i].p=p;regions[i].n=bytes;regions[i].high=allocation_mode==2;return p;}
++    abort();
++}
++void XbTest_Free(void *p) {
++    if(!p)return;
++    for(unsigned i=0;i<64;i++)if(regions[i].p==p) {
++        if(regions[i].high)free(p);else assert(!munmap(p,regions[i].n));
++        regions[i].p=NULL;return;
++    }
++    abort();
++}
++void xsdk_log_write(const char *fmt,...) {
++    char line[512];va_list ap;va_start(ap,fmt);vsnprintf(line,sizeof(line),fmt,ap);va_end(ap);
++    assert(line[0]);events++;
++}
++static void valid_chain(void) {
++    HeapBlock *b=gHeapStart[0];uint64_t total=0;unsigned n=0;
++    while(b && b!=gHeapEnd[0]) {
++        assert(++n<4096 && b->magic==HEAP_MAGIC && b->size>=36 && !(b->size&3));
++        assert((uintptr_t)b+b->size<=(uintptr_t)gHeapEnd[0]);
++        assert(*(uint32_t *)((uint8_t *)b+b->size-4)==(uint32_t)b->size);
++        if(b->used) {
++            assert(b->data>=(uintptr_t)b+sizeof(*b) && !(b->data%b->align));
++            assert((uint64_t)b->data+b->dataSize<=(uintptr_t)b+b->size-4);
++        }
++        total+=(unsigned)b->size;b=(HeapBlock *)((uint8_t *)b+b->size);
++    }
++    assert(b==gHeapEnd[0] && total==(unsigned)gHeapSize[0]);checks++;
++}
++static uint32_t random_state=360;
++static uint32_t rng(void){random_state=random_state*1664525u+1013904223u;return random_state;}
++int main(void) {
++    assert(Port_StageBufSize()==0x6cb800 && Port_WideFactor()==1.0f);
++    assert(XbMem_SelfTest()>0); /* before Init: never touch unmapped MMIO */
++    checks++;
++    Heap_Init();assert(!XbHeap_Ready() && XbHeap_LastError()==XB_HEAP_NOT_READY && !gHeapStart[0]);
++    assert(!Heap_Alloc(32,32,0,2) && XbHeap_LastError()==XB_HEAP_NOT_READY);checks++;
++    assert(XbMem_InitHeap()!=0);allocation_mode=2;
++    /* A normal 64-bit host allocation cannot be represented in game fields. */
++    assert(XbMem_InitHeap()!=0);allocation_mode=0;assert(!XbMem_InitHeap());
++    assert(!Port_Malloc(0) && !Port_Malloc(UINT32_MAX));Heap_Init();
++    assert(XbHeap_Ready() && !XbHeap_LastError() && gHeapSize[0]==(s32)XB_GAME_HEAP_BYTES);
++    assert(Heap_GetFreeSize()==gHeapSize[0]-32);valid_chain();
++    void *p=Heap_Alloc(64,64,0,2);assert(p && !((uintptr_t)p&63));memset(p,0x9c,64);
++    HeapBlock *start=gHeapStart[0];Heap_Init();assert(gHeapStart[0]==start);
++    for(unsigned i=0;i<64;i++)assert(((uint8_t *)p)[i]==0x9c);
++    XbRes_TestRead(0,0,0,64,p,64);assert(XbRes_SourceSize(p)==64);
++    Heap_Free(p);assert(!XbRes_SourceSize(p));valid_chain();
++    Heap_Free(p);assert(XbHeap_LastError()==XB_HEAP_BAD_FREE);valid_chain();
++    Heap_Free(NULL);assert(!XbHeap_LastError());
++    assert(!Heap_Alloc(10,0,0,2) && XbHeap_LastError()==XB_HEAP_ARGUMENT);
++    assert(!Heap_Alloc(INT_MAX,32,0,2) && XbHeap_LastError()==XB_HEAP_ARGUMENT);
++    assert(!Heap_Alloc(10,UINT32_MAX,0,2) && XbHeap_LastError()==XB_HEAP_ARGUMENT);
++    assert(!Heap_Alloc(10,32,0,-1) && XbHeap_LastError()==XB_HEAP_ARGUMENT);
++    assert(!Heap_Alloc(10,32,0,3) && XbHeap_LastError()==XB_HEAP_ARGUMENT);
++    checks+=8;
++    struct Slot {uint8_t *p;unsigned size,byte;} slots[128]={0};
++    for(unsigned turn=0;turn<3000;turn++) {
++        unsigned at=rng()%128;struct Slot *s=&slots[at];
++        if(s->p) {
++            for(unsigned k=0;k<s->size;k++)assert(s->p[k]==s->byte);
++            Heap_Free(s->p);assert(!XbHeap_LastError());s->p=NULL;
++        } else {
++            s->size=1+rng()%8192;s->byte=1+rng()%254;
++            unsigned align=1u<<(2+rng()%11);
++            s->p=Heap_Alloc((s32)s->size,align,(s32)(rng()&1),2);
++            assert(s->p && !((uintptr_t)s->p%align));memset(s->p,(int)s->byte,s->size);
++            for(unsigned j=0;j<128;j++)if(j!=at && slots[j].p)
++                assert(s->p+s->size<=slots[j].p || slots[j].p+slots[j].size<=s->p);
++        }
++        valid_chain();
++    }
++    for(unsigned i=0;i<128;i++)if(slots[i].p)Heap_Free(slots[i].p);
++    assert(Heap_GetUsedSize()==0 && Heap_GetFreeSize()==gHeapSize[0]-32);valid_chain();
++    assert(!Heap_Alloc((s32)XB_GAME_HEAP_BYTES,32,0,2) && XbHeap_LastError()==XB_HEAP_FULL);
++    unsigned big=Port_GameBigAlloc(2048);assert(big);
++    p=(void *)(uintptr_t)big;XbRes_TestRead(0,0,0,2048,p,2048);assert(XbRes_SourceSize(p)==2048);
++    Heap_Free(p);assert(!XbHeap_LastError() && !XbRes_SourceSize(p));checks++;
++    /* Exhaust only the arena's remaining bump space. A repeated initializer
++     * must not rewind it or allow writes past the end. */
++    unsigned filled=0;while(Port_Malloc(16)){assert(++filled<200000);}
++    assert(filled && !Port_Malloc(16) && !XbMem_InitHeap() && !Port_Malloc(16));checks++;
++    assert(events>0);printf("PASS: %u heap checks / 3000 randomized head-tail operations; original Heap_* code, low 32-bit arena, failure paths, alignment, payloads, coalescing, idempotent init, exhaustion and converter lifetime; host only\n",checks);
++    for(unsigned i=0;i<64;i++)if(regions[i].p)XbTest_Free(regions[i].p);
++}
+--- /dev/null
++++ b/engine/tools/extract_iso.py
+@@ -0,0 +1,57 @@
++#!/usr/bin/env python3
++# SPDX-License-Identifier: MIT
++"""Extract required BT3 files with the actual native ISO reader; no game execution.
++User-provided ISO and extracted game files are local inputs, not redistributable
++port artifacts. Default extracts the two programs, SYSTEM.CNF and three AFSs.
++"""
++from pathlib import Path
++import argparse,ctypes as C,hashlib,json,struct,subprocess,tempfile
++p=argparse.ArgumentParser(description=__doc__);p.add_argument('iso',type=Path);p.add_argument('output',type=Path)
++p.add_argument('--inspect-only',action='store_true');p.add_argument('--cc',default='gcc');a=p.parse_args()
++project=Path(__file__).resolve().parents[2];out=a.output.resolve();out.mkdir(parents=True,exist_ok=True)
++class Span(C.Structure):_fields_=[('offset',C.c_uint64),('size',C.c_uint64),('directory',C.c_uint)]
++class Disc(C.Structure):_fields_=[('read',C.c_void_p),('opaque',C.c_void_p),('size',C.c_uint64),('root',Span)]
++Reader=C.CFUNCTYPE(C.c_int,C.c_void_p,C.c_uint64,C.c_void_p,C.c_size_t)
++with tempfile.TemporaryDirectory(prefix='dr-iso-reader-') as tmp,a.iso.open('rb') as file:
++ library=Path(tmp)/'disc.so'
++ subprocess.run([a.cc,'-std=c17','-O2','-Wall','-Wextra','-Werror','-fPIC','-shared','-I'+str(project/'src'),str(project/'src/dr_disc.c'),'-o',str(library)],check=True)
++ lib=C.CDLL(str(library));lib.dr_mount.argtypes=[C.POINTER(Disc),Reader,C.c_void_p,C.c_uint64];lib.dr_find.argtypes=[C.POINTER(Disc),C.c_char_p,C.POINTER(Span)]
++ lib.dr_read.argtypes=[C.POINTER(Disc),C.POINTER(Span),C.c_uint64,C.c_void_p,C.c_size_t]
++ lib.dr_error.argtypes=[C.c_int];lib.dr_error.restype=C.c_char_p
++ @Reader
++ def read(opaque,at,target,n):
++  try:
++   file.seek(at);data=file.read(n)
++   if len(data)!=n:return -1
++   C.memmove(target,data,n);return 0
++  except (OSError,ValueError):return -1
++ def checked(rc):
++  if rc:raise RuntimeError(lib.dr_error(rc).decode())
++ disc=Disc();checked(lib.dr_mount(C.byref(disc),read,None,a.iso.stat().st_size))
++ paths=['SYSTEM.CNF','SLUS_216.78','BIN/DBZP.BIN']+[f'DATA/PZS3US{i}.AFS' for i in range(3)]
++ spans=[];report={'ISO_bytes':a.iso.stat().st_size,'reader':'actual src/dr_disc.c','game_executed':False,'files':[]}
++ for name in paths:
++  span=Span();checked(lib.dr_find(C.byref(disc),name.encode(),C.byref(span)));assert not span.directory
++  row={'name':name,'offset':span.offset,'size':span.size}
++  if name.endswith('.AFS'):
++   head=C.create_string_buffer(8);checked(lib.dr_read(C.byref(disc),C.byref(span),0,head,8))
++   assert head.raw[:4]==b'AFS\0',name
++   count=struct.unpack_from('<I',head.raw,4)[0];assert count<=1000000 and 8+count*8<=span.size
++   table=C.create_string_buffer(count*8);checked(lib.dr_read(C.byref(disc),C.byref(span),8,table,count*8))
++   for i,(offset,size) in enumerate(struct.iter_unpack('<II',table.raw)):
++    assert offset<=span.size and size<=span.size-offset and (not size or offset>=8+count*8),(name,i)
++   row['AFS_entries']=count;row['all_entry_ranges_valid']=True
++  spans.append((span,row))
++ # All required paths/ranges are checked before extracting any file.
++ for span,row in spans:
++  if not a.inspect_only:
++   dest=out/'disc'/row['name'];dest.parent.mkdir(parents=True,exist_ok=True)
++   buffer=C.create_string_buffer(8*1024*1024);digest=hashlib.sha256();at=0
++   with dest.open('wb') as target:
++    while at<span.size:
++     n=min(len(buffer),span.size-at);checked(lib.dr_read(C.byref(disc),C.byref(span),at,buffer,n))
++     chunk=buffer.raw[:n];target.write(chunk);digest.update(chunk);at+=n
++   row['sha256']=digest.hexdigest()
++  report['files'].append(row);print(json.dumps(row),flush=True)
++ (out/'iso-extraction.json').write_text(json.dumps(report,indent=2)+'\n')
++ print('PASS: required programs and all three AFS archives readable; no game or Xbox execution',flush=True)
+--- /dev/null
++++ b/engine/tools/test_gamedata_real.py
+@@ -0,0 +1,48 @@
++#!/usr/bin/env python3
++# SPDX-License-Identifier: MIT
++"""Load three explicitly typed real game tables with actual xb_gamedata.c.
++Writes only registered host test buffers, never the game executable or XEX.
++"""
++from pathlib import Path
++import argparse,ctypes as C,hashlib,json,struct,subprocess
++p=argparse.ArgumentParser(description=__doc__);p.add_argument('disc',type=Path);p.add_argument('output',type=Path)
++a=p.parse_args();e=Path(__file__).resolve().parents[1];out=a.output.resolve();out.mkdir(parents=True,exist_ok=True)
++sources={'SLUS_216.78':(a.disc/'SLUS_216.78').read_bytes(),'DBZP.BIN':(a.disc/'BIN/DBZP.BIN').read_bytes()}
++elf=sources['SLUS_216.78'];shoff=struct.unpack_from('<I',elf,32)[0];shsize,n=struct.unpack_from('<HH',elf,46)
++def original(address,length):
++ for i in range(n):
++  _,kind,flags,addr,offset,size=struct.unpack_from('<6I',elf,shoff+i*shsize)
++  if flags&2 and kind!=8 and addr<=address and length<=size-(address-addr):return elf[offset+address-addr:offset+address-addr+length]
++ raise ValueError('source address outside ELF sections')
++# Offsets are the pinned table labels in port/data/cod_1C3400.data.s.
++# Widths are explicit C declarations in mathf.c, snd.h and battle_setup.h.
++rows=[('gMathfSinCoef',0x2c3450,4,4,0x10),('gSndBankVolume',0x2c3460,4,8,0x30),('gBattleTimeLimitTbl',0x2c3480,2,8,0x60)]
++subprocess.run(['gcc','-std=gnu17','-O2','-Wall','-Wextra','-Werror','-fPIC','-shared','-DXB_HOST_TEST','-I'+str(e/'platform/platform'),str(e/'platform/platform/xb_gamedata.c'),'-o',str(out/'gamedata.so')],check=True)
++lib=C.CDLL(str(out/'gamedata.so'));libc=C.CDLL(None);libc.malloc.argtypes=[C.c_size_t];libc.malloc.restype=C.c_void_p
++Read=C.CFUNCTYPE(C.c_int,C.c_void_p,C.c_char_p,C.POINTER(C.c_void_p),C.POINTER(C.c_size_t))
++class Files(C.Structure):_fields_=[('read',Read),('ctx',C.c_void_p)]
++class Target(C.Structure):_fields_=[('address',C.c_uint32),('bytes',C.c_void_p),('size',C.c_size_t)]
++@Read
++def read(ctx,name,pointer,size):
++ data=sources[name.decode()];dest=libc.malloc(len(data))
++ if not dest:return -1
++ C.memmove(dest,data,len(data));pointer[0]=dest;size[0]=len(data);return 0
++lib.XbGameData_SetTargets.argtypes=[C.POINTER(Target),C.c_size_t]
++lib.XbGameData_Load.argtypes=[C.POINTER(Files),C.c_void_p,C.c_size_t,C.c_long,C.c_int]
++memory=C.create_string_buffer(256);target=Target(0x82001000,C.cast(memory,C.c_void_p),256);files=Files(read,None)
++assert not lib.XbGameData_SetTargets(C.byref(target),1)
++records=[];hash_value=0xcbf29ce484222325;expected={}
++for name,address,width,count,dest in rows:
++ raw=original(address,width*count);expected[name]=raw
++ for byte in raw:hash_value=((hash_value^byte)*0x100000001b3)&0xffffffffffffffff
++ records.append((0x82001000+dest,0,address-0x100000,len(raw),width))
++manifest=struct.pack('<4sIQ',b'BT3X',len(records),hash_value)+b''.join(struct.pack('<5I',*r) for r in records)
++buf=C.create_string_buffer(manifest);assert lib.XbGameData_Load(C.byref(files),buf,len(manifest),0,0)==0
++for name,address,width,count,dest in rows:
++ fmt='I' if width==4 else 'h'
++ assert struct.unpack('<'+fmt*count,expected[name])==struct.unpack_from('>'+fmt*count,memory.raw,dest),name
++before=memory.raw;bad=bytearray(manifest);bad[8]^=1;buf=C.create_string_buffer(bytes(bad))
++assert lib.XbGameData_Load(C.byref(files),buf,len(bad),0,0)==5 and memory.raw==before
++assert not lib.XbGameData_ClearTargets()
++report={'result':'PASS','source_program_sha256':{name:hashlib.sha256(data).hexdigest() for name,data in sources.items()},'tables':[{'name':name,'source_address':hex(address),'width':width,'count':count} for name,address,width,count,dest in rows],'real_source_coverage_checked':True,'checksum_failure_preserves_destination':True,'destination':'host test buffer only','game_global_tables_initialized':False,'PowerPC_execution':False,'battle_execution':False}
++(out/'gamedata-real.json').write_text(json.dumps(report,indent=2)+'\n');print('PASS: three real scalar tables -> actual loader -> registered BE host buffers; bad checksum leaves destinations unchanged; no battle execution')
+--- /dev/null
++++ b/engine/tools/test_heap_native.py
+@@ -0,0 +1,20 @@
++#!/usr/bin/env python3
++# SPDX-License-Identifier: MIT
++"""Exercise actual game heap + native arena using host low-address allocations."""
++from pathlib import Path
++import argparse,subprocess,os,json
++p=argparse.ArgumentParser(description=__doc__);p.add_argument('upstream',type=Path);p.add_argument('xsdk',type=Path);p.add_argument('output',type=Path);p.add_argument('--sanitize',action='store_true')
++a=p.parse_args();up=a.upstream.resolve();sdk=a.xsdk.resolve();out=a.output.resolve();out.mkdir(parents=True,exist_ok=True);e=Path(__file__).resolve().parents[1];plat=e/'platform/platform'
++common=['gcc','-std=gnu17','-O1','-g','-fno-builtin','-ffunction-sections','-fdata-sections','-I'+str(up/'include'),'-I'+str(plat),'-I'+str(sdk/'include')]
++if a.sanitize:common+=['-fsanitize=address,undefined','-fno-omit-frame-pointer']
++rows=[(e/'tests/test_heap_native.c',[]),(e/'combat/heap.c',['-DPORT_BIGENDIAN','-include',str(up/'port/include/port_compat.h'),'-Wno-pointer-to-int-cast','-Wno-int-to-pointer-cast']),
++      (plat/'xb_plat_mem.c',['-Dcalloc=XbTest_Calloc','-Dfree=XbTest_Free']),
++      (plat/'xb_resconv.c',['-DXB_HOST_TEST']),(plat/'xb_game_profile.c',[]),(up/'src/sys/align.c',['-include',str(up/'port/include/port_compat.h')])]
++objects=[]
++for i,(src,flags) in enumerate(rows):
++ obj=out/(str(i)+'.o');objects.append(obj);subprocess.run([*common,*flags,'-c',str(src),'-o',str(obj)],check=True)
++exe=out/'test-heap';subprocess.run([*common,'-Wl,--gc-sections',*map(str,objects),'-o',str(exe)],check=True)
++r=subprocess.run([str(exe)],capture_output=True,text=True,env=dict(os.environ,ASAN_OPTIONS='detect_leaks=0'))
++(out/'heap.txt').write_text(r.stdout+r.stderr);print(r.stdout,end='')
++if r.returncode:print(r.stderr[-3000:])
++r.check_returncode();(out/'heap.json').write_text(json.dumps({'result':'PASS','sanitizers':a.sanitize,'scope':'actual adapted engine heap + native arena + converter registry; allocator/log transport replaced only on host','randomized_operations':3000,'PowerPC_executed':False,'battle_executed':False},indent=2)+'\n')

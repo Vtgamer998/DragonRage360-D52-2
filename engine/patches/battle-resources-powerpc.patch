@@ -1,0 +1,211 @@
+diff --git a/src/battle/bobj_a.c b/src/battle/bobj_a.c
+index d9b2392..2568bbc 100644
+--- a/src/battle/bobj_a.c
++++ b/src/battle/bobj_a.c
+@@ -14,6 +14,12 @@
+  */
+ #include "common.h"
+ #include "battle/bobj_a.h"
++#ifdef DR_XBOX360
++#include "dr_resource.h"
++#include "dr_container.h"
++static size_t Dr360_MotionSpan(void *object, const void *entry);
++static void *Dr360_ModelBuffer(void *object);
++#endif
+ 
+ extern void *memset(void *dst, s32 c, u32 n);
+ extern s32 memcmp(const void *a, const void *b, u32 n);
+@@ -361,11 +367,38 @@ BobjAnim *BtlObjAnim_Load(BobjObj *obj, void *buf, s32 anim, s32 *size) {
+     void **tbl = (void **)&obj->mdl;
+     void *ret;
+ 
++    if (anim < 0) {
++        return NULL;
++    }
+     if (anim >= BOBJ_ANIM_MAX) {
++#ifdef DR_XBOX360
++        size_t span, written = 0;
++        if (size != NULL) *size = 0;
++        if (anim >= BOBJ_ANIM_MAX + 8) return NULL;
++        ret = obj->mdl.modelAnims[anim - BOBJ_ANIM_MAX];
++        span = Dr360_MotionSpan(obj, ret);
++        if (!span || dr_motion_from_memory(ret, span, 0, __BYTE_ORDER__ == __ORDER_BIG_ENDIAN__, buf,
++                                           BOBJ_WORK_LAYER_SIZE, &written) != DR_OK) return NULL;
++        ret = buf;
++        if (size != NULL) *size = (s32)written;
++#else
+         ret = (tbl + anim)[0x2A]; /* mdl->anims[anim]: runs on into modelAnims[] and the tables behind it */
+         *size = 1;
++#endif
+     } else if (obj->mdl.anims[anim] != NULL) {
++#ifdef DR_XBOX360
++        const u8 *packed = obj->mdl.anims[anim];
++        size_t span = Dr360_MotionSpan(obj, packed);
++        size_t written = 0;
++        if (size != NULL) *size = 0;
++        if (!span || dr_motion_from_memory(packed, span, 1, __BYTE_ORDER__ == __ORDER_BIG_ENDIAN__, buf,
++                                           BOBJ_WORK_LAYER_SIZE, &written) != DR_OK) {
++            return NULL;
++        }
++        if (size != NULL) *size = (s32)written;
++#else
+         Bpe_Decode(obj->mdl.anims[anim], buf, size);
++#endif
+         ret = buf;
+     } else {
+         ret = NULL;
+@@ -829,7 +862,18 @@ void BtlObjAnim_PlayModel(BobjObj *obj, s32 anim, s32 mode) {
+         return;
+     }
+     if (anim >= 0) {
++#ifdef DR_XBOX360
++        void *source = mdl->modelAnims[anim];
++        size_t span = Dr360_MotionSpan(obj, source), written = 0;
++        void *buffer = Dr360_ModelBuffer(obj);
++        ap->layer[0].data = NULL;
++        if (span && buffer && dr_motion_from_memory(source, span, 0,
++                __BYTE_ORDER__ == __ORDER_BIG_ENDIAN__, buffer, BOBJ_WORK_LAYER_SIZE, &written) == DR_OK) {
++            ap->layer[0].data = buffer;
++        }
++#else
+         ap->layer[0].data = mdl->modelAnims[anim];
++#endif
+         if (ap->layer[0].data != NULL) {
+             ap->layer[0].id = anim;
+             ap->frame = 0.0f;
+@@ -2269,13 +2313,52 @@ s32 BtlObj_GetEyeFrame(BObj *obj) {
+ }
+ 
+ /* Returns entry n of a file's offset table, NULL when the entry is empty. */
++#ifdef DR_XBOX360
++/* The original object table has 12 stable IDs (btl_obj.h / BtlObj_InitTable).
++   Non-fighter objects have no BobjWork. A fixed, ID-indexed arena gives those
++   motions the same lifetime as the object, without changing file bytes or
++   leaking a new allocation on every animation switch. Reused IDs are copied
++   afresh. The old rollback snapshot does NOT capture this arena; online
++   integration must capture it or reconstruct immutable motion buffers. */
++extern void *Dr360_ObjGet(s32 id) __asm__("BtlObj_Get");
++static u8 sDr360ModelMotion[12][BOBJ_WORK_LAYER_SIZE] __attribute__((aligned(16)));
++static void *Dr360_ModelBuffer(void *object) {
++    BobjObj *obj = object;
++    s32 i;
++    if (obj == NULL) return NULL;
++    if (obj->work != NULL) return obj->work->layer[0];
++    for (i = 0; i < 12; i++) {
++        if (Dr360_ObjGet(i) == object) return sDr360ModelMotion[i];
++    }
++    return NULL;
++}
++static size_t Dr360_MotionSpan(void *object, const void *entry) {
++    BObj *obj = object;
++    s32 i;
++    size_t length;
++    if (obj == NULL || obj->slot == NULL || entry == NULL) return 0;
++    for (i = 0; i < 3; i++) {
++        BObjFile *file = &obj->slot->file[i];
++        if (file->buf != NULL && file->size > 0 &&
++            dr_pack_memory_span(file->buf, (size_t)file->size, entry, &length) == DR_OK) return length;
++    }
++    return 0;
++}
++#endif
+ void *BObjFile_GetEntry(BObjFile *file, s32 n) {
++#ifdef DR_XBOX360
++    size_t offset, length;
++    if (file == NULL || file->buf == NULL || file->size <= 0 || n < 1) return NULL;
++    if (dr_pack_memory_entry(file->buf, (size_t)file->size, (u32)(n - 1),
++                             &offset, &length, NULL) != DR_OK) return NULL;
++    return (u8 *)file->buf + offset;
++#else
+     u32 *buf = file->buf;
+-
+     if (buf[n + 1] != buf[n]) {
+         return (u8 *)buf + (buf[n] >> 2 << 2);
+     }
+     return NULL;
++#endif
+ }
+ 
+ /* Fills the object's table pointers from the files of its resource slot. */
+diff --git a/src/sys/bpe.c b/src/sys/bpe.c
+index 2160d5e..95d5b52 100644
+--- a/src/sys/bpe.c
++++ b/src/sys/bpe.c
+@@ -1,6 +1,9 @@
+ #include "common.h"
+ #include "sys/bpe.h"
+ #include "sys/heap.h"
++#ifdef DR_XBOX360
++#include "sys/mem_read.h"
++#endif
+ 
+ /* Expands byte-pair-encoded data (Philip Gage's "expand"); allocates the output when dst is NULL. Returns the output. */
+ void *Bpe_Decode(void *src, void *dst, s32 *rawSize) {
+@@ -18,9 +21,17 @@ void *Bpe_Decode(void *src, void *dst, s32 *rawSize) {
+     s32 hi;
+     void *buf;
+ 
++#ifdef DR_XBOX360
++    size = Mem_ReadS32(src);
++#else
+     size = *(s32 *)src;
++#endif
+     src = (s32 *)src + 1;
++#ifdef DR_XBOX360
++    packSize = Mem_ReadS32(src);
++#else
+     packSize = *(s32 *)src;
++#endif
+     src = (s32 *)src + 1;
+     if (rawSize != NULL) {
+         *rawSize = size;
+diff --git a/src/sys/mem_read.c b/src/sys/mem_read.c
+index 13edda4..dd6389c 100644
+--- a/src/sys/mem_read.c
++++ b/src/sys/mem_read.c
+@@ -1,5 +1,8 @@
+ #include "common.h"
+ #include "sys/mem_read.h"
++#ifdef DR_XBOX360
++#include "dr_resource.h"
++#endif
+ 
+ /*
+  * Typed reads from a data pointer, 0x11F968..0x11FA10: three loads and five wrappers that give them a type.
+@@ -9,17 +12,36 @@
+ 
+ /* Loads a 32-bit word. */
+ s32 Mem_LoadWord(const void *p) {
++#ifdef DR_XBOX360
++    u32 bits = dr_resource_le32(p);
++    s32 value;
++    __builtin_memcpy(&value, &bits, sizeof(value));
++    return value;
++#else
+     return *(const s32 *)p;
++#endif
+ }
+ 
+ /* Loads a float. */
+ f32 Mem_LoadFloat(const void *p) {
++#ifdef DR_XBOX360
++    u32 bits = dr_resource_le32(p);
++    f32 value;
++    __builtin_memcpy(&value, &bits, sizeof(value));
++    return value;
++#else
+     return *(const f32 *)p;
++#endif
+ }
+ 
+ /* Loads an unsigned 16-bit value. */
+ u16 Mem_LoadHalf(const void *p) {
++#ifdef DR_XBOX360
++    const u8 *b = p;
++    return (u16)((u16)b[0] | (u16)b[1] << 8);
++#else
+     return *(const u16 *)p;
++#endif
+ }
+ 
+ /* Reads a signed 32-bit value. */

@@ -1,0 +1,207 @@
+diff --git a/port/src/gs/gs_vu1.c b/port/src/gs/gs_vu1.c
+index 7c821a3..1aae0d0 100644
+--- a/port/src/gs/gs_vu1.c
++++ b/port/src/gs/gs_vu1.c
+@@ -40,6 +40,31 @@ static struct {
+     uint32_t top, tops, base, ofst, dbf, itop, itops, mode, mask, cl, wl, row[4], col[4];
+ } vu;
+ 
++/* Canonical little-endian VU data/microcode bytes on every CPU. Registers
++   remain native numeric values. Do not memcpy file bytes into native scalars. */
++static uint32_t vu_le(const void *source, unsigned bytes) {
++    const uint8_t *p = source;
++    uint32_t value = 0;
++    unsigned i;
++    for (i = 0; i < bytes; i++) value |= (uint32_t)p[i] << (i * 8);
++    return value;
++}
++static void vu_store(void *target, uint32_t value) {
++    uint8_t *p = target;
++    unsigned i;
++    for (i = 0; i < 4; i++) p[i] = (uint8_t)(value >> (i * 8));
++}
++static void vu_load_reg(Reg *target, const void *source) {
++    const uint8_t *p = source;
++    unsigned i;
++    for (i = 0; i < 4; i++) target->u[i] = vu_le(p + i * 4, 4);
++}
++static void vu_store_vector(void *target, const uint32_t *values) {
++    uint8_t *p = target;
++    unsigned i;
++    for (i = 0; i < 4; i++) vu_store(p + i * 4, values[i]);
++}
++
+ /* See Gs_StateKeep (gs_core.c): the vertex unit's memory and loaded programs, kept (0) or brought back (1). */
+ void GsVu1_StateKeep(int restore) {
+     static unsigned char *kept;
+@@ -77,8 +102,8 @@ void GsVu1_SetOffset(uint32_t v) { vu.ofst = v & 0x3FF; vu.dbf = 0; vu.tops = vu
+ void GsVu1_SetItop(uint32_t v) { vu.itops = v & 0x3FF; }
+ void GsVu1_SetMode(uint32_t v) { vu.mode = v & 3; }
+ void GsVu1_SetMask(uint32_t v) { vu.mask = v; }
+-void GsVu1_SetRow(const uint32_t *v) { memcpy(vu.row, v, 16); }
+-void GsVu1_SetCol(const uint32_t *v) { memcpy(vu.col, v, 16); }
++void GsVu1_SetRow(const uint32_t *v) { unsigned i; for (i = 0; i < 4; i++) vu.row[i] = vu_le((const uint8_t *)v + i * 4, 4); }
++void GsVu1_SetCol(const uint32_t *v) { unsigned i; for (i = 0; i < 4; i++) vu.col[i] = vu_le((const uint8_t *)v + i * 4, 4); }
+ 
+ void GsVu1_Program(uint32_t addr, const uint32_t *words, uint32_t count) {
+     uint32_t i;
+@@ -125,13 +150,13 @@ void GsVu1_Unpack(uint32_t cmd, uint32_t num, uint32_t imm, const uint32_t *data
+             uint32_t out[4] = {0, 0, 0, 0};
+             if (vl == 0) {
+                 for (c = 0; c < comps; c++) {
+-                    memcpy(&out[c], src + c * 4, 4);
++                    out[c] = vu_le(src + c * 4, 4);
+                 }
+                 src += comps * 4;
+             } else if (vl == 1) {
+                 for (c = 0; c < comps; c++) {
+                     uint16_t w;
+-                    memcpy(&w, src + c * 2, 2);
++                    w = (uint16_t)vu_le(src + c * 2, 2);
+                     out[c] = usn ? (uint32_t)w : (uint32_t)(int32_t)(int16_t)w;
+                 }
+                 src += comps * 2;
+@@ -141,7 +166,7 @@ void GsVu1_Unpack(uint32_t cmd, uint32_t num, uint32_t imm, const uint32_t *data
+                 }
+                 src += comps;
+             }
+-            memcpy(&vu.mem[((addr + k) & 0x3FF) * 16], out, 16);
++            vu_store_vector(&vu.mem[((addr + k) & 0x3FF) * 16], out);
+         }
+         return;
+     }
+@@ -158,7 +183,7 @@ void GsVu1_Unpack(uint32_t cmd, uint32_t num, uint32_t imm, const uint32_t *data
+                 uint32_t size = 32u >> vl;
+                 for (c = 0; c <= vn; c++) {
+                     uint32_t w = 0;
+-                    memcpy(&w, &src[bitpos / 8], size / 8);
++                    w = vu_le(&src[bitpos / 8], size / 8);
+                     if (!usn && size == 16) { w = (uint32_t)(int32_t)(int16_t)w; }
+                     if (!usn && size == 8) { w = (uint32_t)(int32_t)(int8_t)w; }
+                     v[c] = w;
+@@ -184,10 +209,10 @@ void GsVu1_Unpack(uint32_t cmd, uint32_t num, uint32_t imm, const uint32_t *data
+             } else if (m == 2) {
+                 out[c] = vu.col[cyc > 3 ? 3 : cyc];
+             } else {
+-                memcpy(&out[c], &vu.mem[((addr & 0x3FF) * 16) + c * 4], 4);
++                out[c] = vu_le(&vu.mem[((addr & 0x3FF) * 16) + c * 4], 4);
+             }
+         }
+-        memcpy(&vu.mem[(addr & 0x3FF) * 16], out, 16);
++        vu_store_vector(&vu.mem[(addr & 0x3FF) * 16], out);
+         addr++;
+         if (++cyc == (wl > cl ? wl : wl)) {
+             if (cl > wl) {
+@@ -209,8 +234,8 @@ static void kick(uint32_t addr) {
+     for (;;) {
+         uint64_t lo, hi;
+         uint32_t nloop, flg, nreg, qw;
+-        memcpy(&lo, &vu.mem[a & 0x3FFF], 8);
+-        memcpy(&hi, &vu.mem[(a + 8) & 0x3FFF], 8);
++        lo = (uint64_t)vu_le(&vu.mem[a & 0x3FFF], 4) | (uint64_t)vu_le(&vu.mem[(a + 4) & 0x3FFF], 4) << 32;
++        hi = (uint64_t)vu_le(&vu.mem[(a + 8) & 0x3FFF], 4) | (uint64_t)vu_le(&vu.mem[(a + 12) & 0x3FFF], 4) << 32;
+         nloop = lo & 0x7FFF;
+         flg = (lo >> 58) & 3;
+         nreg = (lo >> 60) & 15;
+@@ -251,8 +276,8 @@ static void run(uint32_t start) {
+         int wacc = 0, lower = 1;
+         uint32_t next = (vu.pc + 1) & 0x7FF;
+ 
+-        memcpy(&lo, &vu.micro[vu.pc * 8], 4);
+-        memcpy(&hi, &vu.micro[vu.pc * 8 + 4], 4);
++        lo = vu_le(&vu.micro[vu.pc * 8], 4);
++        hi = vu_le(&vu.micro[vu.pc * 8 + 4], 4);
+         vu.cycle++;
+         sStatInstr++;
+         if (vu.qReady != 0 && vu.cycle >= vu.qReady) {
+@@ -379,10 +404,10 @@ upper_done:
+ #define MEM(a) (&vu.mem[((uint32_t)(a) & 0x3FF) * 16])
+ #define SETVI(r, v) do { if ((r) & 15) { vu.vi[(r) & 15] = (uint16_t)(v); } } while (0)
+             switch (lop) {
+-            case 0x00: { Reg m; memcpy(&m, MEM((int32_t)vu.vi[is & 15] + imm11), 16); for (c = 0; c < 4; c++) if (LDEST(c) && it) vu.vf[it].u[c] = m.u[c]; break; }
+-            case 0x01: { uint8_t *m = MEM((int32_t)vu.vi[it & 15] + imm11); for (c = 0; c < 4; c++) if (LDEST(c)) memcpy(m + c * 4, &vu.vf[is].u[c], 4); break; }
+-            case 0x04: { uint8_t *m = MEM((int32_t)vu.vi[is & 15] + imm11); for (c = 0; c < 4; c++) if (LDEST(c)) { uint32_t w; memcpy(&w, m + c * 4, 4); SETVI(it, w); } break; }
+-            case 0x05: { uint8_t *m = MEM((int32_t)vu.vi[is & 15] + imm11); for (c = 0; c < 4; c++) if (LDEST(c)) { uint32_t w = vu.vi[it & 15]; memcpy(m + c * 4, &w, 4); } break; }
++            case 0x00: { Reg m; vu_load_reg(&m, MEM((int32_t)vu.vi[is & 15] + imm11)); for (c = 0; c < 4; c++) if (LDEST(c) && it) vu.vf[it].u[c] = m.u[c]; break; }
++            case 0x01: { uint8_t *m = MEM((int32_t)vu.vi[it & 15] + imm11); for (c = 0; c < 4; c++) { if (LDEST(c)) { vu_store(m + c * 4, vu.vf[is].u[c]); } } break; }
++            case 0x04: { uint8_t *m = MEM((int32_t)vu.vi[is & 15] + imm11); for (c = 0; c < 4; c++) if (LDEST(c)) { uint32_t w; w = vu_le(m + c * 4, 4); SETVI(it, w); } break; }
++            case 0x05: { uint8_t *m = MEM((int32_t)vu.vi[is & 15] + imm11); for (c = 0; c < 4; c++) if (LDEST(c)) { uint32_t w = vu.vi[it & 15]; vu_store(m + c * 4, w); } break; }
+             case 0x08: SETVI(it, vu.vi[is & 15] + imm15); break;
+             case 0x09: SETVI(it, vu.vi[is & 15] - imm15); break;
+             case 0x10: SETVI(1, (vu.clip & 0xFFFFFF) == (lo & 0xFFFFFF)); break;
+@@ -416,15 +441,15 @@ upper_done:
+                     switch (sp) {
+                     case 0x30: if (it) { for (c = 0; c < 4; c++) if (LDEST(c)) vu.vf[it].u[c] = vu.vf[is].u[c]; } break; /* MOVE */
+                     case 0x31: if (it) { Reg s = vu.vf[is]; if (LDEST(0)) vu.vf[it].u[0] = s.u[1]; if (LDEST(1)) vu.vf[it].u[1] = s.u[2];
+-                                         if (LDEST(2)) vu.vf[it].u[2] = s.u[3]; if (LDEST(3)) vu.vf[it].u[3] = s.u[0]; } break; /* MR32 */
+-                    case 0x34: { Reg m; memcpy(&m, MEM(vu.vi[is & 15]), 16); if (it) { for (c = 0; c < 4; c++) if (LDEST(c)) vu.vf[it].u[c] = m.u[c]; }
++                                         if (LDEST(2)) { vu.vf[it].u[2] = s.u[3]; } if (LDEST(3)) { vu.vf[it].u[3] = s.u[0]; } } break; /* MR32 */
++                    case 0x34: { Reg m; vu_load_reg(&m, MEM(vu.vi[is & 15])); if (it) { for (c = 0; c < 4; c++) if (LDEST(c)) vu.vf[it].u[c] = m.u[c]; }
+                                  SETVI(is, vu.vi[is & 15] + 1); break; } /* LQI */
+-                    case 0x35: { uint8_t *m = MEM(vu.vi[it & 15]); for (c = 0; c < 4; c++) if (LDEST(c)) memcpy(m + c * 4, &vu.vf[is].u[c], 4);
++                    case 0x35: { uint8_t *m = MEM(vu.vi[it & 15]); for (c = 0; c < 4; c++) { if (LDEST(c)) { vu_store(m + c * 4, vu.vf[is].u[c]); } }
+                                  SETVI(it, vu.vi[it & 15] + 1); break; } /* SQI */
+-                    case 0x36: { Reg m; SETVI(is, vu.vi[is & 15] - 1); memcpy(&m, MEM(vu.vi[is & 15]), 16);
++                    case 0x36: { Reg m; SETVI(is, vu.vi[is & 15] - 1); vu_load_reg(&m, MEM(vu.vi[is & 15]));
+                                  if (it) { for (c = 0; c < 4; c++) if (LDEST(c)) vu.vf[it].u[c] = m.u[c]; } break; } /* LQD */
+                     case 0x37: { uint8_t *m; SETVI(it, vu.vi[it & 15] - 1); m = MEM(vu.vi[it & 15]);
+-                                 for (c = 0; c < 4; c++) if (LDEST(c)) memcpy(m + c * 4, &vu.vf[is].u[c], 4); break; } /* SQD */
++                                 for (c = 0; c < 4; c++) { if (LDEST(c)) { vu_store(m + c * 4, vu.vf[is].u[c]); } } break; } /* SQD */
+                     case 0x38: { float d = vu.vf[it].f[ftf], n = vu.vf[is].f[fsf]; /* DIV */
+                                  vu.qPending = d != 0.0f ? clampf(n / d) : ((n < 0.0f) != (d < 0.0f) || (n < 0.0f && d == 0.0f) ? -3.4028235e38f : 3.4028235e38f);
+                                  vu.qReady = vu.cycle + 7; break; }
+@@ -434,8 +459,8 @@ upper_done:
+                     case 0x3B: if (vu.qReady != 0) { vu.q = vu.qPending; vu.qReady = 0; } break; /* WAITQ */
+                     case 0x3C: SETVI(it, vu.vf[is].u[fsf]); break;                                /* MTIR */
+                     case 0x3D: if (it) { for (c = 0; c < 4; c++) if (LDEST(c)) vu.vf[it].i[c] = (int16_t)vu.vi[is & 15]; } break; /* MFIR */
+-                    case 0x3E: { uint8_t *m = MEM(vu.vi[is & 15]); for (c = 0; c < 4; c++) if (LDEST(c)) { uint32_t w; memcpy(&w, m + c * 4, 4); SETVI(it, w); } break; } /* ILWR */
+-                    case 0x3F: { uint8_t *m = MEM(vu.vi[is & 15]); for (c = 0; c < 4; c++) if (LDEST(c)) { uint32_t w = vu.vi[it & 15]; memcpy(m + c * 4, &w, 4); } break; } /* ISWR */
++                    case 0x3E: { uint8_t *m = MEM(vu.vi[is & 15]); for (c = 0; c < 4; c++) if (LDEST(c)) { uint32_t w; w = vu_le(m + c * 4, 4); SETVI(it, w); } break; } /* ILWR */
++                    case 0x3F: { uint8_t *m = MEM(vu.vi[is & 15]); for (c = 0; c < 4; c++) if (LDEST(c)) { uint32_t w = vu.vi[it & 15]; vu_store(m + c * 4, w); } break; } /* ISWR */
+                     case 0x64: if (it) { for (c = 0; c < 4; c++) if (LDEST(c)) vu.vf[it].f[c] = vu.p; } break; /* MFP */
+                     case 0x68: SETVI(it, vu.top); break;   /* XTOP */
+                     case 0x69: SETVI(it, vu.itop); break;  /* XITOP */
+@@ -487,8 +512,8 @@ upper_done:
+             for (k = 0; k < 16; k++) { fprintf(stderr, " %04x", vu.vi[k]); }
+             fprintf(stderr, "\n  top %u tops %u base %u ofst %u itop %u; code around pc:\n", vu.top, vu.tops, vu.base, vu.ofst, vu.itop);
+             for (k = (vu.pc > 24 ? vu.pc - 24 : 0); k < vu.pc + 12; k++) {
+-                memcpy(&lo2, &vu.micro[(k & 0x7FF) * 8], 4);
+-                memcpy(&hi2, &vu.micro[(k & 0x7FF) * 8 + 4], 4);
++                lo2 = vu_le(&vu.micro[(k & 0x7FF) * 8], 4);
++                hi2 = vu_le(&vu.micro[(k & 0x7FF) * 8 + 4], 4);
+                 fprintf(stderr, "  %4u: %08x %08x\n", k, hi2, lo2);
+             }
+         }
+@@ -497,6 +522,7 @@ upper_done:
+ 
+ /* ---------------------------------------------------------------------------------------------- shader versions */
+ 
++#if !defined(DR_XBOX360)
+ /* Program 0 (the fighters' models; 127 instructions uploaded) without the interpreter: the batch at TOP is two
+    GIF headers and one strip; both layers go to the GPU back end with the constants, which does the vertex work in
+    shaders/vu0.vert. Layout of the batch (verified on dumps): +0 GIF tag "one A+D register", +1 TEX0_1 of the
+@@ -662,6 +688,8 @@ static int hle_program6(void) {
+ }
+ 
+ /* MSCAL / MSCALF (addr = instruction address) or MSCNT (addr < 0: continue where the last run stopped). */
++#endif /* native little-endian HLE shortcuts */
++
+ void GsVu1_Call(int addr) {
+     vu.top = vu.tops;
+     vu.itop = vu.itops;
+@@ -711,6 +739,7 @@ void GsVu1_Call(int addr) {
+             }
+         }
+     }
++#ifndef DR_XBOX360
+     if (sProgSize == 399 && GsGpu_Enabled() && getenv("BT3_VU_INTERP") == NULL) {
+         if (addr >= 0) {          /* MSCALF 0: constants only */
+             sP4Batches = 0;
+@@ -777,6 +806,7 @@ void GsVu1_Call(int addr) {
+             return;
+         }
+     }
++#endif
+     run(addr < 0 ? vu.pc : (uint32_t)addr);
+ }
+ 

@@ -1,0 +1,89 @@
+--- a/port/src/gs/net.c
++++ b/port/src/gs/net.c
+@@ -40,6 +40,23 @@
+ #define closesocket close
+ #endif
+ #include "gs_internal.h"
++#if __BYTE_ORDER__ == __ORDER_BIG_ENDIAN__
++#include "bt3_wire.h"
++#endif
++
++/* IPv4 resolution through getaddrinfo, provided by xsdk (no legacy hostent). */
++static int resolve_ipv4(const char *name, struct in_addr *address) {
++    struct addrinfo hints, *result = NULL;
++    int ok;
++    memset(&hints, 0, sizeof(hints));
++    hints.ai_family = AF_INET;
++    hints.ai_socktype = SOCK_DGRAM;
++    if (getaddrinfo(name, NULL, &hints, &result) != 0) return 0;
++    ok = result != NULL && result->ai_family == AF_INET && result->ai_addrlen >= sizeof(struct sockaddr_in);
++    if (ok) *address = ((const struct sockaddr_in *)result->ai_addr)->sin_addr;
++    if (result != NULL) freeaddrinfo(result);
++    return ok;
++}
+ 
+ extern int Port_PadRead(int socket, unsigned char *data); /* gs_input.c: the keyboard and the controllers */
+ void Port_NetLeave(void);
+@@ -342,6 +359,14 @@
+ }
+ 
+ static void net_send(const void *buf, int n, const struct sockaddr_in *to) {
++#if __BYTE_ORDER__ == __ORDER_BIG_ENDIAN__
++    uint8_t wire[2048];
++    if (n < 0 || bt3_wire_encode(wire, buf, (size_t)n, 1) == 0) {
++        sStatErr++;
++        return;
++    }
++    buf = wire;
++#endif
+     sStatOut++;
+     sStatBytes += n;
+     if (Relay_IsPeer(to)) {
+@@ -364,6 +389,9 @@
+         }
+         kind = Relay_Unwrap(pkt, n, from, &data, &len);
+         if (kind == 2) {
++#if __BYTE_ORDER__ == __ORDER_BIG_ENDIAN__
++            if (bt3_wire_decode(pkt, pkt, (size_t)n, 1) == 0) continue;
++#endif
+             Relay_SawDirect(from);
+             sStatIn++;
+             return n;
+@@ -375,6 +403,9 @@
+             sStatIn++;
+             sStatInVia++;
+             memmove(pkt, data, (size_t)len);
++#if __BYTE_ORDER__ == __ORDER_BIG_ENDIAN__
++            if (bt3_wire_decode(pkt, pkt, (size_t)len, 1) == 0) continue;
++#endif
+             return len;
+         }
+     }
+@@ -842,12 +873,10 @@
+         *colon = '\0';
+         sPeer.sin_port = htons((uint16_t)atoi(colon + 1));
+         if (inet_pton(AF_INET, addr, &sPeer.sin_addr) != 1) {
+-            struct hostent *he = gethostbyname(addr);
+-            if (he == NULL) {
++            if (!resolve_ipv4(addr, &sPeer.sin_addr)) {
+                 fprintf(stderr, "bt3: net: unknown address %s\n", addr);
+                 exit(2);
+             }
+-            memcpy(&sPeer.sin_addr, he->h_addr_list[0], sizeof(sPeer.sin_addr));
+         }
+         if (sCodeLocalPort != 0 && !sFromLobby) {
+             /* a match found with a room code: from the port the lobby used, so that the routers on the way keep
+@@ -1727,12 +1756,7 @@
+     } else {
+         sPeer.sin_port = htons((uint16_t)port);
+         if (inet_pton(AF_INET, sLobbyAddr, &sPeer.sin_addr) != 1) {
+-            struct hostent *he = gethostbyname(sLobbyAddr);
+-            if (he == NULL) {
+-                sLobby = -1;
+-            } else {
+-                memcpy(&sPeer.sin_addr, he->h_addr_list[0], sizeof(sPeer.sin_addr));
+-            }
++            if (!resolve_ipv4(sLobbyAddr, &sPeer.sin_addr)) sLobby = -1;
+         }
+     }
+     return sLobby;
